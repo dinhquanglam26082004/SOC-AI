@@ -1,0 +1,23 @@
+T1027.004 - Compile After Delivery
+
+Tactic: Stealth
+Platform: linux, macos, windows
+
+Description:
+Adversaries may attempt to make payloads difficult to discover and analyze by
+delivering files to victims as uncompiled code. Text-based source code files
+may subvert analysis and scrutiny from protections targeting
+executables/binaries. These payloads will need to be compiled before
+execution; typically via native utilities such as ilasm.exe, csc.exe, or
+GCC/MinGW.  Source code payloads may also be encrypted, encoded, and/or
+embedded within other files, such as those delivered as a Phishing. Payloads
+may also be delivered in formats unrecognizable and inherently benign to the
+native OS (ex: EXEs on macOS/Linux) before later being (re)compiled into a
+proper executable binary with a bundled compiler and execution framework.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

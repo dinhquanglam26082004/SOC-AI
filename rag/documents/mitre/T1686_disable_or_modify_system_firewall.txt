@@ -1,0 +1,32 @@
+T1686 - Disable or Modify System Firewall
+
+Tactic: Defense Impairment
+Platform: esxi, linux, macos, network devices, windows
+
+Description:
+Adversaries may disable or modify host-based or network firewalls to impair
+defensive mechanisms and enable further action. Once an adversary has gathered
+sufficient privileges, they can tamper with firewall services, policies, or
+rule sets to remove restrictions on inbound or outbound traffic. For example,
+this may include turning off firewall profiles, altering existing rules to
+permit previously blocked ports or protocols, or adding new rules that create
+covert communication paths (e.g., adding a new firewall rule for a well-known
+protocol (such as RDP) using a non-traditional and potentially less
+securitized port.  Adversaries may disable or modify firewalls using different
+behaviors, depending on the platform. For example, in ESXi, firewall rules may
+be modified directly via the esxcli (e.g., via esxcli network firewall set) or
+via the vCenter user interface.
+
+Sub-techniques:
+  T1686.003 - Windows Host Firewall
+  T1686.002 - Network Device Firewall
+  T1686.001 - Cloud Firewall
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - User Account Management
+  - Restrict File and Directory Permissions
+  - Restrict Registry Permissions
+  - Audit

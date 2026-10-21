@@ -1,0 +1,28 @@
+T1568 - Dynamic Resolution
+
+Tactic: Command and Control
+Platform: esxi, linux, macos, windows
+
+Description:
+Adversaries may dynamically establish connections to command and control
+infrastructure to evade common detections and remediations. This may be
+achieved by using malware that shares a common algorithm with the
+infrastructure the adversary uses to receive the malware's communications.
+These calculations can be used to dynamically adjust parameters such as the
+domain name, IP address, or port number the malware uses for command and
+control.  Adversaries may use dynamic resolution for the purpose of Fallback
+Channels. When contact is lost with the primary command and control server
+malware may employ dynamic resolution as a means to reestablishing command and
+control.
+
+Sub-techniques:
+  T1568.002 - Domain Generation Algorithms
+  T1568.001 - Fast Flux DNS
+  T1568.003 - DNS Calculation
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Network Intrusion Prevention
+  - Restrict Web-Based Content

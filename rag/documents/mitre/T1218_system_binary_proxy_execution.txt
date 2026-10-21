@@ -1,0 +1,43 @@
+T1218 - System Binary Proxy Execution
+
+Tactic: Stealth
+Platform: linux, macos, windows
+
+Description:
+Adversaries may bypass process and/or signature-based defenses by proxying
+execution of malicious content with signed, or otherwise trusted, binaries.
+Binaries used in this technique are often Microsoft-signed files, indicating
+that they have been either downloaded from Microsoft or are already native in
+the operating system. Binaries signed with trusted digital certificates can
+typically execute on Windows systems protected by digital signature
+validation. Several Microsoft signed binaries that are default on Windows
+installations can be used to proxy execution of other files or commands.
+Similarly, on Linux systems adversaries may abuse trusted binaries such as
+<code>split</code> to proxy execution of malicious commands.
+
+Sub-techniques:
+  T1218.011 - Rundll32
+  T1218.013 - Mavinject
+  T1218.004 - InstallUtil
+  T1218.007 - Msiexec
+  T1218.003 - CMSTP
+  T1218.002 - Control Panel
+  T1218.015 - Electron Applications
+  T1218.008 - Odbcconf
+  T1218.012 - Verclsid
+  T1218.005 - Mshta
+  T1218.001 - Compiled HTML File
+  T1218.010 - Regsvr32
+  T1218.009 - Regsvcs/Regasm
+  T1218.014 - MMC
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Filter Network Traffic
+  - Restrict Web-Based Content
+  - Execution Prevention
+  - Privileged Account Management
+  - Exploit Protection
+  - Disable or Remove Feature or Program

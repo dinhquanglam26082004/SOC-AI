@@ -1,0 +1,9 @@
+{
+  "id": "fixture-only-001",
+  "timestamp": "2026-10-20T08:00:00+07:00",
+  "agent": {"id": "007", "name": "fixture-agent-not-live", "ip": "192.0.2.7"},
+  "manager": {"name": "fixture-manager-not-live"},
+  "rule": {"id": "550", "level": 7, "description": "Integrity checksum changed.", "groups": ["ossec", "syscheck", "syscheck_entry_modified"]},
+  "syscheck": {"path": "C:\\SOC-Lab\\watched\\example.txt", "event": "modified", "changed_attributes": ["size", "md5", "sha256"]},
+  "full_log": "TEST FIXTURE ONLY: file content changed inside a lab directory. No execution or malicious behavior has been established."
+}

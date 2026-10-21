@@ -1,0 +1,28 @@
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Local secrets and runtime state
+.env
+.env.*
+!.env.example
+secrets/
+*.sqlite3*
+artifacts/
+data/soc_runtime.sqlite3*
+rag/chroma_db/
+incidents/
+data/
+logs/
+*.log
+*.pcap
+*.pcapng
+*.gguf
+*.safetensors
+*.pem
+*.key

@@ -1,0 +1,16 @@
+T1041 - Exfiltration Over C2 Channel
+
+Tactic: Exfiltration
+Platform: esxi, linux, macos, windows
+
+Description:
+Adversaries may steal data by exfiltrating it over an existing command and
+control channel. Stolen data is encoded into the normal communications channel
+using the same protocol as command and control communications.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Network Intrusion Prevention
+  - Data Loss Prevention

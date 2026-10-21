@@ -1,0 +1,49 @@
+PLAYBOOK ID: PB-LAT-001
+
+NAME:
+Lateral Movement Response
+
+TRIGGER:
+Alert indicating movement between internal hosts:
+- Pass-the-Hash or Pass-the-Ticket activity (Event ID 4624 logon type 3
+  with NTLM on non-standard accounts).
+- SMB/WMI/PSExec access from workstation to workstation.
+- Unusual RDP connections between internal systems.
+- EDR alert on credential dumping tools (Mimikatz, secretsdump).
+
+INVESTIGATION:
+1. Map the movement: identify source host, destination hosts, and
+   the account(s) used for movement.
+2. Determine the timeline and sequence of lateral movement events.
+3. Check for credential dumping activity on the source host:
+   - LSASS access (Event ID 4656 on lsass.exe)
+   - Volume shadow copy access
+   - SAM/SYSTEM/SECURITY registry hive reads
+4. Identify all accounts whose credentials may have been harvested.
+5. Review network traffic for SMB, WMI, DCOM, RDP between endpoints.
+6. Determine the original infection point (patient zero).
+7. Assess which sensitive systems were reached (AD DC, file servers,
+   database servers, backup servers).
+
+RESPONSE:
+1. Isolate all confirmed compromised hosts from the network.
+2. Reset passwords for ALL accounts that authenticated on compromised hosts
+   (attacker may have harvested hashes from memory).
+3. Invalidate all Kerberos tickets (krbtgt password reset x2 if golden
+   ticket is suspected).
+4. Disable NTLM authentication if Pass-the-Hash is confirmed (evaluate
+   business impact first).
+5. Enable SMB signing on all hosts to prevent relay attacks.
+6. Remove PsExec and other dual-use tools from compromised hosts.
+7. Block lateral movement paths via host-based firewall rules
+   (workstation-to-workstation SMB, WMI).
+8. Collect memory dumps from affected hosts before remediation.
+
+ESCALATION:
+Escalate to Tier 3 / CISO immediately if:
+- Domain Controller or Active Directory is reached.
+- Golden or Silver Ticket attack is suspected.
+- 5 or more hosts are involved.
+
+Human approval is required before host isolation, account resets,
+NTLM disabling, or krbtgt password reset.

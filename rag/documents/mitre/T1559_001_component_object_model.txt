@@ -1,0 +1,26 @@
+T1559.001 - Component Object Model
+
+Tactic: Execution
+Platform: windows
+
+Description:
+Adversaries may use the Windows Component Object Model (COM) for local code
+execution. COM is an inter-process communication (IPC) component of the native
+Windows application programming interface (API) that enables interaction
+between software objects, or executable code that implements one or more
+interfaces. Through COM, a client object can call methods of server objects,
+which are typically binary Dynamic Link Libraries (DLL) or executables (EXE).
+Remote COM execution is facilitated by Remote Services such as  Distributed
+Component Object Model (DCOM).  Various COM interfaces are exposed that can be
+abused to invoke arbitrary execution via a variety of programming languages
+such as C, C++, Java, and Visual Basic. Specific COM objects also exist to
+directly perform functions beyond code execution, such as creating a Scheduled
+Task/Job, fileless download/execution, and other adversary behaviors related
+to privilege escalation and persistence.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Privileged Account Management
+  - Application Isolation and Sandboxing

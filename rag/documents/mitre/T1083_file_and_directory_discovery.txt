@@ -1,0 +1,26 @@
+T1083 - File and Directory Discovery
+
+Tactic: Discovery
+Platform: esxi, linux, macos, network devices, windows
+
+Description:
+Adversaries may enumerate files and directories or may search in specific
+locations of a host or network share for certain information within a file
+system. Adversaries may use the information from File and Directory Discovery
+during automated discovery to shape follow-on behaviors, including whether or
+not the adversary fully infects the target and/or attempts specific actions.
+Many command shell utilities can be used to obtain this information. Examples
+include <code>dir</code>, <code>tree</code>, <code>ls</code>,
+<code>find</code>, and <code>locate</code>. Custom tools may also be used to
+gather file and directory information and interact with the Native API.
+Adversaries may also leverage a Network Device CLI on network devices to
+gather file and directory information (e.g. <code>dir</code>, <code>show
+flash</code>, and/or <code>nvram</code>).  Some files and directories may
+require elevated or specific user permissions to access.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

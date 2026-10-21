@@ -1,0 +1,26 @@
+T1114 - Email Collection
+
+Tactic: Collection
+Platform: linux, macos, office suite, windows
+
+Description:
+Adversaries may target user email to collect sensitive information. Emails may
+contain sensitive data, including trade secrets or personal information, that
+can prove valuable to adversaries. Emails may also contain details of ongoing
+incident response operations, which may allow adversaries to adjust their
+techniques in order to maintain persistence or evade defenses. Adversaries can
+collect or forward email from mail servers or clients.
+
+Sub-techniques:
+  T1114.001 - Local Email Collection
+  T1114.003 - Email Forwarding Rule
+  T1114.002 - Remote Email Collection
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Out-of-Band Communications Channel
+  - Multi-factor Authentication
+  - Audit
+  - Encrypt Sensitive Information

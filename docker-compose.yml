@@ -1,0 +1,115 @@
+services:
+  wazuh-manager:
+    build:
+      context: .
+      dockerfile: docker/wazuh/Dockerfile
+    hostname: soc-manager
+    restart: unless-stopped
+    mem_limit: 3g
+    environment:
+      WAZUH_SPOOL_PATH: /spool/queue.sqlite3
+      WAZUH_SPOOL_MAX_BYTES: ${WAZUH_SPOOL_MAX_BYTES:-268435456}
+      WAZUH_FORWARD_MIN_LEVEL: ${WAZUH_FORWARD_MIN_LEVEL:-3}
+      WAZUH_FORWARD_GROUP_ALLOWLIST: ${WAZUH_FORWARD_GROUP_ALLOWLIST:-}
+    ports:
+      - "1514:1514/tcp"
+      - "1515:1515/tcp"
+    volumes:
+      - wazuh_etc:/var/ossec/etc
+      - wazuh_api:/var/ossec/api/configuration
+      - wazuh_queue:/var/ossec/queue
+      - wazuh_logs:/var/ossec/logs
+      - wazuh_multigroups:/var/ossec/var/multigroups
+      - forwarder_spool:/spool
+      - ./docker/wazuh/ossec.conf:/wazuh-config-mount/etc/ossec.conf:ro
+    secrets:
+      - enrollment_password
+    healthcheck:
+      test: ["CMD", "/var/ossec/framework/python/bin/python3", "/opt/healthcheck.py"]
+      interval: 15s
+      timeout: 8s
+      start_period: 60s
+      retries: 12
+    logging: &logging
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}
+
+  wazuh-forwarder:
+    build:
+      context: .
+      dockerfile: docker/forwarder.Dockerfile
+    restart: unless-stopped
+    mem_limit: 128m
+    environment:
+      WAZUH_WEBHOOK_TOKEN: ${WAZUH_WEBHOOK_TOKEN:?Run scripts/configure_local.py first}
+      WAZUH_FORWARDER_TARGET_URL: ${WAZUH_FORWARDER_TARGET_URL:-http://soc-ai-app:8100/wazuh}
+      WAZUH_SPOOL_MAX_BYTES: ${WAZUH_SPOOL_MAX_BYTES:-268435456}
+      WAZUH_FORWARD_MIN_LEVEL: ${WAZUH_FORWARD_MIN_LEVEL:-3}
+      WAZUH_FORWARD_GROUP_ALLOWLIST: ${WAZUH_FORWARD_GROUP_ALLOWLIST:-}
+    volumes:
+      - forwarder_spool:/spool
+      - wazuh_logs:/manager-logs:ro
+    depends_on:
+      wazuh-manager: {condition: service_healthy}
+    healthcheck:
+      test: ["CMD", "python", "-c", "import json,time; s=json.load(open('/spool/status.json')); assert time.time()-s['updated']<30 and s['state']=='running'"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging: *logging
+
+  ollama:
+    image: ollama/ollama:0.13.5
+    profiles: [app]
+    restart: unless-stopped
+    mem_limit: 2g
+    environment:
+      OLLAMA_HOST: 0.0.0.0:11434
+      OLLAMA_NUM_PARALLEL: 1
+      OLLAMA_MAX_LOADED_MODELS: 1
+    volumes:
+      - ollama_models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 5s
+      retries: 12
+    logging: *logging
+
+  soc-ai-app:
+    build: .
+    profiles: [app]
+    restart: unless-stopped
+    mem_limit: 3g
+    ports:
+      - "127.0.0.1:8100:8100"
+    env_file: .env
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      RUNTIME_DB_PATH: /app/data/soc_runtime.sqlite3
+      CHROMA_PATH: /app/rag/chroma_db
+      WAZUH_FORWARDER_STATUS_FILE: /spool/status.json
+    volumes:
+      - ./rag/chroma_db:/app/rag/chroma_db
+      - ./rag/documents:/app/rag/documents:ro
+      - ./data:/app/data
+      - embedding_cache:/root/.cache/huggingface
+      - forwarder_spool:/spool:ro
+    depends_on:
+      ollama: {condition: service_healthy}
+    logging: *logging
+
+volumes:
+  wazuh_etc:
+  wazuh_api:
+  wazuh_queue:
+  wazuh_logs:
+  wazuh_var:
+  wazuh_multigroups:
+  forwarder_spool:
+  ollama_models:
+  embedding_cache:
+
+secrets:
+  enrollment_password:
+    file: ./secrets/authd.pass

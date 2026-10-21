@@ -1,0 +1,48 @@
+PLAYBOOK ID: PB-PRV-001
+
+NAME:
+Privilege Escalation Response
+
+TRIGGER:
+Alert indicating a user or process gaining elevated privileges:
+- Windows: Event ID 4672 (special privileges assigned), unexpected
+  addition to Administrators / Domain Admins group (Event ID 4728/4732).
+- Linux: sudo usage anomaly, unexpected SUID binary execution,
+  or /etc/sudoers modification.
+- EDR alert on known privilege escalation techniques (e.g., token
+  impersonation, UAC bypass, LSASS access).
+
+INVESTIGATION:
+1. Identify the account that gained elevated privileges and the host.
+2. Determine whether the escalation was authorized (change ticket exists?).
+3. Review the process tree leading to the escalation event via EDR.
+4. Check whether any known exploit tools or LOLBins were used
+   (e.g., mshta, certutil, regsvr32, psexec, runas).
+5. Examine what actions were taken after escalation:
+   - New accounts created?
+   - Scheduled tasks or services added?
+   - Sensitive files accessed?
+   - Lateral movement attempted?
+6. On Linux: check /var/log/auth.log, /var/log/secure, /etc/passwd,
+   /etc/sudoers, and bash history.
+7. Review Group Policy changes if Domain Admin access was obtained.
+
+RESPONSE:
+1. Revoke the elevated privileges if unauthorized.
+2. Disable the compromised account immediately.
+3. Isolate the affected host if malicious tool execution is confirmed.
+4. Reset credentials for the compromised account and all accounts
+   accessed during the session.
+5. Review and remove any persistence mechanisms (scheduled tasks,
+   registry run keys, new local accounts, authorized_keys changes).
+6. Patch the exploited vulnerability if a local exploit was used.
+7. Preserve logs and memory dump for forensic analysis.
+
+ESCALATION:
+Escalate to Tier 2 / Incident Response if:
+- Domain Admin or root-level access was obtained.
+- Persistence mechanisms were installed.
+- Lateral movement is detected.
+
+Human approval is required before disabling accounts, isolating hosts,
+or reverting Group Policy / sudoers changes.

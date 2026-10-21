@@ -1,0 +1,37 @@
+T1553 - Subvert Trust Controls
+
+Tactic: Defense Impairment
+Platform: linux, macos, windows
+
+Description:
+Adversaries may undermine security controls that will either warn users of
+untrusted activity or prevent execution of untrusted programs. Operating
+systems and security products may contain mechanisms to identify programs or
+websites as possessing some level of trust. Examples of such features would
+include a program being allowed to run because it is signed by a valid code
+signing certificate, a program prompting the user with a warning because it
+has an attribute set from being downloaded from the Internet, or getting an
+indication that you are about to connect to an untrusted site.  Adversaries
+may attempt to subvert these trust mechanisms. The method adversaries use will
+depend on the specific mechanism they seek to subvert. Adversaries may conduct
+File and Directory Permissions Modification or Modify Registry in support of
+subverting these controls. Adversaries may also create or steal code signing
+certificates to acquire trust on target systems.
+
+Sub-techniques:
+  T1553.001 - Gatekeeper Bypass
+  T1553.002 - Code Signing
+  T1553.003 - SIP and Trust Provider Hijacking
+  T1553.006 - Code Signing Policy Modification
+  T1553.005 - Mark-of-the-Web Bypass
+  T1553.004 - Install Root Certificate
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Operating System Configuration
+  - Execution Prevention
+  - Privileged Account Management
+  - Restrict Registry Permissions
+  - Software Configuration

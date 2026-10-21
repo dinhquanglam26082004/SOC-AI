@@ -1,0 +1,13 @@
+#!/usr/bin/with-contenv bash
+set -eu
+# Windows-created secrets may use CRLF; authd must not treat CR as password data.
+tr -d '\r' < /run/secrets/enrollment_password > /var/ossec/etc/authd.pass
+chown root:wazuh /var/ossec/etc/authd.pass
+chmod 640 /var/ossec/etc/authd.pass
+# Install only this managed rule file; preserve all other local rules and keys.
+install -o root -g wazuh -m 640 /opt/soc-ai/zeek-notice-rules.xml /var/ossec/etc/rules/soc-ai-zeek-notice.xml
+chown root:wazuh /spool
+chmod 2770 /spool
+for file in /spool/queue.sqlite3*; do
+  if [ -f "$file" ]; then chown root:wazuh "$file"; chmod 660 "$file"; fi
+done

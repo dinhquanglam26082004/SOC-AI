@@ -1,0 +1,21 @@
+T1137.003 - Outlook Forms
+
+Tactic: Persistence
+Platform: office suite, windows
+
+Description:
+Adversaries may abuse Microsoft Outlook forms to obtain persistence on a
+compromised system. Outlook forms are used as templates for presentation and
+functionality in Outlook messages. Custom Outlook forms can be created that
+will execute code when a specifically crafted email is sent by an adversary
+utilizing the same custom Outlook form.  Once malicious forms have been added
+to the user’s mailbox, they will be loaded when Outlook is started. Malicious
+forms will execute when an adversary sends a specifically crafted email to the
+user.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Behavior Prevention on Endpoint
+  - Update Software

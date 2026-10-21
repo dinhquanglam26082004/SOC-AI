@@ -1,0 +1,27 @@
+T1564.011 - Ignore Process Interrupts
+
+Tactic: Stealth
+Platform: linux, macos, windows
+
+Description:
+Adversaries may evade defensive mechanisms by executing commands that hide
+from process interrupt signals. Many operating systems use signals to deliver
+messages to control process behavior. Command interpreters often include
+specific commands/flags that ignore errors and other hangups, such as when the
+user of the active session logs off.  These interrupt signals may also be used
+by defensive tools and/or analysts to pause or terminate specified running
+processes.   Adversaries may invoke processes using `nohup`, PowerShell
+`-ErrorAction SilentlyContinue`, or similar commands that may be immune to
+hangups. This may enable malicious commands and malware to continue execution
+through system events that would otherwise terminate its execution, such as
+users logging off or the termination of its C2 network connection.  Hiding
+from process interrupt signals may allow malware to continue execution, but
+unlike Trap this does not establish Persistence since the process will not be
+re-invoked once actually terminated.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

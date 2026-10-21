@@ -1,0 +1,46 @@
+T1685 - Disable or Modify Tools
+
+Tactic: Defense Impairment
+Platform: containers, esxi, iaas, linux, macos, network devices, windows
+
+Description:
+Adversaries may disable, degrade, or tamper with security tools or
+applications (e.g., endpoint detection and response (EDR) tools, intrusion
+detection systems (IDS), antivirus, logging agents, sensors, etc.) to impair
+or reduce visibility of defensive capabilities. This may include stopping
+specific services, killing processes, modifying or deleting tool configuration
+files and Registry keys, or preventing tools from updating. This may also
+include impairing defenses more broadly by disrupting preventative, detection,
+and response mechanisms across host, network, and cloud environments.   In
+addition to directly targeting tools, adversaries may block or manipulate
+indicators and telemetry used for detection. This includes maliciously
+disabling or redirecting sensors such as Event Tracing for Windows (ETW),
+modifying event log configurations (e.g., redirecting Security logs), or
+interfering with logging pipelines and forwarding mechanisms (e.g., SIEM
+ingestion).  More advanced techniques include leveraging legitimate drivers or
+debugging mechanisms to render tools non-functional, bypassing anti-tampering
+protections, and targeting specific defenses such as Sysmon or cloud
+monitoring agents. Adversaries may also disrupt broader defensive operations,
+including update mechanisms, logging infrastructure (e.g., syslog), or event
+aggregation, further degrading an organization’s ability to detect and respond
+to malicious activity.
+
+Sub-techniques:
+  T1685.003 - Modify or Spoof Tool UI
+  T1685.001 - Disable or Modify Windows Event Log
+  T1685.004 - Disable or Modify Linux Audit System Log
+  T1685.002 - Disable or Modify Cloud Log
+  T1685.006 - Clear Linux or Mac System Logs
+  T1685.005 - Clear Windows Event Logs
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Execution Prevention
+  - User Account Management
+  - Restrict File and Directory Permissions
+  - Restrict Registry Permissions
+  - Software Configuration
+  - Audit
+  - Disable or Remove Feature or Program

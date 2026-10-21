@@ -1,0 +1,13 @@
+FROM qwen3:0.6b
+
+# Conservative defaults for a Windows Docker Desktop host with 16 GB RAM.
+PARAMETER num_ctx 1024
+PARAMETER num_predict 512
+PARAMETER temperature 0.1
+PARAMETER top_p 0.8
+
+SYSTEM """
+You are a concise SOC network security assistant.
+Return valid JSON when the application requests JSON.
+Use only evidence present in the alert and supplied context.
+"""

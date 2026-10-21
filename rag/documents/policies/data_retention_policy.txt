@@ -1,0 +1,62 @@
+SOC DATA RETENTION POLICY
+
+PURPOSE:
+Define how long security data is retained, where it is stored,
+and when it is deleted, in support of incident investigation,
+compliance, and audit requirements.
+
+RETENTION PERIODS:
+
+Raw Security Logs (Firewall, Proxy, DNS, DHCP):
+- Hot storage (SIEM, searchable online): 90 days.
+- Cold storage (compressed archive): 12 months.
+- Total retention: 13 months.
+- Justification: Covers most incident investigation windows and
+  satisfies common compliance requirements (PCI-DSS, ISO 27001).
+
+Endpoint Logs (Windows Event Logs, Sysmon, EDR telemetry):
+- Hot storage: 30 days.
+- Cold storage: 12 months.
+- Total retention: 13 months.
+
+Authentication Logs (AD, LDAP, VPN, SSH, RDP):
+- Hot storage: 90 days.
+- Cold storage: 24 months.
+- Total retention: 27 months.
+- Justification: Account activity must be retained for longer periods
+  for HR, legal, and insider threat investigations.
+
+Security Alerts (SIEM alerts, IDS/IPS events):
+- Active incidents: retained indefinitely until closed.
+- Closed TRUE POSITIVE incidents: 3 years.
+- Closed FALSE POSITIVE / BENIGN incidents: 12 months.
+
+Incident Reports and Case Files:
+- Confirmed security incidents: 5 years.
+- Near-misses / low-severity closed cases: 2 years.
+
+Network Traffic (PCAP):
+- Full packet capture: 7 days (high-storage cost).
+- Flow data (NetFlow/IPFIX): 90 days.
+
+Vulnerability Scan Results:
+- Most recent 12 scans or 12 months (whichever is longer).
+
+Forensic Evidence (disk images, memory dumps):
+- Active investigations: retained until case closure + 6 months.
+- Confirmed criminal incidents: consult Legal for extended retention.
+
+STORAGE REQUIREMENTS:
+- All archived data must be encrypted at rest (AES-256 minimum).
+- Backups of archived data must be verified quarterly.
+- Access to archived data requires Tier 2+ authorization and logging.
+
+DATA DELETION:
+- Data past retention period is deleted within 30 days of expiry.
+- Deletion must be documented and signed off by the SOC Manager.
+- Secure deletion (DoD 5220.22-M or equivalent) required for all media.
+
+LEGAL HOLD:
+- Any data subject to ongoing legal proceedings or regulatory
+  investigation is placed on Legal Hold and exempt from deletion
+  until released by Legal Counsel.

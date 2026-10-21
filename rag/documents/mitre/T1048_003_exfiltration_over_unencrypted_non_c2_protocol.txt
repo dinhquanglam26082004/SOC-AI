@@ -1,0 +1,23 @@
+T1048.003 - Exfiltration Over Unencrypted Non-C2 Protocol
+
+Tactic: Exfiltration
+Platform: esxi, linux, macos, network devices, windows
+
+Description:
+Adversaries may steal data by exfiltrating it over an un-encrypted network
+protocol other than that of the existing command and control channel. The data
+may also be sent to an alternate network location from the main command and
+control server.  Adversaries may opt to obfuscate this data, without the use
+of encryption, within network protocols that are natively unencrypted (such as
+HTTP, FTP, or DNS). This may include custom or publicly available
+encoding/compression algorithms (such as base64) as well as embedding data
+within protocol headers and fields.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Network Intrusion Prevention
+  - Filter Network Traffic
+  - Data Loss Prevention
+  - Network Segmentation

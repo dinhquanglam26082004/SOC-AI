@@ -1,0 +1,11 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+rag/chroma_db/
+.env
+secrets/
+artifacts/
+data/soc_runtime.sqlite3*
+data/backups/
+.git/

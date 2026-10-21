@@ -1,0 +1,11 @@
+#!/usr/bin/with-contenv bash
+set -eu
+# This runs before 0-wazuh-init and 2-manager. PID files belong to the
+# previous container boot; retaining them can make apid kill a reused PID.
+mkdir -p /var/ossec/var/run /var/ossec/var/multigroups
+find /var/ossec/var/run -maxdepth 1 -type f \( -name 'wazuh-*.pid' -o -name 'wazuh-apid.failed' \) -delete
+# The upstream initializer copies this directory when the volume is empty.
+# Its empty seed may be absent after initialization on an earlier boot.
+mkdir -p /var/ossec/data_tmp/permanent/var/ossec/var/multigroups
+chown root:wazuh /var/ossec/var/multigroups
+chmod 770 /var/ossec/var/multigroups

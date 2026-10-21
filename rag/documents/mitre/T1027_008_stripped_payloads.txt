@@ -1,0 +1,26 @@
+T1027.008 - Stripped Payloads
+
+Tactic: Stealth
+Platform: linux, macos, network devices, windows
+
+Description:
+Adversaries may attempt to make a payload difficult to analyze by removing
+symbols, strings, and other human readable information. Scripts and
+executables may contain variables names and other strings that help developers
+document code functionality. Symbols are often created by an operating
+system’s `linker` when executable payloads are compiled. Reverse engineers use
+these symbols and strings to analyze code and to identify functionality in
+payloads.  Adversaries may use stripped payloads in order to make malware
+analysis more difficult. For example, compilers and other tools may provide
+features to remove or obfuscate strings and symbols. Adversaries have also
+used stripped payload formats, such as run-only AppleScripts, a compiled and
+stripped version of AppleScript, to evade detection and analysis. The lack of
+human-readable information may directly hinder detection and analysis of
+payloads.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

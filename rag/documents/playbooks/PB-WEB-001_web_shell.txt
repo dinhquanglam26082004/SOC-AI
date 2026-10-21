@@ -1,0 +1,52 @@
+PLAYBOOK ID: PB-WEB-001
+
+NAME:
+Web Shell Detection and Response
+
+TRIGGER:
+EDR/WAF/IDS alert indicating a web shell uploaded or executed on a
+web server, or anomalous HTTP requests with command injection patterns
+(cmd=, exec=, system=, eval=), or unusual child processes spawned by
+web server processes (httpd, nginx, IIS worker process).
+
+INVESTIGATION:
+1. Identify the affected web server host and the web application.
+2. Locate the web shell file: check web server access logs for POST
+   requests to unusual file paths, or for unexpected .php/.aspx/.jsp
+   files in the web root.
+3. Review process tree: look for web server processes (apache2, w3wp,
+   nginx) spawning cmd.exe, powershell.exe, bash, or python.
+4. Examine web server access logs for attacker activity:
+   - Commands executed via web shell.
+   - Files accessed or downloaded.
+   - Lateral movement from the web server.
+5. Determine the upload vector: file upload vulnerability, RCE exploit,
+   compromised admin credentials, or supply chain.
+6. Check for additional backdoors or persistence mechanisms installed
+   after web shell access.
+7. Identify the attacker's source IPs from access logs.
+
+RESPONSE:
+1. Take the web application offline or redirect to maintenance page
+   (minimize data exposure).
+2. Remove the web shell file(s) from the filesystem.
+3. Block attacker source IPs at the WAF and perimeter firewall.
+4. Reset all web application and database credentials.
+5. Patch the vulnerability that allowed the web shell upload:
+   - Unrestricted file upload: add extension/MIME validation.
+   - RCE: apply vendor patch or virtual patch via WAF.
+6. Restore the web server from a clean baseline snapshot if compromise
+   depth is unclear.
+7. Review and harden web server configuration:
+   - Disable PHP execution in upload directories.
+   - Apply web application firewall rules.
+   - Enable audit logging on the web server.
+8. Preserve web server logs, web shell sample, and memory dump.
+
+ESCALATION:
+Escalate to Tier 2 if the web server has access to internal network
+segments or sensitive databases. Escalate to Tier 3 if lateral movement
+from the web server is detected.
+
+Human approval is required before taking the application offline,
+removing files, or restoring from snapshot.

@@ -1,0 +1,12 @@
+# Task #10: Pin version cu the de build Docker deterministic.
+# ChromaDB co breaking changes giua cac minor version — khong pin se gay loi bat ngo.
+chromadb==1.5.9
+sentence-transformers==3.4.1
+requests==2.34.2
+python-dotenv==1.2.3
+fastapi==0.141.1
+uvicorn[standard]==0.52.4
+# UI terminal dep cho demo (khong co C extension, cai duoc tren moi OS)
+rich==13.9.4
+# System resource monitoring cho SOC dashboard (CPU/RAM/GPU)
+psutil==6.1.1

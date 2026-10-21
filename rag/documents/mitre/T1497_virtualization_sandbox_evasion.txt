@@ -1,0 +1,33 @@
+T1497 - Virtualization/Sandbox Evasion
+
+Tactic: Stealth, Discovery
+Platform: linux, macos, windows
+
+Description:
+Adversaries may employ various means to detect and avoid virtualization and
+analysis environments. This may include changing behaviors based on the
+results of checks for the presence of artifacts indicative of a virtual
+machine environment (VME) or sandbox. If the adversary detects a VME, they may
+alter their malware to disengage from the victim or conceal the core functions
+of the implant. They may also search for VME artifacts before dropping
+secondary or additional payloads. Adversaries may use the information learned
+from Virtualization/Sandbox Evasion during automated discovery to shape
+follow-on behaviors.  Adversaries may use several methods to accomplish
+Virtualization/Sandbox Evasion such as checking for security monitoring tools
+(e.g., Sysinternals, Wireshark, etc.) or other system artifacts associated
+with analysis or virtualization. Adversaries may also check for legitimate
+user activity to help determine if it is in an analysis environment.
+Additional methods include use of sleep timers or loops within malware code to
+avoid operating within a temporary sandbox.
+
+Sub-techniques:
+  T1497.001 - System Checks
+  T1497.003 - Time Based Checks
+  T1497.002 - User Activity Based Checks
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

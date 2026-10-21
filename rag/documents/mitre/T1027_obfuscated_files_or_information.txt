@@ -1,0 +1,53 @@
+T1027 - Obfuscated Files or Information
+
+Tactic: Stealth
+Platform: esxi, linux, macos, network devices, windows
+
+Description:
+Adversaries may attempt to make an executable or file difficult to discover or
+analyze by encrypting, encoding, or otherwise obfuscating its contents on the
+system or in transit. This is common behavior that can be used across
+different platforms and the network to evade defenses.   Payloads may be
+compressed, archived, or encrypted in order to avoid detection. These payloads
+may be used during Initial Access or later to mitigate detection. Sometimes a
+user's action may be required to open and Deobfuscate/Decode Files or
+Information for User Execution. The user may also be required to input a
+password to open a password protected compressed/encrypted file that was
+provided by the adversary. Adversaries may also use compressed or archived
+scripts, such as JavaScript.   Portions of files can also be encoded to hide
+the plain-text strings that would otherwise help defenders with discovery.
+Payloads may also be split into separate, seemingly benign files that only
+reveal malicious functionality when reassembled.  Adversaries may also abuse
+Command Obfuscation to obscure commands executed from payloads or directly via
+Command and Scripting Interpreter. Environment variables, aliases, characters,
+and other platform/language specific semantics can be used to evade signature
+based detections and application control mechanisms.
+
+Sub-techniques:
+  T1027.011 - Fileless Storage
+  T1027.009 - Embedded Payloads
+  T1027.013 - Encrypted/Encoded File
+  T1027.008 - Stripped Payloads
+  T1027.001 - Binary Padding
+  T1027.016 - Junk Code Insertion
+  T1027.017 - SVG Smuggling
+  T1027.012 - LNK Icon Smuggling
+  T1027.005 - Indicator Removal from Tools
+  T1027.014 - Polymorphic Code
+  T1027.003 - Steganography
+  T1027.004 - Compile After Delivery
+  T1027.006 - HTML Smuggling
+  T1027.010 - Command Obfuscation
+  T1027.002 - Software Packing
+  T1027.018 - Invisible Unicode
+  T1027.007 - Dynamic API Resolution
+  T1027.015 - Compression
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - User Training
+  - Behavior Prevention on Endpoint
+  - Antivirus/Antimalware
+  - Audit

@@ -1,0 +1,26 @@
+PLAYBOOK ID: PB-SSH-001
+
+NAME:
+SSH Brute Force Response
+
+TRIGGER:
+More than 20 failed SSH authentication attempts
+within 5 minutes.
+
+INVESTIGATION:
+1. Review authentication logs.
+2. Check successful SSH logins.
+3. Check activity of the targeted account.
+4. Investigate source IP.
+5. Check whether other hosts received connections
+   from the same source.
+
+RESPONSE:
+1. Block the source IP.
+2. Collect authentication logs.
+3. Review the targeted account.
+4. Reset credentials if compromise is confirmed.
+5. Increase monitoring.
+
+Human approval is required before blocking an IP,
+disabling an account, or changing firewall rules.

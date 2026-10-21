@@ -1,0 +1,36 @@
+T1053 - Scheduled Task/Job
+
+Tactic: Execution, Persistence, Privilege Escalation
+Platform: containers, esxi, linux, macos, network devices, windows
+
+Description:
+Adversaries may abuse task scheduling functionality to facilitate initial or
+recurring execution of malicious code. Utilities exist within all major
+operating systems to schedule programs or scripts to be executed at a
+specified date and time. A task can also be scheduled on a remote system,
+provided the proper authentication is met (ex: RPC and file and printer
+sharing in Windows environments). Scheduling a task on a remote system
+typically may require being a member of an admin or otherwise privileged group
+on the remote system.  Adversaries may use task scheduling to execute programs
+at system startup or on a scheduled basis for persistence. These mechanisms
+can also be abused to run a process under the context of a specified account
+(such as one with elevated permissions/privileges). Similar to System Binary
+Proxy Execution, adversaries have also abused task scheduling to potentially
+mask one-time execution under a trusted system process.
+
+Sub-techniques:
+  T1053.005 - Scheduled Task
+  T1053.007 - Container Orchestration Job
+  T1053.003 - Cron
+  T1053.006 - Systemd Timers
+  T1053.002 - At
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Operating System Configuration
+  - User Account Management
+  - Restrict File and Directory Permissions
+  - Privileged Account Management
+  - Audit

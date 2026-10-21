@@ -1,0 +1,22 @@
+T1216 - System Script Proxy Execution
+
+Tactic: Stealth
+Platform: windows
+
+Description:
+Adversaries may use trusted scripts, often signed with certificates, to proxy
+the execution of malicious files. Several Microsoft signed scripts that have
+been downloaded from Microsoft or are default on Windows installations can be
+used to proxy execution of other files. This behavior may be abused by
+adversaries to execute malicious files that could bypass application control
+and signature validation on systems.
+
+Sub-techniques:
+  T1216.001 - PubPrn
+  T1216.002 - SyncAppvPublishingServer
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Execution Prevention

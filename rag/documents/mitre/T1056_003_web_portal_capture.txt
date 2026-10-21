@@ -1,0 +1,20 @@
+T1056.003 - Web Portal Capture
+
+Tactic: Collection, Credential Access
+Platform: linux, macos, windows
+
+Description:
+Adversaries may install code on externally facing portals, such as a VPN login
+page, to capture and transmit credentials of users who attempt to log into the
+service. For example, a compromised login page may log provided user
+credentials before logging the user in to the service.  This variation on
+input capture may be conducted post-compromise using legitimate administrative
+access as a backup measure to maintain network access through External Remote
+Services and Valid Accounts or as part of the initial compromise by
+exploitation of the externally facing web service.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Privileged Account Management

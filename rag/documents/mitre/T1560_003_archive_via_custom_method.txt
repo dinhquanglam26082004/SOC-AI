@@ -1,0 +1,18 @@
+T1560.003 - Archive via Custom Method
+
+Tactic: Collection
+Platform: linux, macos, windows
+
+Description:
+An adversary may compress or encrypt data that is collected prior to
+exfiltration using a custom method. Adversaries may choose to use custom
+archival methods, such as encryption with XOR or stream ciphers implemented
+with no external library or utility references. Custom implementations of
+well-known compression algorithms have also been used.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

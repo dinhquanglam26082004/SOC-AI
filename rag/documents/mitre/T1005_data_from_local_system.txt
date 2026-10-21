@@ -1,0 +1,19 @@
+T1005 - Data from Local System
+
+Tactic: Collection
+Platform: esxi, linux, macos, network devices, windows
+
+Description:
+Adversaries may search local system sources, such as file systems,
+configuration files, local databases, virtual machine files, or process
+memory, to find files of interest and sensitive data prior to Exfiltration.
+Adversaries may do this using a Command and Scripting Interpreter, such as cmd
+as well as a Network Device CLI, which have functionality to interact with the
+file system to gather information. Adversaries may also use Automated
+Collection on the local system.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Data Loss Prevention

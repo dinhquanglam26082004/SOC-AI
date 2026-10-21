@@ -1,0 +1,34 @@
+T1548 - Abuse Elevation Control Mechanism
+
+Tactic: Privilege Escalation
+Platform: iaas, identity provider, linux, macos, office suite, windows
+
+Description:
+Adversaries may circumvent mechanisms designed to control privilege elevation
+to gain higher-level permissions. Most modern systems contain native elevation
+control mechanisms that are intended to limit privileges that a user can
+perform on a machine. Authorization has to be granted to specific users in
+order to perform tasks that can be considered of higher risk. An adversary can
+perform several methods to take advantage of built-in control mechanisms in
+order to escalate privileges on a system.
+
+Sub-techniques:
+  T1548.002 - Bypass User Account Control
+  T1548.003 - Sudo and Sudo Caching
+  T1548.001 - Setuid and Setgid
+  T1548.005 - Temporary Elevated Cloud Access
+  T1548.004 - Elevated Execution with Prompt
+  T1548.006 - TCC Manipulation
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - User Account Control
+  - Operating System Configuration
+  - Execution Prevention
+  - User Account Management
+  - Restrict File and Directory Permissions
+  - Privileged Account Management
+  - Audit
+  - Update Software

@@ -1,0 +1,26 @@
+T1569 - System Services
+
+Tactic: Execution
+Platform: linux, macos, windows
+
+Description:
+Adversaries may abuse system services or daemons to execute commands or
+programs. Adversaries can execute malicious content by interacting with or
+creating services either locally or remotely. Many services are set to run at
+boot, which can aid in achieving persistence (Create or Modify System
+Process), but adversaries can also abuse services for one-time or temporary
+execution.
+
+Sub-techniques:
+  T1569.003 - Systemctl
+  T1569.001 - Launchctl
+  T1569.002 - Service Execution
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Behavior Prevention on Endpoint
+  - User Account Management
+  - Restrict File and Directory Permissions
+  - Privileged Account Management

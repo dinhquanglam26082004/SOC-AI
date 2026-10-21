@@ -1,0 +1,1 @@
+"""Source-neutral FastAPI application."""

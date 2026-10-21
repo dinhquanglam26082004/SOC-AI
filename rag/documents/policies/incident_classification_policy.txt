@@ -1,0 +1,71 @@
+SOC INCIDENT CLASSIFICATION POLICY
+
+PURPOSE:
+Provide a consistent taxonomy for classifying security incidents,
+enabling accurate reporting, trend analysis, and resource allocation.
+
+INCIDENT CATEGORIES:
+
+CAT-01: Unauthorized Access
+- Successful brute force / credential theft.
+- Account takeover (ATO).
+- Unauthorized physical access to systems.
+- Use of stolen credentials.
+
+CAT-02: Malware / Ransomware
+- Virus, trojan, backdoor, or rootkit detected and executed.
+- Ransomware encryption activity.
+- Potentially unwanted application (PUA) with impact.
+- Fileless malware / living-off-the-land attacks.
+
+CAT-03: Denial of Service
+- Distributed Denial of Service (DDoS) against external services.
+- Internal resource exhaustion caused by attack.
+- Service unavailability caused by malicious activity.
+
+CAT-04: Data Breach / Exfiltration
+- Confirmed unauthorized data transfer to external party.
+- Loss of physical media containing sensitive data.
+- Unauthorized access to PII / PHI / financial records.
+
+CAT-05: Web Application Attack
+- SQL injection, XSS, CSRF exploitation.
+- Web shell upload and execution.
+- API abuse / broken authentication on web APIs.
+
+CAT-06: Insider Threat
+- Intentional policy violation with malicious intent.
+- Data theft by current or former employee.
+- Privilege abuse by authorized user.
+
+CAT-07: Vulnerability Exploitation
+- Exploitation of known CVE on network-accessible service.
+- Zero-day exploitation.
+- Exploitation of misconfiguration.
+
+CAT-08: Social Engineering
+- Phishing, spear-phishing, vishing.
+- Business Email Compromise (BEC).
+- Pretexting or impersonation attacks.
+
+CAT-09: Network Intrusion
+- Unauthorized access via network vulnerability.
+- Lateral movement between network segments.
+- Command & Control (C2) traffic detected.
+
+CAT-10: Policy Violation (Non-malicious)
+- Accidental data sharing.
+- Unauthorized software installation.
+- Use of personal devices for company data without authorization.
+
+CLASSIFICATION PROCESS:
+1. Initial classification is assigned at ticket creation by Tier 1.
+2. Classification may be updated as investigation progresses.
+3. Final classification is confirmed at ticket closure.
+4. All CRITICAL incidents must have a formal incident report citing
+   the category within 24 hours of closure.
+
+REPORTING:
+- Monthly: Incident counts by category, severity, and business unit.
+- Quarterly: Trend analysis, top attack vectors, MTTD/MTTR metrics.
+- Annually: Full SOC performance report for management.

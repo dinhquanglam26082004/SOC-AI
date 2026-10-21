@@ -1,0 +1,27 @@
+T1496 - Resource Hijacking
+
+Tactic: Impact
+Platform: containers, iaas, linux, macos, saas, windows
+
+Description:
+Adversaries may leverage the resources of co-opted systems to complete
+resource-intensive tasks, which may impact system and/or hosted service
+availability.   Resource hijacking may take a number of different forms. For
+example, adversaries may:  * Leverage compute resources in order to mine
+cryptocurrency * Sell network bandwidth to proxy networks * Generate SMS
+traffic for profit * Abuse cloud-based messaging services to send large
+quantities of spam messages  In some cases, adversaries may leverage multiple
+types of Resource Hijacking at once.
+
+Sub-techniques:
+  T1496.003 - SMS Pumping
+  T1496.002 - Bandwidth Hijacking
+  T1496.004 - Cloud Service Hijacking
+  T1496.001 - Compute Hijacking
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

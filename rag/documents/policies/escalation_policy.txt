@@ -1,0 +1,61 @@
+SOC ESCALATION POLICY
+
+PURPOSE:
+Define the conditions and process for escalating security incidents
+between SOC tiers and to management/external parties.
+
+TIER DEFINITIONS:
+- Tier 1 (SOC Analyst): Initial alert triage, playbook execution,
+  basic investigation, first response actions.
+- Tier 2 (Senior Analyst / Incident Responder): Deep investigation,
+  malware analysis, complex containment, forensic collection.
+- Tier 3 (Lead / Threat Hunter): Advanced threat hunting, APT response,
+  Active Directory / infrastructure compromise, strategic decisions.
+- Management (CISO / Management): Business decisions, public disclosure,
+  regulatory notification, ransom decisions.
+- External: Law enforcement, CERT/CC, legal counsel, PR team.
+
+ESCALATION CONDITIONS:
+
+Tier 1 → Tier 2:
+- Confirmed malware execution (not just detection).
+- Successful brute force or credential theft confirmed.
+- More than 3 hosts affected by a single incident.
+- Lateral movement detected.
+- Web shell confirmed active.
+- Analyst unable to contain incident within 30 minutes.
+
+Tier 2 → Tier 3:
+- Domain Controller or Active Directory compromise suspected.
+- 5+ hosts involved in a single incident.
+- Ransomware spreading across the network.
+- Advanced persistent threat (APT) indicators.
+- Incident duration exceeds 4 hours without containment.
+
+Tier 3 → Management (CISO):
+- Ransomware confirmed with significant business impact.
+- Data exfiltration of PII, PHI, or regulated data confirmed.
+- Critical infrastructure system compromised.
+- Media or regulatory enquiry likely.
+
+Escalation to External:
+- Law enforcement: when criminal activity (ransomware payment,
+  data theft, insider crime) is confirmed. Required by some regulations.
+- Legal counsel: when litigation risk, regulatory notification, or
+  contract breach is possible.
+- CERT: when nation-state threat actor is suspected.
+
+ESCALATION TIMEOUTS:
+- Tier 1 must escalate within 30 minutes if unable to resolve CRITICAL.
+- Tier 2 must escalate to Tier 3 within 2 hours for unresolved HIGH/CRITICAL.
+- All CRITICAL incidents must have a management notification within 1 hour
+  of confirmation.
+
+ESCALATION COMMUNICATION:
+When escalating, provide:
+1. Incident ID and current severity.
+2. Affected assets and users.
+3. Timeline of events (first seen, current status).
+4. Actions taken so far.
+5. Reason for escalation.
+6. Recommended next steps.

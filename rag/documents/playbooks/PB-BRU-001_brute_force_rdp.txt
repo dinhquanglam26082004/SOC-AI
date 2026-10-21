@@ -1,0 +1,42 @@
+PLAYBOOK ID: PB-BRU-001
+
+NAME:
+RDP Brute Force Response
+
+TRIGGER:
+More than 20 failed RDP (port 3389) authentication attempts against the
+same account or host within 5 minutes, or repeated failures from a
+single external IP.
+
+INVESTIGATION:
+1. Identify the source IP address(es) and geolocate them.
+2. Check threat intelligence feeds for the source IP reputation.
+3. Review Windows Security Event Log (Event ID 4625) on the target host
+   for authentication failure details.
+4. Determine which accounts were targeted.
+5. Check for Event ID 4624 (successful logon) following failures —
+   this indicates a successful brute force.
+6. If successful login occurred: review actions taken during that session
+   (Event IDs 4672, 4688, 7045) for privilege escalation or tool execution.
+7. Determine whether RDP is exposed directly to the internet or via a
+   jump server / VPN.
+
+RESPONSE:
+1. Block the source IP at the perimeter firewall and/or WAF.
+2. Enable account lockout policy if not already enforced (lockout after
+   5 failed attempts, 30-minute lockout duration).
+3. If a successful login was detected:
+   a. Immediately isolate the compromised host.
+   b. Disable or lock the compromised account.
+   c. Force password reset and MFA enrollment.
+4. Restrict RDP access to authorized VPN users or jump hosts only.
+5. Enable NLA (Network Level Authentication) on all RDP-exposed hosts.
+6. Collect and preserve Windows Event Logs from the target host.
+7. Increase logging verbosity on Windows hosts (Audit Logon Events).
+
+ESCALATION:
+Escalate to Tier 2 if a successful login after brute force is confirmed,
+or if multiple hosts are being targeted simultaneously.
+
+Human approval is required before blocking IPs, disabling accounts,
+isolating hosts, or modifying firewall rules.

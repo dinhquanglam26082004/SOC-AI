@@ -1,0 +1,25 @@
+T1036.010 - Masquerade Account Name
+
+Tactic: Stealth
+Platform: containers, iaas, identity provider, linux, macos, office suite, saas, windows
+
+Description:
+Adversaries may match or approximate the names of legitimate accounts to make
+newly created ones appear benign. This will typically occur during Create
+Account, although accounts may also be renamed at a later date. This may also
+coincide with Account Access Removal if the actor first deletes an account
+before re-creating one with the same name.  Often, adversaries will attempt to
+masquerade as service accounts, such as those associated with legitimate
+software, data backups, or container cluster management. They may also give
+accounts generic, trustworthy names, such as “admin”, “help”, or “root.”
+Sometimes adversaries may model account names off of those already existing in
+the system, as a follow-on behavior to Account Discovery.    Note that this is
+distinct from Impersonation, which describes impersonating specific trusted
+individuals or organizations, rather than user or service account names.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - User Account Management
+  - Audit

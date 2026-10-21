@@ -1,0 +1,3 @@
+# Keep Python, Docker configuration and Linux entry points usable after a
+# Windows clone, regardless of the user's core.autocrlf setting.
+* text=auto eol=lf

@@ -1,0 +1,27 @@
+T1136 - Create Account
+
+Tactic: Persistence
+Platform: containers, esxi, iaas, identity provider, linux, macos, network devices, office suite, saas, windows
+
+Description:
+Adversaries may create an account to maintain access to victim systems. With a
+sufficient level of access, creating such accounts may be used to establish
+secondary credentialed access that do not require persistent remote access
+tools to be deployed on the system.  Accounts may be created on the local
+system or within a domain or cloud tenant. In cloud environments, adversaries
+may create accounts that only have access to specific services, which can
+reduce the chance of detection.
+
+Sub-techniques:
+  T1136.001 - Local Account
+  T1136.002 - Domain Account
+  T1136.003 - Cloud Account
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Operating System Configuration
+  - Network Segmentation
+  - Privileged Account Management
+  - Multi-factor Authentication

@@ -1,0 +1,50 @@
+T1059 - Command and Scripting Interpreter
+
+Tactic: Execution
+Platform: containers, esxi, iaas, identity provider, linux, macos, network devices, office suite, saas, windows
+
+Description:
+Adversaries may abuse command and script interpreters to execute commands,
+scripts, or binaries. These interfaces and languages provide ways of
+interacting with computer systems and are a common feature across many
+different platforms. Most systems come with some built-in command-line
+interface and scripting capabilities, for example, macOS and Linux
+distributions include some flavor of Unix Shell while Windows installations
+include the Windows Command Shell and PowerShell.  There are also cross-
+platform interpreters such as Python, as well as those commonly associated
+with client applications such as JavaScript and Visual Basic.  Adversaries may
+abuse these technologies in various ways as a means of executing arbitrary
+commands. Commands and scripts can be embedded in Initial Access payloads
+delivered to victims as lure documents or as secondary payloads downloaded
+from an existing C2. Adversaries may also execute commands through interactive
+terminals/shells, as well as utilize various Remote Services in order to
+achieve remote Execution.
+
+Sub-techniques:
+  T1059.007 - JavaScript
+  T1059.002 - AppleScript
+  T1059.010 - AutoHotKey & AutoIT
+  T1059.009 - Cloud API
+  T1059.008 - Network Device CLI
+  T1059.001 - PowerShell
+  T1059.004 - Unix Shell
+  T1059.011 - Lua
+  T1059.013 - Container CLI/API
+  T1059.006 - Python
+  T1059.003 - Windows Command Shell
+  T1059.012 - Hypervisor CLI
+  T1059.005 - Visual Basic
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Restrict Web-Based Content
+  - Limit Software Installation
+  - Execution Prevention
+  - Code Signing
+  - Behavior Prevention on Endpoint
+  - Privileged Account Management
+  - Antivirus/Antimalware
+  - Audit
+  - Disable or Remove Feature or Program

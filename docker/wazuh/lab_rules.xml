@@ -1,0 +1,9 @@
+<group name="windows,soc_lab,">
+  <rule id="100110" level="3">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^4104$</field>
+    <field name="win.eventdata.scriptBlockText" type="pcre2">SOC-LAB-HARMLESS-PS</field>
+    <description>LAB ONLY: harmless PowerShell marker observed</description>
+    <group>soc_lab,</group>
+  </rule>
+</group>

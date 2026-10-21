@@ -1,0 +1,21 @@
+T1010 - Application Window Discovery
+
+Tactic: Discovery
+Platform: linux, macos, windows
+
+Description:
+Adversaries may attempt to get a listing of open application windows. Window
+listings could convey information about how the system is used. For example,
+information about application windows could be used identify potential data to
+collect as well as identifying security tooling (Security Software Discovery)
+to evade.  Adversaries typically abuse system features for this type of
+enumeration. For example, they may gather information through native system
+features such as Command and Scripting Interpreter commands and Native API
+functions.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.

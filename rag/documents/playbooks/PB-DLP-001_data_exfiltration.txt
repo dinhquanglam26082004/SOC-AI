@@ -1,0 +1,48 @@
+PLAYBOOK ID: PB-DLP-001
+
+NAME:
+Data Exfiltration Response
+
+TRIGGER:
+Alert indicating unusually large outbound data transfer, DLP policy
+violation, or detection of data staging/compression activity:
+- Outbound transfer > 500 MB to external IP in short window.
+- DLP alert on sensitive file upload (PII, financial, source code).
+- DNS tunneling or covert channel indicators.
+- Large archive creation (zip/rar/7z) followed by outbound transfer.
+
+INVESTIGATION:
+1. Identify the source host, user account, and destination IP/domain.
+2. Determine the volume and type of data transferred.
+3. Review proxy/firewall logs for the full session details
+   (URLs, bytes transferred, duration, HTTP method).
+4. Check whether the destination is a known cloud storage service
+   (Dropbox, OneDrive, Mega, WeTransfer) or unusual IP.
+5. Check for data staging activity: archive creation, file copying
+   to temp directories, or bulk file access before transfer.
+6. Determine if the activity is authorized (business justification,
+   approved data transfer, backup agent).
+7. Review the user's recent activity pattern for anomalies.
+8. Check for concurrent credential theft or privilege escalation.
+9. Identify what data was exfiltrated (file names, directories accessed).
+
+RESPONSE:
+1. Block the destination IP/domain at the firewall and proxy immediately.
+2. If insider threat is suspected: preserve evidence BEFORE alerting
+   the user (coordinate with HR and Legal).
+3. Isolate the host if malware-driven exfiltration is confirmed.
+4. Preserve proxy logs, DLP logs, and endpoint artifacts.
+5. Assess regulatory reporting obligations (GDPR, PCI-DSS, HIPAA).
+6. Notify Data Protection Officer (DPO) and Legal within required
+   timeframes if PII or regulated data is involved.
+7. Revoke cloud storage OAuth tokens if cloud service was abused.
+8. Submit destination indicators to threat intelligence.
+
+ESCALATION:
+Immediately escalate to Tier 3 / CISO and Legal if regulated data
+(PII, PHI, financial records) is confirmed to have been exfiltrated.
+Law enforcement notification may be required.
+
+Human approval is required before blocking destinations, isolating
+hosts, or notifying regulators. HR must approve any action involving
+employee accounts suspected of insider threat.

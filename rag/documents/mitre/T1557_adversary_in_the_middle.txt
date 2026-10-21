@@ -1,0 +1,44 @@
+T1557 - Adversary-in-the-Middle
+
+Tactic: Credential Access, Collection
+Platform: linux, macos, network devices, windows
+
+Description:
+Adversaries may attempt to position themselves between two or more networked
+devices using an adversary-in-the-middle (AiTM) technique to support follow-on
+behaviors such as Network Sniffing, Transmitted Data Manipulation, or replay
+attacks (Exploitation for Credential Access). By abusing features of common
+networking protocols that can determine the flow of network traffic (e.g. ARP,
+DNS, LLMNR, etc.), adversaries may force a device to communicate through an
+adversary controlled system so they can collect information or perform
+additional actions.  For example, adversaries may manipulate victim DNS
+settings to enable other malicious activities such as preventing/redirecting
+users from accessing legitimate sites and/or pushing additional malware.
+Adversaries may also manipulate DNS and leverage their position in order to
+intercept user credentials, including access tokens (Steal Application Access
+Token) and session cookies (Steal Web Session Cookie). Downgrade Attacks can
+also be used to establish an AiTM position, such as by negotiating a less
+secure, deprecated, or weaker version of communication protocol (SSL/TLS) or
+encryption algorithm.  Adversaries may also leverage the AiTM position to
+attempt to monitor and/or modify traffic, such as in Transmitted Data
+Manipulation. Adversaries can setup a position similar to AiTM to prevent
+traffic from flowing to the appropriate destination, potentially to impair
+defenses and/or in support of a Network Denial of Service.
+
+Sub-techniques:
+  T1557.004 - Evil Twin
+  T1557.003 - DHCP Spoofing
+  T1557.001 - Name Resolution Poisoning and SMB Relay
+  T1557.002 - ARP Cache Poisoning
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Network Intrusion Prevention
+  - Limit Access to Resource Over Network
+  - Filter Network Traffic
+  - User Training
+  - Network Segmentation
+  - Disable or Remove Feature or Program
+  - Encrypt Sensitive Information

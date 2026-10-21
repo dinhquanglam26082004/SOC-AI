@@ -1,0 +1,14 @@
+#!/var/ossec/framework/python/bin/python3
+import sys
+from pathlib import Path
+sys.path.insert(0, '/opt/soc-ai')
+from wazuh_integration.spool import integration
+try:
+    integration(sys.argv[1])
+except Exception as exc:
+    # Fixed message only: no raw log content or credentials.
+    try:
+        Path('/spool/integration-error').write_text('Spool ingestion failed; inspect retained Manager alerts and disk space.\n')
+    finally:
+        print('SOC-AI spool failure (' + type(exc).__name__ + '): operator recovery required', file=sys.stderr)
+        sys.exit(1)

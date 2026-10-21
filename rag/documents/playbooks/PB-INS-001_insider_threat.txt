@@ -1,0 +1,51 @@
+PLAYBOOK ID: PB-INS-001
+
+NAME:
+Insider Threat Response
+
+TRIGGER:
+Behavioral analytics or DLP alert indicating potential insider threat:
+- Employee accessing data outside normal working hours or from unusual
+  location, especially before resignation/termination.
+- Bulk download of sensitive files to personal device or cloud storage.
+- Privilege abuse: access to data beyond job function.
+- User account active after offboarding.
+
+INVESTIGATION:
+1. Engage HR and Legal BEFORE alerting or confronting the user.
+   This investigation must be covert in initial stages.
+2. Collect and preserve logs without modifying them:
+   - VPN and authentication logs.
+   - File access logs (DLP, DRM, file server audit).
+   - Email logs (sent items, forwarding rules).
+   - Cloud storage access (OneDrive, SharePoint, personal accounts).
+   - Badge access records.
+3. Establish a baseline of the user's normal behavior patterns.
+4. Document all anomalous activities with timestamps.
+5. Determine whether the activity is malicious, negligent, or a
+   policy violation (misuse vs. deliberate theft).
+6. Assess what data was accessed, copied, or transmitted.
+7. Preserve chain of custody for all evidence (required for legal action).
+
+RESPONSE:
+1. All response actions require approval from HR, Legal, and Management.
+2. If termination is pending or confirmed:
+   a. Immediately revoke all access on the last day of employment.
+   b. Disable accounts, revoke VPN certificates, remove email access.
+   c. Recover company-owned devices.
+3. If active data exfiltration is occurring:
+   a. Block outbound transfer at the proxy (without alerting user).
+   b. Preserve evidence simultaneously.
+4. Conduct exit interview coordinated with HR (if appropriate).
+5. File a law enforcement report if criminal activity (IP theft, fraud)
+   is confirmed.
+6. Review access controls to prevent similar incidents:
+   - Implement need-to-know data access.
+   - Enable User Behavior Analytics (UBA) monitoring.
+
+ESCALATION:
+Engage HR, Legal, and executive management at the earliest stage.
+This playbook must NOT be executed by SOC Tier 1 alone.
+
+All actions against the suspected user account require explicit written
+approval from HR Director and Legal Counsel.

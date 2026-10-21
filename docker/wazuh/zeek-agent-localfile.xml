@@ -1,0 +1,7 @@
+<!-- Add inside an existing ossec_config block on the Ubuntu Agent. -->
+<localfile>
+  <!-- syslog reads each text line, including JSON logs and startup/error text. -->
+  <log_format>syslog</log_format>
+  <location>/opt/zeek/logs/current/*.log</location>
+  <only-future-events>no</only-future-events>
+</localfile>

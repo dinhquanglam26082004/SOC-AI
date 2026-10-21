@@ -1,0 +1,25 @@
+T1204.005 - Malicious Library
+
+Tactic: Execution
+Platform: linux, macos, windows
+
+Description:
+Adversaries may rely on a user installing a malicious library to facilitate
+execution. Threat actors may Upload Malware to package managers such as NPM
+and PyPi, as well as to public code repositories such as GitHub. User may
+install libraries without realizing they are malicious, thus bypassing
+techniques that specifically achieve Initial Access. This can lead to the
+execution of malicious code, such as code that establishes persistence, steals
+data, or mines cryptocurrency.  In some cases, threat actors may compromise
+and backdoor existing popular libraries (i.e., Compromise Software
+Dependencies and Development Tools). Alternatively, they may create entirely
+new packages and leverage behaviors such as typosquatting to encourage users
+to install them.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Network Intrusion Prevention
+  - Limit Software Installation
+  - User Training

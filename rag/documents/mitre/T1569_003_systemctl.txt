@@ -1,0 +1,19 @@
+T1569.003 - Systemctl
+
+Tactic: Execution
+Platform: linux
+
+Description:
+Adversaries may abuse systemctl to execute commands or programs. Systemctl is
+the primary interface for systemd, the Linux init system and service manager.
+Typically invoked from a shell, Systemctl can also be integrated into scripts
+or applications.     Adversaries may use systemctl to execute commands or
+programs as Systemd Services. Common subcommands include: `systemctl start`,
+`systemctl stop`, `systemctl enable`, `systemctl disable`, and `systemctl
+status`.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - User Account Management

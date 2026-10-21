@@ -1,0 +1,59 @@
+SOC ALERT TRIAGE POLICY
+
+PURPOSE:
+Define the process for SOC analysts to consistently triage, classify,
+and prioritize incoming alerts.
+
+TRIAGE STEPS:
+
+Step 1 — Validate the Alert:
+- Confirm the alert is not a known false positive from the false
+  positive register.
+- Verify the alert data (IP, hostname, user) exists in the asset
+  inventory.
+- Check whether the same alert fired previously (recurring known issue).
+- If confirmed false positive: close with "False Positive" disposition
+  and document the reason.
+
+Step 2 — Enrich the Alert:
+- Resolve hostnames to IPs and vice versa.
+- Look up source IPs in threat intelligence (VirusTotal, AbuseIPDB).
+- Identify the asset owner and business criticality.
+- Check whether the asset has a maintenance window or change ticket.
+- Review the affected user's account status and role.
+
+Step 3 — Assign Initial Severity:
+- Apply the SOC Severity Policy to set initial severity (LOW/MEDIUM/HIGH/CRITICAL).
+- Adjust severity based on asset criticality (crown jewels: +1 level).
+- If uncertainty exists, assign higher severity (err on the side of caution).
+
+Step 4 — Initial Containment Decision:
+- LOW/MEDIUM: Document, monitor, schedule investigation.
+- HIGH: Begin active investigation, consider interim containment
+  (block IP at firewall if confirmed malicious).
+- CRITICAL: Immediate response per relevant playbook; notify Tier 2
+  within 15 minutes.
+
+Step 5 — Document and Track:
+- Create a ticket in the SIEM/SOAR/ticketing system immediately.
+- Record all enrichment data, actions taken, and decisions.
+- Update ticket status throughout the lifecycle.
+- Close with one of: True Positive, False Positive, Benign Positive,
+  Undetermined.
+
+CLASSIFICATION DEFINITIONS:
+- True Positive (TP): Alert correctly identified a real threat.
+- False Positive (FP): Alert fired on legitimate/benign activity.
+- Benign Positive (BP): Alert fired correctly but activity was authorized.
+- Undetermined (UN): Insufficient data to classify; requires further review.
+
+FALSE POSITIVE MANAGEMENT:
+- FP rate > 20% for any single rule: submit rule tuning request.
+- Document all FPs in the false positive register with the alert rule ID.
+- Monthly review of top FP-generating rules with SIEM team.
+
+ALERT QUEUE MANAGEMENT:
+- Tier 1 SLA for first review:
+  CRITICAL: 15 minutes | HIGH: 1 hour | MEDIUM: 4 hours | LOW: 24 hours.
+- Maximum queue depth per analyst: 20 active tickets.
+- Unreviewed CRITICAL alerts auto-escalate to shift lead after 15 minutes.

@@ -1,0 +1,40 @@
+PLAYBOOK ID: PB-PHI-001
+
+NAME:
+Phishing Email Response
+
+TRIGGER:
+User reports suspicious email, or email security gateway flags a message
+as phishing / malicious attachment / credential harvesting link.
+
+INVESTIGATION:
+1. Obtain the original email headers and body (do not click any links).
+2. Extract and defang all URLs and attachment hashes.
+3. Check URLs against threat intelligence (VirusTotal, URLScan.io).
+4. Check attachment hashes against AV and sandboxing tools.
+5. Identify all recipients of the same campaign within the organization.
+6. Check mail server logs for delivery and open/click events.
+7. Determine whether any user clicked links or opened attachments.
+8. If credentials were submitted: check for account logins from unusual IPs
+   or locations in the past 24 hours.
+9. Correlate with EDR telemetry for payload execution on endpoints.
+
+RESPONSE:
+1. Quarantine the phishing email from all affected mailboxes.
+2. Block sender domain and all extracted malicious URLs at the gateway.
+3. If a user clicked a link or opened an attachment:
+   a. Isolate the endpoint from the network.
+   b. Force password reset for the affected account(s).
+   c. Revoke active sessions / OAuth tokens.
+4. Notify affected users and their managers.
+5. Submit indicators to threat intelligence platform.
+6. Preserve email headers, URLs, and attachment samples as evidence.
+
+ESCALATION:
+Escalate to Tier 2 / Incident Response if:
+- Credential theft is confirmed.
+- Malware execution is detected on any endpoint.
+- More than 10 users received or interacted with the email.
+
+Human approval is required before quarantining mailboxes, blocking
+domains, isolating endpoints, or resetting user credentials.

@@ -1,0 +1,50 @@
+SOC SEVERITY POLICY
+
+LOW:
+1-5 failed authentication attempts.
+Informational log entries, routine policy violations.
+No immediate threat indicators present.
+SLA: Review within 24 hours.
+
+MEDIUM:
+6-20 failed authentication attempts.
+Single-source port scan detected.
+Suspicious process execution (moderate confidence).
+Known bad IP contacted but no payload delivered.
+SLA: Review within 4 hours.
+
+HIGH:
+More than 20 failed authentication attempts within 5 minutes.
+Successful authentication after repeated failures from same source.
+Malware detected (quarantined successfully).
+Web application attack (SQLi, XSS) with indicators of exploitation.
+Privilege escalation attempt detected.
+SLA: Review within 1 hour.
+
+CRITICAL:
+Successful authentication after brute-force activity,
+evidence of account compromise, or privilege escalation.
+Active ransomware encryption detected.
+Active data exfiltration in progress.
+Lateral movement confirmed between internal hosts.
+Domain Controller or Active Directory compromise suspected.
+Web shell confirmed active.
+SLA: Immediate response (within 15 minutes).
+
+For SSH brute-force detection:
+More than 20 failed authentication attempts from the
+same source IP targeting the same account within 5 minutes
+should be considered HIGH severity.
+
+For RDP brute-force detection:
+Treat the same thresholds as SSH. If RDP is exposed directly
+to the internet (not via VPN), elevate severity by one level.
+
+The absence of a successful login does not automatically
+reduce the severity of a large-scale brute-force attempt.
+
+Severity may be escalated based on asset criticality:
+- Crown jewel assets (AD DC, financial systems, PII databases):
+  elevate all alerts by one severity level.
+- DMZ/internet-facing assets: elevate HIGH to CRITICAL if
+  exploitation indicators are present.

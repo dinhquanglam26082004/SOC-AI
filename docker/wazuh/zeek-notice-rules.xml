@@ -1,0 +1,15 @@
+<!-- Level 3 is a delivery envelope for all Zeek log lines, not a security detection.
+     SOC-AI stores these in zeek_logs, outside Alerts and the automatic AI queue. -->
+<group name="zeek,zeek_telemetry,network,">
+  <rule id="100121" level="3">
+    <location type="pcre2">(?:^|/)zeek/logs/current/[^/]+\.log$</location>
+    <description>Zeek log transport record (not a security alert)</description>
+  </rule>
+  <rule id="100120" level="5">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">(?:^|/)zeek/logs/current/notice\.log$</location>
+    <field name="note" type="pcre2">^[A-Za-z0-9_]+::[A-Za-z0-9_:]+$</field>
+    <description>Zeek notice: $(note) — $(msg)</description>
+    <group>zeek_notice,</group>
+  </rule>
+</group>

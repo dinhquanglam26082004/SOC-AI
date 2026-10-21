@@ -1,0 +1,45 @@
+T1556 - Modify Authentication Process
+
+Tactic: Defense Impairment, Persistence, Credential Access
+Platform: iaas, identity provider, linux, macos, network devices, office suite, saas, windows
+
+Description:
+Adversaries may modify authentication mechanisms and processes to access user
+credentials or enable otherwise unwarranted access to accounts. The
+authentication process is handled by mechanisms, such as the Local Security
+Authentication Server (LSASS) process and the Security Accounts Manager (SAM)
+on Windows, pluggable authentication modules (PAM) on Unix-based systems, and
+authorization plugins on MacOS systems, responsible for gathering, storing,
+and validating credentials. By modifying an authentication process, an
+adversary may be able to authenticate to a service or system without using
+Valid Accounts.  Adversaries may maliciously modify a part of this process to
+either reveal credentials or bypass authentication mechanisms. Compromised
+credentials or access may be used to bypass access controls placed on various
+resources on systems within the network and may even be used for persistent
+access to remote systems and externally available services, such as VPNs,
+Outlook Web Access and remote desktop.
+
+Sub-techniques:
+  T1556.003 - Pluggable Authentication Modules
+  T1556.002 - Password Filter DLL
+  T1556.007 - Hybrid Identity
+  T1556.008 - Network Provider DLL
+  T1556.006 - Multi-Factor Authentication
+  T1556.009 - Conditional Access Policies
+  T1556.001 - Domain Controller Authentication
+  T1556.005 - Reversible Encryption
+  T1556.004 - Network Device Authentication
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Operating System Configuration
+  - Privileged Process Integrity
+  - Password Policies
+  - User Account Management
+  - Restrict File and Directory Permissions
+  - Privileged Account Management
+  - Restrict Registry Permissions
+  - Multi-factor Authentication
+  - Audit

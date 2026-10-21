@@ -1,0 +1,42 @@
+PLAYBOOK ID: PB-RAN-001
+
+NAME:
+Ransomware Incident Response
+
+TRIGGER:
+EDR/AV alert indicating ransomware activity, file encryption detected
+(mass .encrypted/.locked extension changes), or user reports inability
+to open files with ransom note present.
+
+INVESTIGATION:
+1. Identify the initially compromised host via EDR telemetry.
+2. Determine the ransomware family (check ransom note, file extension,
+   and compare against known signatures).
+3. Map the spread: identify other hosts showing encryption activity
+   via file integrity monitoring and EDR alerts.
+4. Identify patient zero: review login history, email, USB, RDP,
+   and web proxy logs for the initial infection vector.
+5. Determine which network shares and backup locations were reached.
+6. Check whether shadow copies (VSS) have been deleted.
+7. Identify the active user account context under which ransomware ran.
+
+RESPONSE:
+1. IMMEDIATELY isolate all affected hosts from the network
+   (disable NIC or move to quarantine VLAN). Do not power off.
+2. Isolate network shares accessed by affected hosts.
+3. Suspend or disable the compromised user account(s).
+4. Notify management and initiate Crisis Communication Plan.
+5. Preserve memory dumps and forensic images before any remediation.
+6. Identify and restore clean backups (verify backup integrity first).
+7. Do NOT pay ransom without legal/management approval and law enforcement
+   notification.
+8. Rebuild compromised systems from known-good images after forensic capture.
+9. Patch the initial entry vector before reconnecting systems.
+
+ESCALATION:
+Escalate to Tier 3 / CISO immediately upon detection. Notify legal
+and HR if internal accounts are involved. Report to law enforcement
+if required by regulation (e.g., GDPR, local cybercrime law).
+
+Human approval is required before isolating hosts, suspending accounts,
+restoring backups, or any ransom payment discussion.

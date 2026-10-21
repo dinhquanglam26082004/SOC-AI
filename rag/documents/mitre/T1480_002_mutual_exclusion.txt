@@ -1,0 +1,24 @@
+T1480.002 - Mutual Exclusion
+
+Tactic: Stealth
+Platform: linux, macos, windows
+
+Description:
+Adversaries may constrain execution or actions based on the presence of a
+mutex associated with malware. A mutex is a locking mechanism used to
+synchronize access to a resource. Only one thread or process can acquire a
+mutex at a given time.  While local mutexes only exist within a given process,
+allowing multiple threads to synchronize access to a resource, system mutexes
+can be used to synchronize the activities of multiple processes. By creating a
+unique system mutex associated with a particular malware, adversaries can
+verify whether or not a system has already been compromised.  In Linux
+environments, malware may instead attempt to acquire a lock on a mutex file.
+If the malware is able to acquire the lock, it continues to execute; if it
+fails, it exits to avoid creating a second instance of itself.  Mutex names
+may be hard-coded or dynamically generated using a predictable algorithm.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Do Not Mitigate

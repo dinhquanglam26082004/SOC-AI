@@ -1,0 +1,29 @@
+T1558.003 - Kerberoasting
+
+Tactic: Credential Access
+Platform: windows
+
+Description:
+Adversaries may abuse a valid Kerberos ticket-granting ticket (TGT) or sniff
+network traffic to obtain a ticket-granting service (TGS) ticket that may be
+vulnerable to Brute Force.   Service principal names (SPNs) are used to
+uniquely identify each instance of a Windows service. To enable
+authentication, Kerberos requires that SPNs be associated with at least one
+service logon account (an account specifically tasked with running a service).
+Adversaries possessing a valid Kerberos ticket-granting ticket (TGT) may
+request one or more Kerberos ticket-granting service (TGS) service tickets for
+any SPN from a domain controller (DC). Portions of these tickets may be
+encrypted with the RC4 algorithm, meaning the Kerberos 5 TGS-REP etype 23 hash
+of the service account associated with the SPN is used as the private key and
+is thus vulnerable to offline Brute Force attacks that may expose plaintext
+credentials.   This same behavior could be executed using service tickets
+captured from network traffic.  Cracked hashes may enable Persistence,
+Privilege Escalation, and Lateral Movement via access to Valid Accounts.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Password Policies
+  - Privileged Account Management
+  - Encrypt Sensitive Information

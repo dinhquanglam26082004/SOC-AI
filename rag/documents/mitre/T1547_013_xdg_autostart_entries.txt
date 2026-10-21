@@ -1,0 +1,29 @@
+T1547.013 - XDG Autostart Entries
+
+Tactic: Persistence, Privilege Escalation
+Platform: linux
+
+Description:
+Adversaries may add or modify XDG Autostart Entries to execute malicious
+programs or commands when a user’s desktop environment is loaded at login. XDG
+Autostart entries are available for any XDG-compliant Linux system. XDG
+Autostart entries use Desktop Entry files (`.desktop`) to configure the user’s
+desktop environment upon user login. These configuration files determine what
+applications launch upon user login, define associated applications to open
+specific file types, and define applications used to open removable media.
+Adversaries may abuse this feature to establish persistence by adding a path
+to a malicious binary or command to the `Exec` directive in the `.desktop`
+configuration file. When the user’s desktop environment is loaded at user
+login, the `.desktop` files located in the XDG Autostart directories are
+automatically executed. System-wide Autostart entries are located in the
+`/etc/xdg/autostart` directory while the user entries are located in the
+`~/.config/autostart` directory.  Adversaries may combine this technique with
+Masquerading to blend malicious Autostart entries with legitimate programs.
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Limit Software Installation
+  - User Account Management
+  - Restrict File and Directory Permissions

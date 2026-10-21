@@ -1,0 +1,25 @@
+T1069 - Permission Groups Discovery
+
+Tactic: Discovery
+Platform: containers, iaas, identity provider, linux, macos, office suite, saas, windows
+
+Description:
+Adversaries may attempt to discover group and permission settings. This
+information can help adversaries determine which user accounts and groups are
+available, the membership of users in particular groups, and which users and
+groups have elevated permissions.  Adversaries may attempt to discover group
+permission settings in many different ways. This data may provide the
+adversary with information about the compromised environment that can be used
+in follow-on activity and targeting.
+
+Sub-techniques:
+  T1069.003 - Cloud Groups
+  T1069.002 - Domain Groups
+  T1069.001 - Local Groups
+
+Detection:
+Monitor for anomalous behavior related to this technique.
+
+Mitigation:
+  - Follow vendor hardening guidelines.
+  - Apply least-privilege principle.
