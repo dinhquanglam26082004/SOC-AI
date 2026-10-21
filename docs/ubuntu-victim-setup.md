@@ -48,7 +48,7 @@ và Python 3.12. Nếu đã có `.venv`, bỏ lệnh tạo lại môi trường.
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts\configure_local.py
 docker compose --profile app up -d --build
-docker compose exec ollama ollama pull qwen3:0.6b
+docker compose exec ollama ollama pull qwen3:8b
 docker compose ps
 ipconfig
 ```

@@ -48,8 +48,10 @@ def _build_query(report: dict) -> str:
     return " ".join(str(p) for p in parts if p)
 
 
-def propose_playbook(report: dict, model: str = None) -> dict:
+def propose_playbook(report: dict, model: str = None, on_progress=None) -> dict:
     model = model or AGENT_MODEL
+    if on_progress:
+        on_progress('retrieving_playbook', 4)
     # Task #7: Neu investigation agent tra ve _parse_error, KHONG goi RAG/model
     # de tranh tao playbook vo can cu tu query rong (incident_type="", mitre=[]).
     if report.get("_parse_error"):
@@ -83,6 +85,8 @@ Select the appropriate playbook and propose response actions.
 Return the JSON object described in the system prompt.
 """
 
+    if on_progress:
+        on_progress('proposing_playbook', 5)
     proposal = chat_json(SYSTEM_PROMPT, user_prompt, model=model)
     if proposal.get("_parse_error"):
         raise ValueError("Playbook model returned invalid JSON")
@@ -94,6 +98,7 @@ Return the JSON object described in the system prompt.
         action['approval_required'] = True
     proposal['citations'] = citations
     proposal["_alert_id"] = report.get("_alert_id")
+    proposal["_model"] = model
     return proposal
 
 

@@ -1,6 +1,6 @@
 """
 Agent 1 - Investigation Agent
-Nhan Wazuh alert -> tra cuu RAG (policy, MITRE) -> goi Foundation-Sec-8B -> tra ve bao cao dieu tra.
+Nhan Wazuh alert -> tra cuu RAG (policy, MITRE) -> goi Qwen3-8B -> tra ve bao cao dieu tra.
 """
 import json
 import logging
@@ -65,8 +65,10 @@ def _build_query(alert: dict) -> str:
     return " ".join(str(p) for p in parts if p)
 
 
-def investigate(alert: dict, model: str = None) -> dict:
+def investigate(alert: dict, model: str = None, on_progress=None) -> dict:
     model = model or AGENT_MODEL
+    if on_progress:
+        on_progress('retrieving_evidence', 1)
     query = _build_query(alert)
 
     policy_docs = retrieve(query, top_k=2, doc_type="policies")
@@ -89,7 +91,11 @@ Do not invent evidence.
 Return the JSON object described in the system prompt.
 """
 
+    if on_progress:
+        on_progress('investigating', 2)
     report = chat_json(SYSTEM_PROMPT, user_prompt, model=model)
+    if on_progress:
+        on_progress('validating_report', 3)
     if report.get("_parse_error"):
         raise ValueError("Investigation model returned invalid JSON")
     raw_severity = str(report.get("severity", "")).upper().strip()
@@ -110,6 +116,7 @@ Return the JSON object described in the system prompt.
     report["confidence"] = confidence
 
     report["_alert_id"] = alert.get("id") or alert.get("alert_id")
+    report["_model"] = model
     report['citations'] = citations
     return report
 

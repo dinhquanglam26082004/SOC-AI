@@ -1,5 +1,8 @@
 # Kiểm chứng bàn giao — 20/10/2026
 
+> Cấu hình model hiện tại đã chuyển sang Qwen3-8B, xem [hướng dẫn](qwen3-8b.md).
+> Các số liệu model 0.6B trong tài liệu này là ghi nhận lịch sử, không phải đánh giá 8B.
+
 > Ghi nhận lịch sử ngày 20/10/2026. Từ 21/10/2026, chức năng hỏi đáp và API chat
 > đã được gỡ theo yêu cầu; kết quả kiểm tra chat bên dưới không áp dụng cho bản hiện tại.
 

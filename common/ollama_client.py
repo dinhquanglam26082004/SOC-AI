@@ -1,5 +1,5 @@
 """
-Client goi Foundation-Sec-8B qua Ollama local (API /api/chat).
+Client goi Qwen3-8B qua Ollama local (API /api/chat).
 Ca 2 agent (Investigation, Playbook) deu goi qua module nay -
 chi khac nhau o system_prompt, khong can chay 2 model.
 """

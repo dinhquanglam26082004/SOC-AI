@@ -17,7 +17,7 @@ import requests
 from common.config import AGENT_MODEL, OLLAMA_HOST, CHROMA_PATH, CHROMA_COLLECTION_NAME
 from common.event_store import EventStore, QueueFull
 from common.alert_timeseries import build_alert_buckets
-from wazuh_integration.mapper import map_wazuh_alert, ai_eligible
+from wazuh_integration.mapper import map_wazuh_alert, ai_eligible, is_security_alert
 
 ROOT = Path(__file__).resolve().parent.parent
 logger = logging.getLogger(__name__)
@@ -27,11 +27,16 @@ def reject_json_constant(value):
     raise ValueError('Non-finite JSON number')
 
 
-def analyze(record):
+def analyze(record, on_progress=None):
+    if not is_security_alert(record):
+        raise ValueError('AI investigation requires a security alert')
     from agents.investigation_agent import investigate
     from agents.playbook_agent import propose_playbook
-    report = investigate(record, model=AGENT_MODEL)
-    proposal = propose_playbook(report, model=AGENT_MODEL)
+    report = investigate(record, model=AGENT_MODEL, on_progress=on_progress)
+    record['investigation_report'] = report
+    proposal = propose_playbook(report, model=AGENT_MODEL, on_progress=on_progress)
+    if on_progress:
+        on_progress('saving', 6)
     return report, proposal
 
 
@@ -47,10 +52,14 @@ async def ai_worker(app):
         if not record:
             await asyncio.sleep(.5)
             continue
+        if not is_security_alert(record):
+            await asyncio.to_thread(store.skip, record, 'Not a security alert; no model call made')
+            continue
         error = None
         try:
             async with app.state.ai_slots:
-                report, proposal = await asyncio.to_thread(analyze, record)
+                report, proposal = await asyncio.to_thread(
+                    analyze, record, lambda stage, step: store.progress(record, stage, step, AGENT_MODEL))
             record['investigation_report'], record['playbook_proposal'] = report, proposal
             # The source rule severity is never overwritten by an inference.
         except asyncio.CancelledError:
@@ -117,7 +126,8 @@ def create_app(db_path=None, workers=True):
         except Exception:
             logger.error('Durable ingestion failed')
             raise HTTPException(503, 'Storage unavailable; retry delivery')
-        return {'id': saved['id'], 'duplicate': duplicate, 'durable': True, 'ai_status': saved['ai_status']}
+        return {'id': saved['id'], 'duplicate': duplicate, 'durable': True,
+                'ignored': saved.get('_ignored_before_reset', False), 'ai_status': saved['ai_status']}
 
     @app.get('/api/zeek/logs')
     def zeek_logs(limit: int = Query(100, ge=1, le=500), before: int = Query(None, ge=1), log_type: str = None):
@@ -158,6 +168,9 @@ def create_app(db_path=None, workers=True):
 
     @app.post('/api/alerts/{alert_id}/investigate', status_code=202)
     def retry(alert_id: str):
+        record = app.state.store.get(alert_id)
+        if record and not is_security_alert(record):
+            raise HTTPException(403, 'AI investigates security alerts only; ordinary logs are excluded')
         try:
             queued = app.state.store.retry(alert_id)
             return {'queued': queued, 'alert': app.state.store.get(alert_id)}

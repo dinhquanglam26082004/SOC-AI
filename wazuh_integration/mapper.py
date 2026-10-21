@@ -86,11 +86,35 @@ def map_wazuh_alert(raw):
         record['dst_ip'] = network_ip(data.get('dst') or data.get('id.resp_h') or endpoints.get('resp_h'))
         record['src_port'] = data.get('id.orig_p', endpoints.get('orig_p'))
         record['dst_port'] = data.get('p') or data.get('id.resp_p', endpoints.get('resp_p'))
+    record['ai_allowed'] = is_security_alert(record)
+    record['event_kind'] = 'alert' if record['ai_allowed'] else 'telemetry'
     return record
 
 
+def is_security_alert(record):
+    """Hard boundary shared by ingestion, manual retry and the AI worker."""
+    if record.get('source') != 'wazuh' or record.get('event_kind') == 'telemetry':
+        return False
+    rule = record.get('rule', {})
+    groups = set(rule.get('groups', []))
+    if record.get('source_product') == 'zeek':
+        note = str(record.get('zeek_notice', {}).get('note', ''))
+        return ('zeek_notice' in groups and bool(note)
+                and not note.startswith(('CaptureLoss::', 'ChecksumOffloading::')))
+    if groups.intersection({'sca', 'syscollector', 'dpkg', 'package', 'package_management', 'inventory'}):
+        return False
+    if str(rule.get('id')) in {'591', '5501', '5502', '5402'}:
+        return False  # rotation, ordinary PAM sessions and successful sudo
+    security_groups = {'syscheck', 'authentication_failed', 'invalid_login', 'rootcheck',
+                       'malware', 'web_attack', 'attack', 'intrusion_detection', 'virus',
+                       'trojan', 'ransomware', 'exploit', 'yara', 'suricata', 'snort'}
+    rules = {x.strip() for x in os.getenv('WAZUH_AI_RULE_ALLOWLIST', '').split(',') if x.strip()}
+    return (rule.get('level', 0) >= 7 or bool(groups.intersection(security_groups))
+            or str(rule.get('id')) == '5404' or str(rule.get('id')) in rules)
+
+
 def ai_eligible(record):
-    if record.get('event_kind') == 'telemetry':
+    if not is_security_alert(record):
         return False
     rules = {x.strip() for x in os.getenv('WAZUH_AI_RULE_ALLOWLIST', '').split(',') if x.strip()}
     groups = {x.strip() for x in os.getenv('WAZUH_AI_GROUP_ALLOWLIST', 'syscheck').split(',') if x.strip()}

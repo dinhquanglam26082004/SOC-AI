@@ -11,7 +11,7 @@ values.setdefault('WAZUH_ENROLLMENT_PASSWORD', '')
 for key in ('WAZUH_WEBHOOK_TOKEN', 'WAZUH_ENROLLMENT_PASSWORD'):
     if not values[key].strip():
         values[key] = secrets.token_hex(24)
-values.update(WAZUH_ENABLED='true', OLLAMA_MODEL='qwen3:0.6b', AGENT_MODEL='qwen3:0.6b', OLLAMA_MODEL_ALIAS='qwen3_small', AI_MAX_CONCURRENCY='1', OLLAMA_NUM_CTX='4096', OLLAMA_NUM_PREDICT='768')
+values.update(WAZUH_ENABLED='true', OLLAMA_MODEL='qwen3:8b', AGENT_MODEL='qwen3:8b', OLLAMA_MODEL_ALIAS='qwen3_8b', AI_MAX_CONCURRENCY='1', OLLAMA_NUM_CTX='4096', OLLAMA_NUM_PREDICT='1024', OLLAMA_TIMEOUT='900')
 values = {k: v for k, v in values.items() if not k.startswith('ZEEK_') and k not in ('SOC_API_TOKEN', 'COPILOT_MODEL')}
 env.write_text('\n'.join(f'{k}={v}' for k,v in values.items()) + '\n', encoding='utf-8')
 folder = ROOT / 'secrets'

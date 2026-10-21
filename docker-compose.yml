@@ -62,7 +62,7 @@ services:
     image: ollama/ollama:0.13.5
     profiles: [app]
     restart: unless-stopped
-    mem_limit: 2g
+    mem_limit: 7g
     environment:
       OLLAMA_HOST: 0.0.0.0:11434
       OLLAMA_NUM_PARALLEL: 1

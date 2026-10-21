@@ -27,7 +27,7 @@ Máy chính Windows 16 GB / Docker Desktop Linux containers
   Wazuh Manager 4.14.5 → custom integration → SQLite spool volume
   → forwarder → POST /wazuh + X-Webhook-Token
   → SQLite events + ai_jobs (commit trước HTTP 202)
-  → worker AI (1) → Ollama qwen3:0.6b + ChromaDB
+  → worker AI (1) → Ollama qwen3:8b + ChromaDB
   → dashboard: cảnh báo nguồn và suy luận AI tách biệt
 ```
 
@@ -48,7 +48,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts\configure_local.py
 docker compose --profile app config --quiet
 docker compose --profile app up -d --build
-docker compose exec ollama ollama pull qwen3:0.6b
+docker compose exec ollama ollama pull qwen3:8b
 # Chỉ ingest lần đầu nếu collection rỗng, hoặc khi chủ động rebuild KB:
 docker compose exec soc-ai-app python -m rag.ingest
 docker compose ps
@@ -94,7 +94,7 @@ RUNTIME_DB_PATH=./data/soc_runtime.sqlite3
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 docker compose up -d --build wazuh-manager wazuh-forwarder
-# Ollama native đã cài: chạy terminal riêng ollama serve; ollama pull qwen3:0.6b
+# Ollama native đã cài: chạy terminal riêng ollama serve; ollama pull qwen3:8b
 .\.venv\Scripts\python.exe main.py
 ```
 
@@ -129,7 +129,7 @@ alert cuối; không suy ra Agent online/offline từ im lặng. Xác minh Agent
 | WAZUH_SPOOL_MAX_BYTES | 268435456; 256 MiB cho file spool |
 | AI_CONTEXT_CHARS / AI_ALERT_CHARS | 6000 / 5000; raw_event vẫn lưu đầy đủ |
 | OLLAMA_NUM_CTX / OLLAMA_NUM_PREDICT | 4096 / 768 |
-| AGENT_MODEL | qwen3:0.6b; cấu hình tên model đã cài |
+| AGENT_MODEL | qwen3:8b; cấu hình tên model đã cài |
 
 Manager integration và log_alert_level cùng mặc định ≥3. Muốn chuyển mức thấp hơn phải
 sửa cả hai trong `docker/wazuh/ossec.conf`, cùng WAZUH_FORWARD_MIN_LEVEL. Không dùng ngưỡng
@@ -160,11 +160,21 @@ runbook để phục hồi JSONL còn giữ và gửi lại DLQ. DLQ cũng chi�
 Heartbeat gồm pending/dead_letter/errors/sent/last_success; stale sau 30s. Native không
 mount heartbeat thì dashboard ghi chưa biết; kiểm tra bằng docker exec.
 
+## Mô hình điều tra
+
+[Chính sách AI chỉ xử lý cảnh báo bảo mật](docs/alert-only-ai.md): log thường,
+thống kê Zeek, xoay vòng log, cài gói và SCA chỉ được lưu để tra cứu; không gọi AI.
+
+Mặc định dùng **Qwen3-8B**, xem [cấu hình, tài nguyên và chuyển model](docs/qwen3-8b.md).
+Model tải qua Ollama; trọng số không nằm trong repository.
+
 ## Ngân sách RAM
 
 Ước tính để lập kế hoạch, cần đo `docker stats` + Task Manager: Windows/app nền 4–6 GB;
 Docker VM overhead 1–2 GB; Manager 1–3 GB; backend + embedding/ChromaDB 1–3 GB; Ollama
-0.6B khoảng 0.8–2 GB; forwarder dưới 128 MB. Compose cap lần lượt 3 GB/3 GB/2 GB/128 MB.
+Qwen3-8B bản Q4_K_M tải khoảng 5.2 GB; RAM chạy còn gồm context và bộ nhớ xử lý.
+Forwarder dưới 128 MB. Compose cap lần lượt 3 GB/3 GB/7 GB/128 MB; đây là giới hạn
+tối đa, không phải lượng RAM đặt trước. Docker VM cần đủ bộ nhớ cho tất cả dịch vụ.
 Ingest/model context lớn có thể OOM. Nếu Agent là VM trên cùng máy, cộng RAM VM đó;
 ưu tiên Agent máy riêng. Không cam kết đủ 16 GB khi chưa đo đủ workload.
 

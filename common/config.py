@@ -12,36 +12,22 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 # ─── Registry cac model duoc ho tro ────────────────────────────────────────
 AVAILABLE_MODELS: dict[str, dict] = {
-    "qwen3_small": {
-        "name":  "qwen3:0.6b",
-        "label": "Qwen3-0.6B (Agent Triage)",
-        "size":  "0.6B  ~522MB",
-        "desc":  "Chuyên trách Agent 1 & 2: Phân tích & Triage siêu tốc trên CPU (~1-3s)",
-    },
-    "foundation": {
-        "name":  "hf.co/Mungert/Foundation-Sec-8B-Instruct-GGUF:Q4_K_M",
-        "label": "Foundation-Sec-8B (SOC Copilot RAG)",
-        "size":  "8B  ~5.1GB",
-        "desc":  "Chuyên trách SOC Knowledge Copilot (RAG Multi-Tier 2,015 chunks)",
+    "qwen3_8b": {
+        "name": "qwen3:8b",
+        "label": "Qwen3-8B (Investigation / Playbook)",
+        "size": "8B · Q4_K_M · khoảng 5.2 GB tải xuống",
+        "desc": "Điều tra và đề xuất playbook; tốc độ phụ thuộc CPU/GPU và RAM.",
     },
     "qwen3": {
-        "name":  "qwen3:0.6b",
-        "label": "Qwen3-0.6B",
-        "size":  "0.6B  ~522MB",
-        "desc":  "Alias nhanh cho Qwen3-0.6B",
-    },
-    "qwen3_4b": {
-        "name":  "qwen3:4b-q4_K_M",
-        "label": "Qwen3-4B  Q4_K_M",
-        "size":  "4B  ~2.6GB",
-        "desc":  "Mô hình trung bình 4B",
+        "name": "qwen3:8b",
+        "label": "Qwen3-8B",
+        "size": "8B · Q4_K_M",
+        "desc": "Alias cho Qwen3-8B.",
     },
 }
 
-# Model chuyen trach cho Agent 1 (Investigation) va Agent 2 (Playbook) -> Qwen3-0.6B
-AGENT_MODEL = os.getenv("AGENT_MODEL", "qwen3:0.6b")
-
-DEFAULT_MODEL_ALIAS = "qwen3_small"
+AGENT_MODEL = os.getenv("AGENT_MODEL", "qwen3:8b")
+DEFAULT_MODEL_ALIAS = "qwen3_8b"
 
 
 def resolve_model(alias: str) -> str:

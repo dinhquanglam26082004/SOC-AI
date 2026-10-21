@@ -1,8 +1,8 @@
-FROM qwen3:0.6b
+FROM qwen3:8b
 
-# Conservative defaults for a Windows Docker Desktop host with 16 GB RAM.
-PARAMETER num_ctx 1024
-PARAMETER num_predict 512
+# Qwen3-8B defaults. Allow enough Docker/host memory for model and context.
+PARAMETER num_ctx 4096
+PARAMETER num_predict 1024
 PARAMETER temperature 0.1
 PARAMETER top_p 0.8
 

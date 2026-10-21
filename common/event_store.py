@@ -3,9 +3,11 @@ import json
 import base64
 import sqlite3
 import time
+from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 from common.runtime_store import RuntimeStore
+from wazuh_integration.mapper import is_security_alert
 
 
 class QueueFull(Exception):
@@ -24,6 +26,7 @@ class EventStore:
             CREATE TABLE IF NOT EXISTS ai_jobs(event_id TEXT PRIMARY KEY REFERENCES events(id),
               state TEXT NOT NULL, attempts INTEGER NOT NULL DEFAULT 0, error TEXT, updated REAL NOT NULL);
             CREATE TABLE IF NOT EXISTS migrations(name TEXT PRIMARY KEY);
+            CREATE TABLE IF NOT EXISTS runtime_control(key TEXT PRIMARY KEY,value TEXT NOT NULL);
             CREATE TABLE IF NOT EXISTS zeek_logs(
               id TEXT PRIMARY KEY,log_type TEXT NOT NULL,agent_name TEXT NOT NULL,
               received_at TEXT NOT NULL,payload TEXT NOT NULL);
@@ -55,12 +58,22 @@ class EventStore:
             for row in db.execute("SELECT event_id FROM ai_jobs WHERE state='running'").fetchall():
                 record = json.loads(db.execute('SELECT payload FROM events WHERE id=?', (row[0],)).fetchone()[0])
                 record['ai_status'] = 'queued'
+                record['ai_progress'] = {'stage': 'queued', 'queued_at': time.time(), 'restarted': True}
                 db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), row[0]))
             db.execute("UPDATE ai_jobs SET state='queued',updated=? WHERE state='running'", (time.time(),))
 
     def accept(self, record, eligible):
+        record['ai_allowed'] = is_security_alert(record)
+        eligible = bool(eligible and record['ai_allowed'])
+        record['ai_skip_reason'] = (None if eligible else
+            'Not a security alert; retained as log only' if not record['ai_allowed'] else
+            'Below automatic investigation policy; manual investigation available')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            cutoff = db.execute("SELECT value FROM runtime_control WHERE key='reset_before'").fetchone()
+            if cutoff and datetime.fromisoformat(record['timestamp'].replace('Z', '+00:00')) < datetime.fromisoformat(cutoff[0]):
+                record.update(ai_status='skipped', ai_skip_reason='Before reset cutoff', _ignored_before_reset=True)
+                return record, False
             if record.get('source_product') == 'zeek':
                 old_log = db.execute('SELECT payload FROM zeek_logs WHERE id=?', (record['id'],)).fetchone()
                 record['ai_status'] = 'skipped' if record.get('event_kind') == 'telemetry' else record.get('ai_status', 'skipped')
@@ -74,6 +87,8 @@ class EventStore:
             if eligible and self._pending(db) >= self.max_jobs:
                 raise QueueFull('AI queue full; source must retry')
             record['ai_status'] = 'queued' if eligible else 'skipped'
+            if eligible:
+                record['ai_progress'] = {'stage': 'queued', 'queued_at': time.time()}
             db.execute('INSERT INTO events VALUES(?,?)', (record['id'], json.dumps(record)))
             if eligible:
                 db.execute("INSERT INTO ai_jobs VALUES(?,'queued',0,NULL,?)", (record['id'], time.time()))
@@ -84,7 +99,7 @@ class EventStore:
 
     def list_events(self):
         with self.connect() as db:
-            return [json.loads(row[0]) for row in db.execute('SELECT payload FROM events ORDER BY rowid DESC')]
+            return [json.loads(row[0]) for row in db.execute("SELECT payload FROM events WHERE COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry' ORDER BY rowid DESC")]
 
     def list_zeek_logs(self, limit=100, before=None, log_type=None):
         # A rowid cursor keeps pagination stable while new logs arrive.
@@ -114,14 +129,14 @@ class EventStore:
         # current alert payload so AI results do not come from a stale log copy.
         unified = """WITH unified AS (
             SELECT z.id, 'zeek' AS origin, z.log_type, z.received_at,
-                   CASE WHEN e.id IS NULL THEN 'telemetry' ELSE 'alert' END AS kind
+                   CASE WHEN e.id IS NULL THEN 'telemetry' ELSE COALESCE(json_extract(e.payload,'$.event_kind'),'alert') END AS kind
             FROM zeek_logs z LEFT JOIN events e ON e.id=z.id
             UNION ALL
             SELECT e.id,
                    CASE WHEN json_extract(e.payload,'$.source_product')='zeek' THEN 'zeek' ELSE 'wazuh' END,
                    COALESCE(json_extract(e.payload,'$.log_type'),json_extract(e.payload,'$.raw_event.location'),'wazuh'),
                    COALESCE(json_extract(e.payload,'$.received_at'),json_extract(e.payload,'$.timestamp'),''),
-                   'alert'
+                   COALESCE(json_extract(e.payload,'$.event_kind'),'alert')
             FROM events e WHERE json_extract(e.payload,'$.source')='wazuh'
               AND NOT EXISTS(SELECT 1 FROM zeek_logs z WHERE z.id=e.id)
         ) """
@@ -184,16 +199,51 @@ class EventStore:
                 return None
             record = json.loads(db.execute('SELECT payload FROM events WHERE id=?', (row[0],)).fetchone()[0])
             record['ai_status'] = 'running'
+            record.pop('investigation_report', None)
+            record.pop('playbook_proposal', None)
+            queued = record.get('ai_progress', {})
+            now = time.time()
+            record['ai_progress'] = {'stage': 'starting', 'step': 0, 'total_steps': 6,
+                                     'started_at': now, 'stage_started_at': now,
+                                     'queued_at': queued.get('queued_at'),
+                                     'restarted': queued.get('restarted', False)}
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), row[0]))
             db.execute("UPDATE ai_jobs SET state='running', attempts=attempts+1,updated=? WHERE event_id=?", (time.time(), row[0]))
             return record
 
+    def progress(self, record, stage, step, model):
+        now = time.time()
+        previous = record.get('ai_progress', {})
+        if previous.get('stage_started_at'):
+            previous.setdefault('stage_seconds', {})[previous['stage']] = round(now - previous['stage_started_at'], 2)
+        record.setdefault('ai_progress', {}).update(
+            stage=stage, step=step, total_steps=6, stage_started_at=now,
+            updated_at=now, model=model)
+        with self.connect() as db:
+            db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), record['id']))
+
     def finish(self, record, error=None):
         record['ai_status'] = 'failed' if error else 'completed'
         record['ai_error'] = error
+        progress = record.setdefault('ai_progress', {})
+        now = time.time()
+        progress['finished_at'] = now
+        if progress.get('stage_started_at'):
+            progress.setdefault('stage_seconds', {})[progress['stage']] = round(now - progress['stage_started_at'], 2)
+        if progress.get('started_at'):
+            progress['elapsed_seconds'] = round(now - progress['started_at'], 2)
+        if error:
+            progress['failed_stage'] = progress.get('stage')
+        progress['stage'] = 'failed' if error else 'completed'
         with self.connect() as db:
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), record['id']))
             db.execute('UPDATE ai_jobs SET state=?,error=?,updated=? WHERE event_id=?', (record['ai_status'], error, time.time(), record['id']))
+
+    def skip(self, record, reason):
+        record.update(ai_status='skipped', ai_allowed=False, ai_skip_reason=reason)
+        with self.connect() as db:
+            db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), record['id']))
+            db.execute("UPDATE ai_jobs SET state='skipped',error=NULL,updated=? WHERE event_id=?", (time.time(), record['id']))
 
     def retry(self, event_id):
         with self.connect() as db:
@@ -202,8 +252,8 @@ class EventStore:
             if not row:
                 raise KeyError(event_id)
             record = json.loads(row[0])
-            if record.get('source') != 'wazuh':
-                raise ValueError('Only current source alerts can be queued')
+            if not is_security_alert(record):
+                raise ValueError('Only security alerts can be investigated; ordinary logs are excluded')
             job = db.execute('SELECT state, attempts, updated FROM ai_jobs WHERE event_id=?', (event_id,)).fetchone()
             if job and job[0] in ('queued', 'running', 'completed'):
                 return False
@@ -212,6 +262,9 @@ class EventStore:
             if self._pending(db) >= self.max_jobs:
                 raise QueueFull()
             record['ai_status'], record['ai_error'] = 'queued', None
+            record['ai_progress'] = {'stage': 'queued', 'queued_at': time.time()}
+            record.pop('investigation_report', None)
+            record.pop('playbook_proposal', None)
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), event_id))
             db.execute("INSERT INTO ai_jobs VALUES(?,'queued',0,NULL,?) ON CONFLICT(event_id) DO UPDATE SET state='queued',error=NULL,updated=excluded.updated", (event_id, time.time()))
             return True
