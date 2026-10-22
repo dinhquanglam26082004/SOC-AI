@@ -274,7 +274,14 @@
         document.documentElement.dataset.theme='dark';
       }
       restoreControls(){for(const [key,id] of [['source','logs-source'],['category','logs-kind'],['q','logs-search'],['from','logs-from'],['to','logs-to'],['limit','logs-limit']])$(id).value=this.filters[key];this.filters.from=$('logs-from').value;this.filters.to=$('logs-to').value;$('logs-hide-telemetry').checked=this.filters.hide;this.updateTypes()}
-      updateTypes(){const values=[...new Set([...this.types,this.filters.type].filter(Boolean))].sort();$('logs-type').innerHTML='<option value="">All types</option>'+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');$('logs-type').value=this.filters.type}
+      
+      // updateTypes(){const values=[...new Set([...this.types,this.filters.type].filter(Boolean))].sort();$('logs-type').innerHTML='<option value="">All types</option>'+values.map(v=>`<option value="${esc(v)}">${esc(v)}</option>`).join('');$('logs-type').value=this.filters.type}
+      updateTypes(){
+        const values=[...new Set([...this.types,this.filters.type].filter(Boolean))].sort();
+        $('logs-type').innerHTML='<option value="">All types</option>'+values.map(v=>`<option
+    value="${esc(v)}">${esc(v)}</option>`).join('');
+        $('logs-type').value=this.filters.type;
+      }
       syncURL(){const url=new URL(location.href),p=url.searchParams;for(const key of ['source','type','log_type','category','q','from','to','hideTelemetry','limit','before','history','selected','tab'])p.delete(key);for(const key of ['source','type','category','q','from','to'])if(this.filters[key])p.set(key,this.filters[key]);p.set('hideTelemetry',this.filters.hide?'1':'0');p.set('limit',this.filters.limit);if(this.before)p.set('before',this.before);if(this.history.length)p.set('history',JSON.stringify(this.history));if(this.selectedId)p.set('selected',this.selectedId);p.set('tab',this.tab);if(document.body.classList.contains('logs-view'))p.set('view','logs');history.replaceState(null,'',url)}
       bind(){
         for(const id of ['logs-source','logs-type','logs-kind','logs-from','logs-to','logs-hide-telemetry','logs-limit'])$(id).onchange=()=>this.filterChanged(id);
@@ -295,9 +302,27 @@
         const media=matchMedia('(min-width:1200px)');media.addEventListener('change',()=>{this.closeDrawer(false);this.updateDrawerAccessibility()});this.bindResizer();this.updateDrawerAccessibility();
       }
       filterChanged(trigger){
+        // if(trigger==='logs-kind'&&$('logs-kind').value==='telemetry')$('logs-hide-telemetry').checked=false;
+        // if(trigger==='logs-hide-telemetry'&&$('logs-hide-telemetry').checked&&$('logs-kind').value==='telemetry')$('logs-kind').value='';
+        // this.filters={source:$('logs-source').value,type:$('logs-type').value,category:$('logs-kind').value,q:$('logs-search').value.trim(),from:$('logs-from').value,to:$('logs-to').value,hide:$('logs-hide-telemetry').checked,limit:Number($('logs-limit').value)};
+        // this.resetPage();this.load(true);
+        if(trigger==='logs-source'){
+        // Khi đổi nguồn Zeek/Wazuh, reset lựa chọn type hiện tại về rỗng
+        $('logs-type').value = '';
+      }
         if(trigger==='logs-kind'&&$('logs-kind').value==='telemetry')$('logs-hide-telemetry').checked=false;
-        if(trigger==='logs-hide-telemetry'&&$('logs-hide-telemetry').checked&&$('logs-kind').value==='telemetry')$('logs-kind').value='';
-        this.filters={source:$('logs-source').value,type:$('logs-type').value,category:$('logs-kind').value,q:$('logs-search').value.trim(),from:$('logs-from').value,to:$('logs-to').value,hide:$('logs-hide-telemetry').checked,limit:Number($('logs-limit').value)};
+        if(trigger==='logs-hide-telemetry'&&$('logs-hide-telemetry').checked&&$('logs-kind').
+    value==='telemetry')$('logs-kind').value='';
+        this.filters={
+          source:$('logs-source').value,
+          type:$('logs-type').value,
+          category:$('logs-kind').value,
+          q:$('logs-search').value.trim(),
+          from:$('logs-from').value,
+          to:$('logs-to').value,
+          hide:$('logs-hide-telemetry').checked,
+          limit:Number($('logs-limit').value)
+        };
         this.resetPage();this.load(true);
       }
       resetPage(){this.before=null;this.history=[];this.next=null;this.clearSelection();this.expanded.clear();this.syncURL()}

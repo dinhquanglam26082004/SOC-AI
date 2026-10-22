@@ -125,6 +125,7 @@ class EventStore:
             return json.loads(row[0]) if row else None
 
     def list_logs(self, limit=100, before=None, source=None, log_type=None, kind=None):
+        source = source.strip().lower() if source and source.strip() else None
         # A Zeek notice is present in both stores: expose it once and use the
         # current alert payload so AI results do not come from a stale log copy.
         unified = """WITH unified AS (
@@ -178,11 +179,29 @@ class EventStore:
                 record.update(log_origin=row['origin'], log_type=row['log_type'], event_kind=row['kind'])
                 records.append(record)
             cursor = base64.urlsafe_b64encode(json.dumps([page[-1]['received_at'], page[-1]['id']]).encode()).decode() if len(rows) > limit else None
-            return {'logs': records, 'next_cursor': cursor,
-                    'total': db.execute(unified + 'SELECT COUNT(*) FROM unified' + where, params).fetchone()[0],
-                    'total_all': db.execute(unified + 'SELECT COUNT(*) FROM unified').fetchone()[0],
-                    'log_types': [r[0] for r in db.execute(unified + 'SELECT DISTINCT log_type FROM unified ORDER BY log_type')]}
-
+            # return {'logs': records, 'next_cursor': cursor,
+            #         'total': db.execute(unified + 'SELECT COUNT(*) FROM unified' + where, params).fetchone()[0],
+            #         'total_all': db.execute(unified + 'SELECT COUNT(*) FROM unified').fetchone()[0],
+            #         'log_types': [r[0] for r in db.execute(unified + 'SELECT DISTINCT log_type FROM unified ORDER BY log_type')]}
+            type_where = ' WHERE origin=?' if source else ''
+            type_params = [source] if source else []
+            return {
+                'logs': records,
+                'next_cursor': cursor,
+                'total': db.execute(
+                    unified + 'SELECT COUNT(*) FROM unified' + where,
+                    params
+                ).fetchone()[0],
+                'total_all': db.execute(
+                    unified + 'SELECT COUNT(*) FROM unified'
+                ).fetchone()[0],
+                'log_types': [
+                    r[0] for r in db.execute(
+                        unified + f'SELECT DISTINCT log_type FROM unified{type_where} ORDER BY log_type',
+                        type_params
+                    )
+                ]
+            }
     def claim(self):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
