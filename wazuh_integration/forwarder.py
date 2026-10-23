@@ -31,11 +31,15 @@ def deliver(spool, target, token, timeout=10):
     return True
 
 
-def write_status(spool, path):
+def write_status(spool, path, archives=None):
     root = Path(path)
     failure = Path(spool.path).parent / 'integration-error'
     status = {**spool.stats(), 'updated': time.time(), 'integration_error': failure.exists()}
     status['state'] = 'error' if failure.exists() or status.get('dead_letter') else 'running'
+    if archives:
+        status['archives'] = archives.status
+        if archives.status['state'] == 'error':
+            status['state'] = 'error'
     tmp = root.with_suffix('.tmp')
     tmp.write_text(json.dumps(status), encoding='utf-8')
     tmp.replace(root)
@@ -71,14 +75,22 @@ def main():
         raise RuntimeError('WAZUH_WEBHOOK_TOKEN required')
     target = os.getenv('WAZUH_FORWARDER_TARGET_URL', 'http://soc-ai-app:8100/wazuh')
     path = os.getenv('WAZUH_FORWARDER_STATUS_FILE', '/spool/status.json')
+    from wazuh_integration.archives import ArchiveReader
+    archives = ArchiveReader(os.getenv('WAZUH_ARCHIVES_PATH', '/manager-logs/archives/archives.json'), spool) if os.getenv('WAZUH_ARCHIVES_ENABLED', 'true').lower() == 'true' else None
     while True:
         try:
+            if archives:
+                try:
+                    archives.poll()
+                except Exception:
+                    archives.status['state'] = 'error'
+                    logger.exception('Archive ingestion paused; source line retained, checkpoint not advanced')
             # Drain a bounded batch; one row/second cannot keep up with Zeek logs.
-            for _ in range(100):
+            for _ in range(400):
                 if not deliver(spool, target, token):
                     break
-                write_status(spool, path)
-            write_status(spool, path)
+                write_status(spool, path, archives)
+            write_status(spool, path, archives)
         except Exception:
             logger.error('Forwarder storage failure; check disk and spool permissions')
             # heartbeat becomes stale if status cannot be persisted

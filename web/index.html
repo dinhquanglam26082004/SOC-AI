@@ -107,7 +107,7 @@
               <label>Received from<input id="logs-from" type="datetime-local" step="1"></label>
               <label>Received to<input id="logs-to" type="datetime-local" step="1"></label>
             </div>
-            <div class="logs-toolbar-bottom"><label class="logs-toggle"><input id="logs-hide-telemetry" type="checkbox" checked>Hide telemetry</label><span id="logs-summary" role="status" aria-live="polite">Open Logs to load entries…</span><button class="link" id="logs-clear">Clear filters</button></div>
+            <div class="logs-toolbar-bottom"><label class="logs-toggle"><input id="logs-hide-telemetry" type="checkbox">Hide telemetry</label><span id="logs-summary" role="status" aria-live="polite">Open Logs to load entries…</span><button class="link" id="logs-clear">Clear filters</button></div>
             <div id="logs-error" class="logs-error hidden" role="alert"></div>
           </section>
           <div id="logs-split" class="logs-split">
@@ -185,7 +185,7 @@
     }
     const hasLogValue=v=>v!==undefined&&v!==null&&v!=='';
     function logSource(a){return a.log_origin==='zeek'||a.source_product==='zeek'?'Zeek':'Wazuh'}
-    function logTitle(a){const d=a.zeek_data||{};if(logSource(a)==='Zeek'){const endpoints=a.src_ip||a.dst_ip?`${a.src_ip||'?'}${hasLogValue(a.src_port)?':'+a.src_port:''} → ${a.dst_ip||'?'}${hasLogValue(a.dst_port)?':'+a.dst_port:''}`:'';return String(d.msg||d.query||[d.method,d.host,d.uri].filter(Boolean).join(' ')||d.note||(d.name?`${d.name}: ${d.value??'—'}${d.metric_type?' · '+d.metric_type:''}`:'')||(endpoints?[d.proto||d.service,endpoints,d.conn_state].filter(Boolean).join(' · '):'')||d.message||d.path||d.filename||`${a.log_type||'Event'} · ${d.service||d.proto||d.peer||'Zeek'}`)}return String(a.rule?.description||a.raw_event?.full_log||'Wazuh event')}
+    function logTitle(a){const d=a.zeek_data||{};if(logSource(a)==='Zeek'){const endpoints=a.src_ip||a.dst_ip?`${a.src_ip||'?'}${hasLogValue(a.src_port)?':'+a.src_port:''} → ${a.dst_ip||'?'}${hasLogValue(a.dst_port)?':'+a.dst_port:''}`:'';return String(d.msg||d.query||[d.method,d.host,d.uri].filter(Boolean).join(' ')||d.note||(d.name?`${d.name}: ${d.value??'—'}${d.metric_type?' · '+d.metric_type:''}`:'')||(endpoints?[d.proto||d.service,endpoints,d.conn_state].filter(Boolean).join(' · '):'')||d.message||d.path||d.filename||`${a.log_type||'Event'} · ${d.service||d.proto||d.peer||'Zeek'}`)}return String((a.ingest_stream==='archives'&&a.rule?.id==='0'?a.raw_event?.full_log:null)||a.rule?.description||a.raw_event?.full_log||'Wazuh event')}
     function logSubtitle(a){const d=a.zeek_data||{},r=a.raw_event||{},data=r.data||{};return [a.src_ip||a.dst_ip?`${a.src_ip||'?'}${hasLogValue(a.src_port)?':'+a.src_port:''} → ${a.dst_ip||'?'}${hasLogValue(a.dst_port)?':'+a.dst_port:''}`:'',d.proto||'',d.conn_state?'State: '+d.conn_state:'',a.username?'User: '+a.username:'',a.file_path||'',data.command?'Command: '+data.command:''].filter(Boolean).join(' · ')}
     function logFields(entries){return entries.filter(([,v])=>hasLogValue(v)).map(([k,v])=>`<div class="log-field"><dt>${esc(k)}</dt><dd>${esc(typeof v==='object'?JSON.stringify(v,null,2):v)}</dd></div>`).join('')}
     function logGroup(title,entries){const fields=logFields(entries);return fields?`<section class="log-group"><h4>${icon(({'Time and collection source':'clock','Network connection':'network','HTTP / DNS / TLS':'globe','User, process and file':'user','Detection rule':'shield','Zeek notice and forwarding rule':'shield'})[title]||'logs')}${esc(title)}</h4><dl>${fields}</dl></section>`:''}
@@ -264,7 +264,7 @@
     class LogsWorkspace {
       constructor(){
         const params=new URLSearchParams(location.search),valid=(key,values,fallback='')=>values.includes(params.get(key))?params.get(key):fallback;
-        this.filters={source:valid('source',['','zeek','wazuh']),type:params.get('type')||params.get('log_type')||'',category:valid('category',['','alert','telemetry']),q:params.get('q')||'',from:params.get('from')||'',to:params.get('to')||'',hide:params.get('hideTelemetry')!=='0',limit:Number(valid('limit',['25','50','100'],'100'))};
+        this.filters={source:valid('source',['','zeek','wazuh']),type:params.get('type')||params.get('log_type')||'',category:valid('category',['','alert','telemetry']),q:params.get('q')||'',from:params.get('from')||'',to:params.get('to')||'',hide:params.get('hideTelemetry')==='1',limit:Number(valid('limit',['25','50','100'],'100'))};
         if(this.filters.category==='telemetry')this.filters.hide=false;
         this.before=params.get('before')||null;this.history=[];
         try{const history=JSON.parse(params.get('history')||'[]');if(Array.isArray(history)&&history.length<=100&&history.every(v=>v===null||(typeof v==='string'&&v.length<=512)))this.history=history}catch{}
@@ -287,7 +287,7 @@
         for(const id of ['logs-source','logs-type','logs-kind','logs-from','logs-to','logs-hide-telemetry','logs-limit'])$(id).onchange=()=>this.filterChanged(id);
         $('logs-search').oninput=()=>{clearTimeout(this.searchTimer);this.searchTimer=setTimeout(()=>this.filterChanged('logs-search'),350)};
         $('logs-search').onkeydown=e=>{if(e.key==='Enter'){clearTimeout(this.searchTimer);this.filterChanged('logs-search')}};
-        $('logs-clear').onclick=()=>{this.filters={source:'',type:'',category:'',q:'',from:'',to:'',hide:true,limit:this.filters.limit};this.restoreControls();this.resetPage();this.load(true)};
+        $('logs-clear').onclick=()=>{this.filters={source:'',type:'',category:'',q:'',from:'',to:'',hide:false,limit:this.filters.limit};this.restoreControls();this.resetPage();this.load(true)};
         $('logs-latest').onclick=()=>{this.resetPage();this.load(true)};
         $('logs-more').onclick=()=>{if(!this.next||this.loading)return;this.history.push(this.before);this.before=this.next;this.clearSelection();this.syncURL();this.load(true)};
         $('logs-back').onclick=()=>{if(!this.history.length||this.loading)return;this.before=this.history.pop();this.clearSelection();this.syncURL();this.load(true)};

@@ -83,13 +83,18 @@ class EventStore:
                     return (json.loads(old_log[0]), True) if old_log else (record, False)
             old = db.execute('SELECT payload FROM events WHERE id=?', (record['id'],)).fetchone()
             if old:
-                return json.loads(old[0]), True
+                previous = json.loads(old[0])
+                if previous.get('event_kind') != 'telemetry' or record.get('event_kind') != 'alert':
+                    return previous, True
+                # An archive may arrive before the corresponding alert. Upgrade
+                # the same event without creating a second log or losing AI state.
+                record['received_at'] = previous.get('received_at', record['received_at'])
             if eligible and self._pending(db) >= self.max_jobs:
                 raise QueueFull('AI queue full; source must retry')
             record['ai_status'] = 'queued' if eligible else 'skipped'
             if eligible:
                 record['ai_progress'] = {'stage': 'queued', 'queued_at': time.time()}
-            db.execute('INSERT INTO events VALUES(?,?)', (record['id'], json.dumps(record)))
+            db.execute('INSERT INTO events VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (record['id'], json.dumps(record)))
             if eligible:
                 db.execute("INSERT INTO ai_jobs VALUES(?,'queued',0,NULL,?)", (record['id'], time.time()))
         return record, False

@@ -221,3 +221,11 @@ thực tế. Khi nâng version phải kiểm tra lại Agent/config.
 
 Chức năng hỏi đáp Copilot và endpoint `/api/chat` đã được gỡ bỏ. RAG tiếp tục phục vụ
 AI điều tra cảnh báo và đề xuất playbook.
+# Wazuh all-event collection
+
+SOC-AI collects both Wazuh alerts and non-alert events from Manager JSON archives.
+Open **Logs → Source: Wazuh → All categories** to view them. Ordinary events
+are telemetry and do not start AI investigations.
+See [Wazuh archive collection](docs/wazuh-archives.md) for configuration,
+checkpoints, rotation, and operational limits.
+

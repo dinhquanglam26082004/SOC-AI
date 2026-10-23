@@ -16,6 +16,7 @@ class Spool:
               id INTEGER PRIMARY KEY, payload TEXT NOT NULL, state TEXT NOT NULL DEFAULT 'pending',
               attempts INTEGER NOT NULL DEFAULT 0, next_try REAL NOT NULL DEFAULT 0, error TEXT);
               CREATE TABLE IF NOT EXISTS stats(key TEXT PRIMARY KEY,value REAL NOT NULL);
+              CREATE TABLE IF NOT EXISTS archive_cursors(stream TEXT PRIMARY KEY,offset INTEGER NOT NULL);
             ''')
         try:
             os.chmod(self.path, 0o660)
@@ -35,6 +36,17 @@ class Spool:
             db.close()
 
     def put(self, raw):
+        self._put(raw)
+
+    def archive_offset(self, stream):
+        with self.connect() as db:
+            row = db.execute('SELECT offset FROM archive_cursors WHERE stream=?', (stream,)).fetchone()
+            return row[0] if row else 0
+
+    def put_archive(self, raw, stream, offset):
+        self._put({**raw, '_soc_stream': 'archives'}, stream, offset)
+
+    def _put(self, raw, stream=None, offset=None):
         payload = json.dumps(raw, ensure_ascii=False)
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -46,6 +58,9 @@ class Spool:
             if size + len(payload.encode()) + 16384 > self.max_bytes:
                 raise RuntimeError('Spool full: source alert retained in Manager logs; operator recovery required')
             db.execute('INSERT INTO queue(payload) VALUES(?)', (payload,))
+            if stream is not None:
+                db.execute('INSERT INTO archive_cursors VALUES(?,?) ON CONFLICT(stream) DO UPDATE SET offset=excluded.offset',
+                           (stream, offset))
 
     def ready(self):
         with self.connect() as db:
