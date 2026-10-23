@@ -1,15 +1,294 @@
-<!-- Level 3 is a delivery envelope for all Zeek log lines, not a security detection.
-     SOC-AI stores these in zeek_logs, outside Alerts and the automatic AI queue. -->
-<group name="zeek,zeek_telemetry,network,">
+<!--
+  ============================================================================
+  Zeek detection rules for Wazuh — v2
+  ============================================================================
+  Phạm vi ID tùy chỉnh: 100100–100199 (theo khuyến nghị Wazuh cho rule cục bộ).
+
+  Quy ước mức độ (level):
+    3   = telemetry / bằng chứng tương quan, KHÔNG phải cảnh báo an ninh
+    7   = bất thường cần xem xét, độ tin cậy trung bình
+    8   = phát hiện suy luận từ log, độ tin cậy chưa xác nhận bằng ngưỡng đo trực tiếp
+    10  = phát hiện có xác nhận cao hơn (nhiều nguồn, hoặc đo trực tiếp qua ngưỡng cấu hình)
+
+  Taxonomy nhóm:
+    zeek_telemetry   -> không hiển thị như cảnh báo an ninh trên dashboard
+    zeek_detection   -> MỌI alert coi là phát hiện an ninh phải mang nhóm này
+    zeek_operational -> tình trạng cảm biến (mất gói, lỗi checksum...), không phải tấn công
+
+  Lưu ý về tương quan đa bước (ví dụ: brute force rồi đăng nhập thành công,
+  hoặc quét cổng rồi khai thác web): rule engine ở đây chỉ phát hiện TỪNG
+  dấu hiệu rời rạc. Việc nối các dấu hiệu rời rạc thành một chuỗi tấn công
+  là việc của agent điều tra (LangGraph), dùng search_related_alerts và
+  search_auth_events. Không cố nhồi toàn bộ logic tương quan vào rule XML.
+  ============================================================================
+-->
+<group name="zeek,network,">
+
+  <!-- ========================= 1. TELEMETRY NỀN ========================= -->
+
   <rule id="100121" level="3">
+    <decoded_as>json</decoded_as>
     <location type="pcre2">(?:^|/)zeek/logs/current/[^/]+\.log$</location>
     <description>Zeek log transport record (not a security alert)</description>
+    <group>zeek_telemetry,</group>
   </rule>
-  <rule id="100120" level="5">
+
+  <rule id="100120" level="3">
     <if_sid>100121</if_sid>
-    <location type="pcre2">(?:^|/)zeek/logs/current/notice\.log$</location>
+    <location type="pcre2">/notice\.log$</location>
     <field name="note" type="pcre2">^[A-Za-z0-9_]+::[A-Za-z0-9_:]+$</field>
-    <description>Zeek notice: $(note) — $(msg)</description>
-    <group>zeek_notice,</group>
+    <description>Zeek notice requiring classification: $(note) - $(msg)</description>
+    <group>zeek_notice,zeek_telemetry,</group>
   </rule>
+
+  <rule id="100124" level="3">
+    <if_sid>100120</if_sid>
+    <field name="note" type="pcre2">^(?:CaptureLoss|ChecksumOffloading)::</field>
+    <description>Zeek sensor health notice: $(note) - $(msg)</description>
+    <group>zeek_operational,zeek_telemetry,</group>
+  </rule>
+
+  <!-- ========================= 2. QUÉT (SCANNING) ========================= -->
+
+  <rule id="100122" level="8" ignore="120">
+    <if_sid>100120</if_sid>
+    <field name="note" type="pcre2">^Scan::(?:Port_Scan|Address_Scan)$</field>
+    <description>Zeek scan detection: $(note) - $(msg)</description>
+    <mitre><id>T1046</id></mitre>
+    <group>zeek_detection,zeek_scan,</group>
+  </rule>
+
+  <rule id="100140" level="3">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/conn\.log$</location>
+    <field name="proto">^tcp$</field>
+    <field name="conn_state" type="pcre2">^(?:S0|REJ)$</field>
+    <description>Zeek unsuccessful TCP connection (correlation evidence)</description>
+    <group>zeek_telemetry,zeek_failed_connection,</group>
+  </rule>
+
+  <!-- Quét dọc: 1 nguồn, 1 đích, nhiều CỔNG khác nhau trong 60s -->
+  <rule id="100141" level="8" frequency="12" timeframe="60" ignore="60">
+    <if_sid>100140</if_sid>
+    <if_matched_sid>100140</if_matched_sid>
+    <same_field>id.orig_h</same_field>
+    <same_field>id.resp_h</same_field>
+    <different_field>id.resp_p</different_field>
+    <description>Zeek vertical port scan: repeated failed TCP connections to different ports from $(id.orig_h) to $(id.resp_h) within 60 seconds</description>
+    <mitre><id>T1046</id></mitre>
+    <group>zeek_detection,zeek_scan,zeek_scan_vertical,</group>
+  </rule>
+
+  <!-- Quét ngang: 1 nguồn, 1 cổng cố định, nhiều HOST đích khác nhau trong 60s -->
+  <rule id="100143" level="8" frequency="12" timeframe="60" ignore="60">
+    <if_sid>100140</if_sid>
+    <if_matched_sid>100140</if_matched_sid>
+    <same_field>id.orig_h</same_field>
+    <same_field>id.resp_p</same_field>
+    <different_field>id.resp_h</different_field>
+    <description>Zeek horizontal scan: repeated failed TCP connections to port $(id.resp_p) across different hosts from $(id.orig_h) within 60 seconds</description>
+    <mitre><id>T1046</id></mitre>
+    <group>zeek_detection,zeek_scan,zeek_scan_horizontal,</group>
+  </rule>
+
+  <!-- ========================= 3. DoS / FLOOD ========================= -->
+  <!--
+    Phân biệt với rule quét: ở đây cổng ĐÍCH và host ĐÍCH giữ nguyên,
+    chỉ số lượng request/kết nối tăng vọt trong khoảng rất ngắn.
+    Các rule DoS dưới đây là SUY LUẬN từ log kết nối thất bại — không
+    chứng minh dịch vụ đã bị gián đoạn thật sự. Alert cần đi kèm câu
+    "impact unconfirmed" để agent điều tra không mặc định coi là đã sập.
+  -->
+
+  <!-- DoS từ MỘT nguồn: cùng nguồn, cùng đích, cùng cổng, bùng phát trong 10s -->
+  <rule id="100142" level="8" frequency="100" timeframe="10" ignore="60">
+    <if_sid>100140</if_sid>
+    <if_matched_sid>100140</if_matched_sid>
+    <same_field>id.orig_h</same_field>
+    <same_field>id.resp_h</same_field>
+    <same_field>id.resp_p</same_field>
+    <description>Zeek suspected single-source DoS: burst of failed TCP flows from $(id.orig_h) to $(id.resp_h):$(id.resp_p); service impact unconfirmed</description>
+    <mitre><id>T1498</id></mitre>
+    <group>zeek_detection,zeek_dos,zeek_dos_single_source,</group>
+  </rule>
+
+  <!-- DoS phân tán: NHIỀU nguồn khác nhau cùng dồn vào một đích/cổng trong 10s -->
+  <rule id="100145" level="10" frequency="150" timeframe="10" ignore="60">
+    <if_sid>100140</if_sid>
+    <if_matched_sid>100140</if_matched_sid>
+    <same_field>id.resp_h</same_field>
+    <same_field>id.resp_p</same_field>
+    <different_field>id.orig_h</different_field>
+    <description>Zeek suspected distributed DoS: burst of failed TCP flows from multiple sources to $(id.resp_h):$(id.resp_p); service impact unconfirmed</description>
+    <mitre><id>T1498</id></mitre>
+    <group>zeek_detection,zeek_dos,zeek_dos_distributed,</group>
+  </rule>
+
+  <!-- Bộ đếm chuyên dụng (zeek script riêng) — ngưỡng do bạn cấu hình,
+       độ tin cậy cao hơn vì đo trực tiếp lưu lượng, không suy luận từ log. -->
+  <rule id="100160" level="3">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/dos\.log$</location>
+    <field name="producer">^soc-ai-dos-v1$</field>
+    <description>Zeek DoS observation summary (requires classification)</description>
+    <group>zeek_telemetry,</group>
+  </rule>
+
+  <rule id="100161" level="10">
+    <if_sid>100160</if_sid>
+    <field name="metric">^tcp_new_connections$</field>
+    <description>Confirmed TCP connection DoS to $(dst):$(dst_port): $(observed) new flows / $(window_seconds)s, threshold $(threshold), sources $(source_count)</description>
+    <mitre><id>T1498</id></mitre>
+    <group>zeek_detection,zeek_dos,zeek_dos_summary,</group>
+  </rule>
+
+  <rule id="100162" level="10">
+    <if_sid>100160</if_sid>
+    <field name="metric">^http_requests$</field>
+    <description>Confirmed HTTP request DoS to $(dst):$(dst_port): $(observed) requests / $(window_seconds)s, threshold $(threshold), sources $(source_count)</description>
+    <mitre><id>T1498</id></mitre>
+    <group>zeek_detection,zeek_dos,zeek_dos_summary,</group>
+  </rule>
+
+  <rule id="100163" level="10">
+    <if_sid>100160</if_sid>
+    <field name="metric">^udp_new_flows$</field>
+    <description>Confirmed UDP flow DoS to $(dst):$(dst_port): $(observed) new flows / $(window_seconds)s, threshold $(threshold), sources $(source_count); not packet rate</description>
+    <mitre><id>T1498</id></mitre>
+    <group>zeek_detection,zeek_dos,zeek_dos_summary,</group>
+  </rule>
+
+  <rule id="100164" level="10">
+    <if_sid>100160</if_sid>
+    <field name="metric">^icmp_new_flows$</field>
+    <description>Confirmed ICMP flood to $(dst): $(observed) new flows / $(window_seconds)s, threshold $(threshold), sources $(source_count); not packet rate</description>
+    <mitre><id>T1498</id></mitre>
+    <group>zeek_detection,zeek_dos,zeek_dos_summary,</group>
+  </rule>
+
+  <!-- ========================= 4. TẤN CÔNG WEB (HTTP) ========================= -->
+  <!-- ignore=120 chống việc một công cụ quét tự động bắn hàng loạt alert
+       giống nhau khi dò nhiều tham số/URI trong thời gian ngắn. -->
+
+  <rule id="100130" level="8" ignore="120">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/http\.log$</location>
+    <field name="uri" type="pcre2">(?i)(?:union(?:\s|%20|\+|%09)+(?:all(?:\s|%20|\+|%09)+)?select\b|(?:\b|%20|\+)or(?:\s|%20|\+)+(?:1(?:=|%3d)1|'1'(?:=|%3d)'1'))</field>
+    <description>Zeek HTTP suspected SQL injection attempt: $(id.orig_h) to $(id.resp_h), $(method) $(host)$(uri)</description>
+    <mitre><id>T1190</id></mitre>
+    <group>zeek_detection,web_attack,zeek_http_sqli,</group>
+  </rule>
+
+  <rule id="100131" level="8" ignore="120">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/http\.log$</location>
+    <field name="uri" type="pcre2">(?i)(?:\.\.|%2e%2e|\.%2e|%2e\.)(?:/|%2f|%5c|\\)(?:.*(?:etc(?:/|%2f)passwd|windows(?:/|%2f)|proc(?:/|%2f)self))</field>
+    <description>Zeek HTTP suspected sensitive-file traversal attempt: $(id.orig_h) to $(id.resp_h), $(host)$(uri)</description>
+    <mitre><id>T1190</id></mitre>
+    <group>zeek_detection,web_attack,zeek_http_traversal,</group>
+  </rule>
+
+  <rule id="100132" level="8" ignore="120">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/http\.log$</location>
+    <field name="uri" type="pcre2">(?i)(?:;|%3b|%7c|\|)(?:\s|%20|\+)*(?:wget|curl|bash|sh)(?:\s|%20|\+|%09)</field>
+    <description>Zeek HTTP suspected shell-command injection attempt: $(id.orig_h) to $(id.resp_h), $(host)$(uri)</description>
+    <mitre><id>T1190</id></mitre>
+    <group>zeek_detection,web_attack,zeek_http_command,</group>
+  </rule>
+
+  <rule id="100133" level="8" ignore="120">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/http\.log$</location>
+    <field name="uri" type="pcre2">(?i)(?:%3c|&lt;)(?:\s|%20)*script\b|javascript:|on(?:error|load|click|mouseover)(?:\s|%20)*=</field>
+    <description>Zeek HTTP suspected cross-site scripting attempt: $(id.orig_h) to $(id.resp_h), $(host)$(uri)</description>
+    <mitre><id>T1190</id></mitre>
+    <group>zeek_detection,web_attack,zeek_http_xss,</group>
+  </rule>
+
+  <!-- Leo thang: cùng nguồn bắn từ 5 kiểu tấn công web trở lên trong 5 phút
+       -> nhiều khả năng là công cụ quét tự động, không phải dò thử ngẫu nhiên. -->
+  <rule id="100134" level="10" frequency="5" timeframe="300" ignore="300">
+    <if_group>web_attack</if_group>
+    <if_matched_group>web_attack</if_matched_group>
+    <same_field>id.orig_h</same_field>
+    <description>Zeek repeated web attack attempts from $(id.orig_h) within 5 minutes: likely automated scanner or active exploitation campaign</description>
+    <mitre><id>T1190</id></mitre>
+    <group>zeek_detection,web_attack,web_attack_campaign,</group>
+  </rule>
+
+  <!-- ========================= 5. DNS BẤT THƯỜNG ========================= -->
+
+  <rule id="100150" level="3">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/dns\.log$</location>
+    <field name="rcode_name">^NXDOMAIN$</field>
+    <description>Zeek DNS NXDOMAIN response (correlation evidence)</description>
+    <group>zeek_telemetry,zeek_dns_failure,</group>
+  </rule>
+
+  <rule id="100151" level="7" frequency="20" timeframe="60" ignore="60">
+    <if_sid>100150</if_sid>
+    <if_matched_sid>100150</if_matched_sid>
+    <same_field>id.orig_h</same_field>
+    <description>Zeek DNS failure burst from $(id.orig_h) within 60 seconds: investigate misconfiguration or suspicious name generation (possible DGA)</description>
+    <group>zeek_detection,zeek_dns_anomaly,</group>
+  </rule>
+
+  <!-- Tên truy vấn bất thường dài (dấu hiệu DNS tunneling cổ điển) -->
+  <rule id="100152" level="7">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/dns\.log$</location>
+    <field name="query" type="pcre2">^.{50,}$</field>
+    <description>Zeek DNS query with unusually long name (possible tunneling): $(query)</description>
+    <group>zeek_telemetry,zeek_dns_anomaly,</group>
+  </rule>
+
+  <rule id="100153" level="8" frequency="10" timeframe="60" ignore="120">
+    <if_sid>100152</if_sid>
+    <if_matched_sid>100152</if_matched_sid>
+    <same_field>id.orig_h</same_field>
+    <description>Zeek repeated long DNS queries from $(id.orig_h) within 60 seconds: possible DNS tunneling</description>
+    <mitre><id>T1071.004</id></mitre>
+    <group>zeek_detection,zeek_dns_tunneling,</group>
+  </rule>
+
+  <!-- ========================= 6. SSH BRUTE FORCE (qua Zeek ssh.log) ========================= -->
+  <!-- Đây là bằng chứng mạng bổ sung cho log xác thực Wazuh (auth.log/PAM).
+       Zeek không giải mã nội dung phiên SSH, chỉ biết auth_success true/false
+       theo heuristic kích thước gói. Dùng để tương quan, không thay log endpoint. -->
+
+  <rule id="100170" level="3">
+    <if_sid>100121</if_sid>
+    <location type="pcre2">/ssh\.log$</location>
+    <description>Zeek SSH session record (correlation evidence)</description>
+    <group>zeek_telemetry,</group>
+  </rule>
+
+  <rule id="100171" level="3">
+    <if_sid>100170</if_sid>
+    <field name="auth_success">^F$</field>
+    <description>Zeek SSH session ended without successful authentication</description>
+    <group>zeek_telemetry,zeek_ssh_failed,</group>
+  </rule>
+
+  <rule id="100172" level="8" frequency="8" timeframe="60" ignore="60">
+    <if_sid>100171</if_sid>
+    <if_matched_sid>100171</if_matched_sid>
+    <same_field>id.orig_h</same_field>
+    <same_field>id.resp_h</same_field>
+    <description>Zeek possible SSH brute force: repeated failed SSH sessions from $(id.orig_h) to $(id.resp_h) within 60 seconds (network evidence, cross-check with host auth log)</description>
+    <mitre><id>T1110</id></mitre>
+    <group>zeek_detection,zeek_bruteforce,zeek_ssh_bruteforce,</group>
+  </rule>
+
+  <!-- ========================= 7. INTEL MATCH ========================= -->
+
+  <rule id="100123" level="10" ignore="300">
+    <if_sid>100120</if_sid>
+    <field name="note" type="pcre2">^Intel::Notice$</field>
+    <description>Zeek intelligence match: $(msg)</description>
+    <group>zeek_detection,zeek_intel,</group>
+  </rule>
+
 </group>

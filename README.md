@@ -229,3 +229,11 @@ are telemetry and do not start AI investigations.
 See [Wazuh archive collection](docs/wazuh-archives.md) for configuration,
 checkpoints, rotation, and operational limits.
 
+Zeek security detections are evaluated by Wazuh Manager and displayed alongside
+endpoint alerts. See [Zeek security rules](docs/zeek-security-rules.md) for the
+rule catalog, evidence requirements, deployment, and limitations.
+
+For suspected DoS detections, see [DoS policy and victim installation](docs/zeek-dos.md).
+Live aggregation requires installing the supplied Zeek policy on the victim;
+the Manager-only fallback counts failed TCP log records.
+

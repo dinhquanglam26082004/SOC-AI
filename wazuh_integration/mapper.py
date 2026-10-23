@@ -4,6 +4,7 @@ from hashlib import sha256
 import os
 import json
 import ipaddress
+import math
 
 
 def network_ip(value):
@@ -15,6 +16,33 @@ def network_ip(value):
 
 def utc_now():
     return datetime.now(timezone.utc).isoformat().replace('+00:00', 'Z')
+
+
+def dos_summary(data):
+    """Require measurable evidence before promoting a sensor summary to Alert."""
+    if data.get('producer') != 'soc-ai-dos-v1' or data.get('metric') not in {
+            'tcp_new_connections', 'http_requests', 'udp_new_flows', 'icmp_new_flows'}:
+        return None
+    try:
+        values = {}
+        for name in ('observed', 'threshold', 'source_count', 'dst_port'):
+            value = data[name]
+            if isinstance(value, bool) or not str(value).isdigit():
+                return None
+            values[name] = int(value)
+        seconds = float(data['window_seconds'])
+        if (not math.isfinite(seconds) or not 0 < seconds <= 300
+                or values['threshold'] < 1 or values['observed'] < values['threshold']
+                or values['source_count'] < 1 or values['source_count'] > values['observed']
+                or not 0 <= values['dst_port'] <= 65535 or not network_ip(data.get('dst'))):
+            return None
+        return {**values, 'window_seconds': seconds, 'metric': data['metric'],
+                'destination_ip': data['dst'], 'observed_per_second': values['observed'] / seconds,
+                'multiple_sources_observed': values['source_count'] > 1,
+                'source_count_capped': str(data.get('source_count_capped')).lower() == 'true',
+                'availability_impact': 'unconfirmed'}
+    except (KeyError, TypeError, ValueError, OverflowError):
+        return None
 
 
 def map_wazuh_alert(raw):
@@ -85,14 +113,27 @@ def map_wazuh_alert(raw):
     # Zeek itself does not assign the numeric severity used by the Manager rule.
     location = raw.get('location', '')
     zeek_path = isinstance(location, str) and '/zeek/logs/current/' in location and location.endswith('.log')
-    if zeek_path and (archived or 'zeek_telemetry' in groups or 'zeek_notice' in groups):
+    if zeek_path and (archived or set(groups).intersection({'zeek_telemetry', 'zeek_notice', 'zeek_detection'})):
         record['source_product'] = 'zeek'
         record['transport'] = 'wazuh'
         record['log_type'] = location.rsplit('/', 1)[-1][:-4]
-        record['event_kind'] = 'alert' if 'zeek_notice' in groups else 'telemetry'
+        detection = 'zeek_detection' in groups and 'zeek_operational' not in groups and level >= 7
+        summary = dos_summary(data) if 'zeek_dos_summary' in groups else None
+        if 'zeek_dos_summary' in groups and summary is None:
+            detection = False
+        record['event_kind'] = 'alert' if detection else 'telemetry'
         record['zeek_data'] = data
         record['raw_line'] = raw.get('full_log')
-        record['severity_origin'] = 'wazuh_delivery_rule'
+        record['severity_origin'] = 'wazuh_detection_rule' if detection else 'wazuh_delivery_rule'
+        if detection:
+            record['detection'] = {'engine': 'wazuh', 'rule_id': rule['id'],
+                                   'reason': rule['description'], 'groups': groups,
+                                   'evidence': data, 'conclusion': 'Suspicious activity; not proof of successful compromise'}
+            if 'zeek_dos' in groups:
+                record['detection']['category'] = 'suspected_dos'
+                record['detection']['conclusion'] = 'Suspected DoS; availability impact is unconfirmed'
+                if summary:
+                    record['dos_summary'] = summary
         record['zeek_notice'] = {
             key: data[key] for key in ('note', 'msg', 'sub', 'uid', 'ts', 'src', 'dst', 'p', 'proto', 'actions')
             if key in data
@@ -102,7 +143,7 @@ def map_wazuh_alert(raw):
         record['src_ip'] = network_ip(data.get('src') or data.get('id.orig_h') or endpoints.get('orig_h'))
         record['dst_ip'] = network_ip(data.get('dst') or data.get('id.resp_h') or endpoints.get('resp_h'))
         record['src_port'] = data.get('id.orig_p', endpoints.get('orig_p'))
-        record['dst_port'] = data.get('p') or data.get('id.resp_p', endpoints.get('resp_p'))
+        record['dst_port'] = data.get('dst_port') or data.get('p') or data.get('id.resp_p', endpoints.get('resp_p'))
     record['ai_allowed'] = is_security_alert(record)
     record['event_kind'] = 'alert' if record['ai_allowed'] else 'telemetry'
     return record
@@ -116,7 +157,8 @@ def is_security_alert(record):
     groups = set(rule.get('groups', []))
     if record.get('source_product') == 'zeek':
         note = str(record.get('zeek_notice', {}).get('note', ''))
-        return ('zeek_notice' in groups and bool(note)
+        return ('zeek_detection' in groups and 'zeek_operational' not in groups
+                and rule.get('level', 0) >= 7
                 and not note.startswith(('CaptureLoss::', 'ChecksumOffloading::')))
     if groups.intersection({'sca', 'syscollector', 'dpkg', 'package', 'package_management', 'inventory'}):
         return False

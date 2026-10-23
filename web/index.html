@@ -204,6 +204,8 @@
           ['Event time',date(a.timestamp)],['SOC received at',date(a.received_at||a.created_at)],
           ['Zeek timestamp',hasLogValue(d.ts)?date(Number(d.ts)):null],['Collection agent',a.agent?.name],['Agent IP',a.agent?.ip],['Agent ID',a.agent?.id],
           ['Manager',a.manager?.name],['Log file',r.location||a.log_type],['Decoder',r.decoder?.name],['Source event ID',a.source_event_id||r.id],['Zeek UID',d.uid]]),
+        logGroup('DoS evidence',[
+          ['Metric',a.dos_summary?.metric],['Observed',a.dos_summary?.observed],['Threshold',a.dos_summary?.threshold],['Window (seconds)',a.dos_summary?.window_seconds],['Observed per second',a.dos_summary?.observed_per_second],['Source count',a.dos_summary?.source_count],['Source count capped',a.dos_summary?.source_count_capped],['Availability impact',a.dos_summary?.availability_impact]]),
         logGroup('Network connection',[
           ['Source IP',a.src_ip],['Source port',a.src_port],['Destination IP',a.dst_ip],['Destination port',a.dst_port],['Protocol',d.proto||data.protocol],['Service',d.service],
           ['Connection state',d.conn_state],['Duration (seconds)',d.duration],['Origin bytes sent',d.orig_bytes],['Responder bytes sent',d.resp_bytes],['Origin packets',d.orig_pkts],['Responder packets',d.resp_pkts],['Missed bytes',d.missed_bytes]]),
@@ -213,7 +215,7 @@
         logGroup('User, process and file',[
           ['User',a.username],['Process',a.process],['Command',data.command],['PID',data.pid],['File',a.file_path],['File change',a.file_event],
           ...logObjectFields(r.syscheck||{}).filter(([k])=>!['path','event'].includes(k))]),
-        logGroup(z?'Zeek notice and forwarding rule':'Detection rule',[
+        logGroup('Detection rule',[
           ['Rule ID',a.rule?.id],['Wazuh level',a.rule?.level],['Rule description',a.rule?.description],['Groups',a.rule?.groups],['MITRE',a.mitre||a.rule?.mitre],
           ['Notice type',d.note],['Message',d.msg],['Notice details',d.sub],['Zeek actions',d.actions]])
       ].join('');
@@ -400,7 +402,7 @@
       drawerKey(e){if(!this.mobile()||!$('logs-inspector').classList.contains('drawer-open'))return;if(e.key==='Enter'&&!e.target.closest('button,input,select,summary,[role=tab]')){e.preventDefault();this.closeDrawer();return}if(e.key!=='Tab')return;const elements=[...$('logs-inspector').querySelectorAll('button:not(:disabled),input,summary,[tabindex="0"]')].filter(el=>el.getClientRects().length);if(!elements.length)return;const first=elements[0],last=elements.at(-1);if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}
       mitre(record){const m=record.mitre||record.rule?.mitre||{};return {ids:m.id||m.ids||[],tactics:m.tactic||[],techniques:m.technique||[]}}
       renderHead(){const a=this.record;$('logs-detail-actions').classList.toggle('hidden',!a);if(!a){$('logs-detail-head').innerHTML='<h2 id="logs-detail-title">No entry selected</h2><p>Select a log entry to view its details.</p>';return}
-        $('logs-detail-head').innerHTML=`<div class="log-chips"><span class="log-chip">${icon(logSource(a)==='Zeek'?'network':'shield')}${esc(logSource(a))}</span>${a.event_kind==='alert'?'':'<span class="log-chip">Telemetry</span>'}${a.severity?'<span title="Source rule severity">'+badge(a.severity)+'</span>':''}${state(a.ai_status)}</div><h2 id="logs-detail-title" title="${esc(logTitle(a))}">${esc(logTitle(a))}</h2>${a.ai_error?'<p class="logs-error">'+esc(a.ai_error)+'</p>':''}`;
+        $('logs-detail-head').innerHTML=`<div class="log-chips"><span class="log-chip">${icon(logSource(a)==='Zeek'?'network':'shield')}${esc(logSource(a))}</span>${a.event_kind==='alert'?'<span class="log-chip">Security alert</span>':'<span class="log-chip">Telemetry</span>'}${a.severity?'<span title="Source rule severity">'+badge(a.severity)+'</span>':''}${state(a.ai_status)}</div><h2 id="logs-detail-title" title="${esc(logTitle(a))}">${esc(logTitle(a))}</h2>${a.ai_error?'<p class="logs-error">'+esc(a.ai_error)+'</p>':''}`;
         $('logs-open-alert').classList.toggle('hidden',a.event_kind!=='alert');
       }
       invalidatePanels(){for(const tree of this.trees)tree.destroy();this.trees=[];this.panelReady.clear();for(const tab of ['overview','original','normalized','source'])$('logs-panel-'+tab).replaceChildren()}
@@ -410,8 +412,9 @@
         const r=a.raw_event||{},d=a.zeek_data||{},data=r.data||{},m=this.mitre(a);
         if(this.tab==='overview')root.innerHTML='<div class="log-groups">'+[
           this.fields('Time and collection source',[['Event time',a.timestamp?date(a.timestamp):null],['SOC received at',a.received_at?date(a.received_at):null],['Agent',a.agent?.name],['Agent IP',a.agent?.ip],['Agent ID',a.agent?.id],['Manager',a.manager?.name],['File',r.location||a.log_type],['Decoder',r.decoder?.name],['Source event ID',a.source_event_id||r.id],['Zeek UID',d.uid],['SOC event ID',a.id]]),
-          this.fields('Detection rule',[['Rule ID',a.rule?.id],['Wazuh level',a.rule?.level],...(a.rule?.description!==logTitle(a)?[['Description',a.rule?.description]]:[]),['Groups',a.rule?.groups],['Notice type',d.note],...(d.msg!==logTitle(a)?[['Message',d.msg]]:[]),['Notice details',d.sub],['AI skip reason',a.ai_status==='skipped'?a.ai_skip_reason:null]]),
+          this.fields('Detection rule',[['Rule ID',a.rule?.id],['Wazuh level',a.rule?.level],...(a.rule?.description!==logTitle(a)?[['Description',a.rule?.description]]:[]),['Groups',a.rule?.groups],['Severity assigned by',a.severity_origin],['Assessment',a.detection?.conclusion],['Notice type',d.note],...(d.msg!==logTitle(a)?[['Message',d.msg]]:[]),['Notice details',d.sub],['AI skip reason',a.ai_status==='skipped'?a.ai_skip_reason:null]]),
           this.fields('MITRE ATT&CK',[['Technique IDs',m.ids],['Tactics',m.tactics],['Techniques',m.techniques]]),
+          this.fields('DoS evidence',[['Metric',a.dos_summary?.metric],['Observed',a.dos_summary?.observed],['Threshold',a.dos_summary?.threshold],['Window (seconds)',a.dos_summary?.window_seconds],['Observed per second',a.dos_summary?.observed_per_second],['Source count',a.dos_summary?.source_count],['Source count capped',a.dos_summary?.source_count_capped],['Availability impact',a.dos_summary?.availability_impact]]),
           this.fields('Network connection',[['Source IP',a.src_ip],['Source port',a.src_port],['Destination IP',a.dst_ip],['Destination port',a.dst_port],['Protocol',d.proto||data.protocol],['Service',d.service],['Connection state',d.conn_state],['Duration (seconds)',d.duration],['Origin bytes',d.orig_bytes],['Responder bytes',d.resp_bytes],['Origin packets',d.orig_pkts],['Responder packets',d.resp_pkts],['Metric',d.name],['Value',d.value],['Metric type',d.metric_type]]),
           this.fields('HTTP / DNS / TLS',[['HTTP method',d.method],['Host',d.host],['URI',d.uri],['Status code',d.status_code],['DNS query',d.query],['DNS answers',d.answers],['Server name',d.server_name],['TLS version',d.cipher?d.version:null],['Cipher',d.cipher]]),
           this.fields('User, process and file',[['User',a.username],['Process',a.process],['Command',data.command],['File',a.file_path],['File event',a.file_event],...logObjectFields(r.syscheck||{}).filter(([k])=>!['path','event'].includes(k))])
