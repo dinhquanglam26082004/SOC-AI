@@ -7,6 +7,7 @@ from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 from common.runtime_store import RuntimeStore
+from common.log_index import backup_before_migration, migrate_index, upsert_index, utc_stamp
 from wazuh_integration.mapper import is_security_alert
 
 
@@ -18,6 +19,7 @@ class EventStore:
     def __init__(self, path, max_jobs=1000):
         self.path, self.max_jobs = str(path), max_jobs
         Path(path).parent.mkdir(parents=True, exist_ok=True)
+        backup_before_migration(path)
         legacy = RuntimeStore(str(path)).load()
         with self.connect() as db:
             db.executescript('''
@@ -39,6 +41,9 @@ class EventStore:
                 for key, record in legacy.get('cases', {}).items():
                     db.execute('INSERT OR IGNORE INTO cases VALUES(?,?)', (key, json.dumps(record)))
                 db.execute("INSERT INTO migrations VALUES('legacy_snapshot')")
+
+        with self.connect() as db:
+            migrate_index(db)
 
     @contextmanager
     def connect(self):
@@ -80,6 +85,8 @@ class EventStore:
                 db.execute('INSERT OR IGNORE INTO zeek_logs VALUES(?,?,?,?,?)',
                            (record['id'], record['log_type'], record['agent']['name'], record['received_at'], json.dumps(record)))
                 if record.get('event_kind') == 'telemetry':
+                    if not old_log:
+                        self._update_log_index(db, record)
                     return (json.loads(old_log[0]), True) if old_log else (record, False)
             old = db.execute('SELECT payload FROM events WHERE id=?', (record['id'],)).fetchone()
             if old:
@@ -97,14 +104,65 @@ class EventStore:
             db.execute('INSERT INTO events VALUES(?,?) ON CONFLICT(id) DO UPDATE SET payload=excluded.payload', (record['id'], json.dumps(record)))
             if eligible:
                 db.execute("INSERT INTO ai_jobs VALUES(?,'queued',0,NULL,?)", (record['id'], time.time()))
+            self._update_log_index(db, record)
         return record, False
 
     def _pending(self, db):
         return db.execute("SELECT COUNT(*) FROM ai_jobs WHERE state IN ('queued','running')").fetchone()[0]
 
-    def list_events(self):
+    def list_events(self, limit=100, before=None, severity=None, status=None, search=None):
+        if not 1 <= limit <= 1000:
+            raise ValueError('Alert limit must be between 1 and 1000')
+        where = ["COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry'"]
+        params = []
+        if before is not None:
+            if type(before) is not int or before < 1:
+                raise ValueError('Invalid alert cursor')
+            where.append('rowid<?')
+            params.append(before)
+        for path, value in (('$.severity', severity.upper() if severity else None), ('$.ai_status', status)):
+            if value:
+                where.append('json_extract(payload,?)=?')
+                params.extend((path, value))
+        if search:
+            where.append('instr(lower(payload),lower(?))>0')
+            params.append(search)
         with self.connect() as db:
-            return [json.loads(row[0]) for row in db.execute("SELECT payload FROM events WHERE COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry' ORDER BY rowid DESC")]
+            return [json.loads(r[0]) for r in db.execute('SELECT payload FROM events WHERE '
+                    +' AND '.join(where)+' ORDER BY rowid DESC LIMIT ?', (*params, limit))]
+
+    def event_cursor(self, event_id):
+        with self.connect() as db:
+            row = db.execute('SELECT rowid FROM events WHERE id=?', (event_id,)).fetchone()
+            return row[0] if row else None
+
+    def event_metrics(self):
+        with self.connect() as db:
+            counts = {str(r[0]).lower(): r[1] for r in db.execute("SELECT json_extract(payload,'$.severity'),COUNT(*) FROM events WHERE COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry' GROUP BY json_extract(payload,'$.severity')")}
+        return {'total': sum(counts.values()), **{s: counts.get(s, 0) for s in ('critical', 'high', 'medium', 'low')}}
+
+    def event_summaries(self):
+        # Time series needs three scalar fields, never full source/AI payloads.
+        with self.connect() as db:
+            for row in db.execute("SELECT json_extract(payload,'$.created_at'),json_extract(payload,'$.timestamp'),json_extract(payload,'$.severity') FROM events WHERE COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry'"):
+                yield dict(zip(('created_at', 'timestamp', 'severity'), row))
+
+    def log_stats(self):
+        with self.connect() as db:
+            latest = db.execute('SELECT received_at FROM log_index ORDER BY received_at DESC,id DESC LIMIT 1').fetchone()
+            zeek_latest = db.execute("SELECT received_at FROM log_index WHERE origin='zeek' ORDER BY received_at DESC,id DESC LIMIT 1").fetchone()
+            total = db.execute('SELECT COUNT(*) FROM log_index').fetchone()[0]
+            count = db.execute("SELECT COUNT(*) FROM log_index WHERE origin='zeek'").fetchone()[0]
+            types = [r[0] for r in db.execute("SELECT DISTINCT log_type FROM log_index WHERE origin='zeek' ORDER BY log_type")]
+            revision = db.execute("SELECT COUNT(*),COALESCE(MAX(rowid),0) FROM events WHERE COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry'").fetchone()
+        return {'total': total, 'last_received_at': latest[0] if latest else None,
+                'alert_revision': ':'.join(str(x) for x in revision),
+                'zeek': {'total': count, 'log_types': types, 'last_received_at': zeek_latest[0] if zeek_latest else None}}
+
+    def investigation_status(self):
+        with self.connect() as db:
+            return [{'id': r[0], 'ai_status': r[1], 'ai_progress': json.loads(r[2] or '{}'), 'ai_error': r[3]}
+                    for r in db.execute("SELECT e.id,json_extract(e.payload,'$.ai_status'),json_extract(e.payload,'$.ai_progress'),json_extract(e.payload,'$.ai_error') FROM ai_jobs j JOIN events e ON e.id=j.event_id WHERE j.state IN ('queued','running') OR j.updated>? ORDER BY j.updated DESC LIMIT 50", (time.time()-60,))]
 
     def list_zeek_logs(self, limit=100, before=None, log_type=None):
         # A rowid cursor keeps pagination stable while new logs arrive.
@@ -129,84 +187,74 @@ class EventStore:
             row = db.execute('SELECT payload FROM events WHERE id=?', (event_id,)).fetchone()
             return json.loads(row[0]) if row else None
 
-    def list_logs(self, limit=100, before=None, source=None, log_type=None, kind=None):
+    def _update_log_index(self, db, record):
+        if record.get('source_product') == 'zeek':
+            z = db.execute('SELECT received_at,log_type FROM zeek_logs WHERE id=?', (record['id'],)).fetchone()
+            e = db.execute('SELECT payload FROM events WHERE id=?', (record['id'],)).fetchone()
+            current = json.loads(e[0]) if e else record
+            upsert_index(db, current, origin='zeek', log_type=z['log_type'],
+                         received_at=z['received_at'], kind=(current.get('event_kind') or 'alert') if e else 'telemetry')
+        elif record.get('source') == 'wazuh':
+            upsert_index(db, record)
+
+    def list_logs(self, limit=100, before=None, source=None, log_type=None, kind=None,
+                  since=None, until=None, q=None):
         source = source.strip().lower() if source and source.strip() else None
-        # A Zeek notice is present in both stores: expose it once and use the
-        # current alert payload so AI results do not come from a stale log copy.
-        unified = """WITH unified AS (
-            SELECT z.id, 'zeek' AS origin, z.log_type, z.received_at,
-                   CASE WHEN e.id IS NULL THEN 'telemetry' ELSE COALESCE(json_extract(e.payload,'$.event_kind'),'alert') END AS kind
-            FROM zeek_logs z LEFT JOIN events e ON e.id=z.id
-            UNION ALL
-            SELECT e.id,
-                   CASE WHEN json_extract(e.payload,'$.source_product')='zeek' THEN 'zeek' ELSE 'wazuh' END,
-                   COALESCE(json_extract(e.payload,'$.log_type'),json_extract(e.payload,'$.raw_event.location'),'wazuh'),
-                   COALESCE(json_extract(e.payload,'$.received_at'),json_extract(e.payload,'$.timestamp'),''),
-                   COALESCE(json_extract(e.payload,'$.event_kind'),'alert')
-            FROM events e WHERE json_extract(e.payload,'$.source')='wazuh'
-              AND NOT EXISTS(SELECT 1 FROM zeek_logs z WHERE z.id=e.id)
-        ) """
+        if not 1 <= limit <= 500:
+            raise ValueError('Log limit must be between 1 and 500')
         filters, params = [], []
         for column, value in (('origin', source), ('log_type', log_type), ('kind', kind)):
             if value:
                 filters.append(column + '=?')
                 params.append(value)
+        since, until = utc_stamp(since) if since else None, utc_stamp(until) if until else None
+        if since and until and since > until:
+            raise ValueError('since must be earlier than or equal to until')
+        for operator, value in (('>=', since), ('<=', until)):
+            if value:
+                filters.append('received_at'+operator+'?')
+                params.append(value)
+        for word in (q or '').casefold().split():
+            filters.append('instr(search_text,?)>0')
+            params.append(word)
         where = ' WHERE ' + ' AND '.join(filters) if filters else ''
         page_where, page_params = where, list(params)
         if before:
             try:
-                cursor = json.loads(base64.urlsafe_b64decode(before.encode()).decode())
-                if not isinstance(cursor, list) or len(cursor) != 2 or not all(isinstance(v, str) for v in cursor):
+                cursor = json.loads(base64.b64decode(before.encode(), altchars=b'-_', validate=True).decode())
+                if (not isinstance(cursor, list) or len(cursor) != 2
+                        or not all(isinstance(v, str) for v in cursor) or len(cursor[0]) > 64 or len(cursor[1]) > 128):
                     raise ValueError()
-                stamp, event_id = cursor
-                if len(stamp) > 64 or len(event_id) > 128:
-                    raise ValueError()
-            except Exception as exc:
-                raise ValueError('Invalid log cursor') from exc
-            page_where += (' AND ' if page_where else ' WHERE ') + '(received_at < ? OR (received_at=? AND id < ?))'
-            page_params.extend((stamp, stamp, event_id))
+                stamp, event_id = utc_stamp(cursor[0]), cursor[1]
+            except (ValueError, UnicodeError) as exc:
+                raise ValueError('Invalid log cursor: expected base64 [UTC timestamp, id]') from exc
+            page_where += (' AND ' if page_where else ' WHERE ') + '(received_at,id)<(?,?)'
+            page_params.extend((stamp, event_id))
         with self.connect() as db:
             db.execute('BEGIN')
-            rows = db.execute(unified + 'SELECT * FROM unified' + page_where + ' ORDER BY received_at DESC,id DESC LIMIT ?', (*page_params, limit + 1)).fetchall()
+            rows = db.execute('SELECT id,origin,log_type,kind,received_at FROM log_index' + page_where
+                              + ' ORDER BY received_at DESC,id DESC LIMIT ?', (*page_params, limit+1)).fetchall()
             page = rows[:limit]
-            # Page on indexed metadata, then load only the selected JSON bodies.
-            # Materializing every raw payload for counts/sorting stalls polling.
             payloads = {}
             if page:
                 ids = [row['id'] for row in page]
                 placeholders = ','.join('?' for _ in ids)
                 for table in ('zeek_logs', 'events'):
                     payloads.update((r['id'], r['payload']) for r in db.execute(
-                        'SELECT id,payload FROM ' + table + ' WHERE id IN (' + placeholders + ')', ids))
+                        'SELECT id,payload FROM '+table+' WHERE id IN ('+placeholders+')', ids))
             records = []
             for row in page:
                 record = json.loads(payloads[row['id']])
                 record.update(log_origin=row['origin'], log_type=row['log_type'], event_kind=row['kind'])
                 records.append(record)
-            cursor = base64.urlsafe_b64encode(json.dumps([page[-1]['received_at'], page[-1]['id']]).encode()).decode() if len(rows) > limit else None
-            # return {'logs': records, 'next_cursor': cursor,
-            #         'total': db.execute(unified + 'SELECT COUNT(*) FROM unified' + where, params).fetchone()[0],
-            #         'total_all': db.execute(unified + 'SELECT COUNT(*) FROM unified').fetchone()[0],
-            #         'log_types': [r[0] for r in db.execute(unified + 'SELECT DISTINCT log_type FROM unified ORDER BY log_type')]}
-            type_where = ' WHERE origin=?' if source else ''
-            type_params = [source] if source else []
-            return {
-                'logs': records,
-                'next_cursor': cursor,
-                'total': db.execute(
-                    unified + 'SELECT COUNT(*) FROM unified' + where,
-                    params
-                ).fetchone()[0],
-                'total_all': db.execute(
-                    unified + 'SELECT COUNT(*) FROM unified'
-                ).fetchone()[0],
-                'log_types': [
-                    r[0] for r in db.execute(
-                        unified + f'SELECT DISTINCT log_type FROM unified{type_where} ORDER BY log_type',
-                        type_params
-                    )
-                ]
-            }
+            cursor = base64.urlsafe_b64encode(json.dumps([page[-1]['received_at'], page[-1]['id']]).encode()).decode() if len(rows)>limit else None
+            # Exact counts from compact metadata. No cache: atomic reads and no stale totals.
+            total = db.execute('SELECT COUNT(*) FROM log_index'+where, params).fetchone()[0]
+            all_count = db.execute('SELECT COUNT(*) FROM log_index').fetchone()[0]
+            type_where, type_params = (' WHERE origin=?', [source]) if source else ('', [])
+            types = [r[0] for r in db.execute('SELECT DISTINCT log_type FROM log_index'+type_where+' ORDER BY log_type', type_params)]
+            return {'logs': records, 'next_cursor': cursor, 'total': total, 'total_all': all_count, 'log_types': types}
+
     def claim(self):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')

@@ -32,7 +32,7 @@ def main():
         tables = {r[0] for r in db.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         with db:
             db.execute('PRAGMA foreign_keys=ON')
-            for table in ('ai_jobs', 'cases', 'zeek_logs', 'events', 'runtime_state'):
+            for table in ('ai_jobs', 'cases', 'log_index', 'zeek_logs', 'events', 'runtime_state'):
                 if table in tables:
                     counts[table] = db.execute('SELECT COUNT(*) FROM ' + table).fetchone()[0]
                     db.execute('DELETE FROM ' + table)

@@ -94,7 +94,7 @@
           <div class="metrics"><article class="card metric"><div class="metric-top"><span>Total Alerts</span><span class="metric-icon" style="color:var(--cyan)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-alert"></use></svg></span></div><div id="total" class="metric-value">0</div><p>Stored security alerts</p></article><article class="card metric"><div class="metric-top"><span>Critical</span><span class="metric-icon" style="color:var(--red)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-alert"></use></svg></span></div><div id="critical" class="metric-value" style="color:#ffc0cb">0</div><p>Priority review required</p></article><article class="card metric"><div class="metric-top"><span>High Severity</span><span class="metric-icon" style="color:var(--orange)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-shield"></use></svg></span></div><div id="high" class="metric-value" style="color:#fed0a6">0</div><p>High severity detections</p></article><article class="card metric"><div class="metric-top"><span>Open Cases</span><span class="metric-icon" style="color:var(--violet)"><svg class="ui-icon" aria-hidden="true"><use href="#icon-case"></use></svg></span></div><div id="case-count" class="metric-value" style="color:#d7c9ff">0</div><p>Cases being tracked</p></article></div>
           <section id="ai-active" class="card hidden" style="margin-top:14px"></section><div class="grid-main"><section class="card"><div class="card-head"><div><h2><svg class="ui-icon" aria-hidden="true"><use href="#icon-alert"></use></svg>Recent Security Alerts</h2><p>Latest alerts from normalized Wazuh events</p></div><button class="link" onclick="showView('alerts')">View all</button></div><div class="scroll"><table><thead><tr><th>Alert</th><th>Agent / Rule</th><th>Severity</th><th>AI Status</th><th>Time</th></tr></thead><tbody id="recent-alerts"></tbody></table></div></section><section class="card"><div class="card-head"><div><h2><svg class="ui-icon" aria-hidden="true"><use href="#icon-activity"></use></svg>Live Activity</h2><p>Source activity and AI queue status</p></div></div><div id="activity" class="activity"></div></section></div>
         </section>
-        <section id="view-alerts" class="hidden"><div class="screen-title"><div class="eyebrow">Detection Queue</div><h1><svg class="ui-icon" aria-hidden="true"><use href="#icon-alert"></use></svg>Alerts</h1><p>Select an alert to inspect its evidence and investigation results.</p></div><section class="card"><div class="card-head"><div><h2 id="alert-summary">Loading alerts…</h2></div><button class="btn" onclick="refreshAll()"><svg class="ui-icon" aria-hidden="true"><use href="#icon-refresh"></use></svg> Refresh</button></div><div class="scroll"><table style="min-width:900px"><thead><tr><th>Alert ID</th><th>Detection</th><th>Agent / Rule</th><th>Severity</th><th>Status</th><th>Received</th></tr></thead><tbody id="all-alerts"></tbody></table></div></section></section>
+        <section id="view-alerts" class="hidden"><div class="screen-title"><div class="eyebrow">Detection Queue</div><h1><svg class="ui-icon" aria-hidden="true"><use href="#icon-alert"></use></svg>Alerts</h1><p>Select an alert to inspect its evidence and investigation results.</p></div><section class="card"><div class="card-head"><div><h2 id="alert-summary">Loading alerts…</h2></div><button class="btn" onclick="refreshAll()"><svg class="ui-icon" aria-hidden="true"><use href="#icon-refresh"></use></svg> Refresh</button></div><div class="scroll"><table style="min-width:900px"><thead><tr><th>Alert ID</th><th>Detection</th><th>Agent / Rule</th><th>Severity</th><th>Status</th><th>Received</th></tr></thead><tbody id="all-alerts"></tbody></table></div><div class="card-head"><button id="alerts-older" class="btn" onclick="loadOlderAlerts()" hidden>Load older alerts</button></div></section></section>
         <!-- LogsWorkspace: filter toolbar, independently scrolling master/detail panes, pagination. -->
         <section id="view-logs" class="hidden" aria-label="Unified event timeline">
 
@@ -144,9 +144,9 @@
     function row(a,full=false){const title=a.rule?.description||a.attack_type||'Historical event';const con=`${esc(a.agent?.name)} · ${esc(a.agent?.ip)} / rule ${esc(a.rule?.id)} · level ${esc(a.rule?.level)}`;return`<tr data-alert="${esc(a.id||'')}">${full?`<td class="mono">${esc(a.id)}</td>`:''}<td><span class="event">${esc(title)}</span><span class="sub">${esc(a.source_product==='zeek'?'Zeek · via Wazuh':(a.source||'historical'))}</span></td><td class="mono">${con}</td><td>${badge(a.severity)}</td><td>${state(a.ai_status||a.status)}</td><td class="mono" style="color:var(--muted)">${date(a.created_at||a.timestamp)}</td></tr>`}
     function empty(cols,message){return`<tr><td colspan="${cols}" class="empty">${message}</td></tr>`}
     function wireRows(root){root.querySelectorAll('tr[data-alert]').forEach(r=>r.onclick=()=>openAlert(r.dataset.alert))}
-    function renderAlerts(){const recent=$('recent-alerts'),all=$('all-alerts');recent.innerHTML=alerts.length?alerts.slice(0,7).map(a=>row(a)).join(''):empty(5,'No alerts yet. Waiting for security alerts from Wazuh.');all.innerHTML=alerts.length?alerts.map(a=>row(a,true)).join(''):empty(6,'No alerts yet.');wireRows(recent);wireRows(all);$('alert-summary').textContent=`${alerts.length} stored security alerts`;$('nav-count').textContent=alerts.length;const list=$('investigation-list');list.innerHTML=alerts.length?[...alerts].sort((a,b)=>({completed:2,running:0,failed:3,queued:1,skipped:4}[a.ai_status]??5)-({completed:2,running:0,failed:3,queued:1,skipped:4}[b.ai_status]??5)).map(a=>`<button data-investigation="${esc(a.id)}"><span class="event">${esc(a.rule?.description||a.attack_type||a.id)}</span><span class="sub">${esc(a.agent?.name)} · ${esc(a.severity)} · AI: ${state(a.ai_status)}</span></button>`).join(''):'<div class="empty">No alerts available for investigation.</div>';list.querySelectorAll('[data-investigation]').forEach(b=>b.onclick=()=>investigate(b.dataset.investigation))}
+    function renderAlerts(){const recent=$('recent-alerts'),all=$('all-alerts');recent.innerHTML=alerts.length?alerts.slice(0,7).map(a=>row(a)).join(''):empty(5,'No alerts yet. Waiting for security alerts from Wazuh.');all.innerHTML=alerts.length?alerts.map(a=>row(a,true)).join(''):empty(6,'No alerts yet.');wireRows(recent);wireRows(all);$('alert-summary').textContent=`${alerts.length} loaded · ${alertTotal} security alerts stored`;$('nav-count').textContent=alertTotal;const list=$('investigation-list');list.innerHTML=alerts.length?[...alerts].sort((a,b)=>({completed:2,running:0,failed:3,queued:1,skipped:4}[a.ai_status]??5)-({completed:2,running:0,failed:3,queued:1,skipped:4}[b.ai_status]??5)).map(a=>`<button data-investigation="${esc(a.id)}"><span class="event">${esc(a.rule?.description||a.attack_type||a.id)}</span><span class="sub">${esc(a.agent?.name)} · ${esc(a.severity)} · AI: ${state(a.ai_status)}</span></button>`).join(''):'<div class="empty">No alerts available for investigation.</div>';list.querySelectorAll('[data-investigation]').forEach(b=>b.onclick=()=>investigate(b.dataset.investigation))}
     function render(data){const m=data.metrics||{};$('total').textContent=m.total??alerts.length;$('critical').textContent=m.critical??0;$('high').textContent=m.high??0;$('case-count').textContent=cases.length;renderAlerts()}
-    async function refreshAll(){if(refreshing)return;refreshing=true;try{const [a,c,source,responses]=await Promise.all([api('/api/alerts'),api('/api/cases'),api('/api/sources/status'),api('/api/response/history')]);alerts=a.alerts||[];cases=c.cases||[];render(a);renderProgress();if(openedAlert)openAlert(openedAlert);if(selectedInvestigation)investigate(selectedInvestigation);else{const ready=alerts.find(x=>x.ai_status==='running')||alerts.find(x=>x.ai_status==='queued')||alerts.find(x=>x.ai_status==='completed'&&x.investigation_report);if(ready)investigate(ready.id)}$('response-history').textContent=responses.history?.length?JSON.stringify(responses.history,null,2):'No response activity recorded. AI recommends actions; execution is not configured.';backend(true,'Backend online');$('activity').textContent=`Wazuh: last log received ${source.last_received_at?date(source.last_received_at):'no data received'}\nManager: status not queried\nAgent: status not queried\nAI queue: ${JSON.stringify(source.ai_queue)}\nForwarder: ${source.forwarder?JSON.stringify(source.forwarder):'no signal available in native mode'}`;if(location.protocol==='file:')throw Error('Open http://localhost:8100 to connect to the backend.')}catch(e){backend(false,'Backend unavailable');toast(e.message,true)}finally{refreshing=false}try{await refreshLogs()}catch(e){$('logs-summary').textContent='Unable to load logs: '+e.message}}
+    async function refreshAll(){if(document.hidden||refreshing)return;refreshing=true;try{const [a,c,source,responses]=await Promise.all([api('/api/alerts'),api('/api/cases'),api('/api/sources/status'),api('/api/response/history')]);alerts=a.alerts||[];alertTotal=a.metrics?.total??alerts.length;alertNextCursor=a.next_cursor;$('alerts-older').hidden=!alertNextCursor;alertRevision=source.alert_revision;cases=c.cases||[];render(a);renderProgress();if(openedAlert)openAlert(openedAlert);if(selectedInvestigation)investigate(selectedInvestigation);else{const ready=alerts.find(x=>x.ai_status==='running')||alerts.find(x=>x.ai_status==='queued')||alerts.find(x=>x.ai_status==='completed'&&x.investigation_report);if(ready)investigate(ready.id)}$('response-history').textContent=responses.history?.length?JSON.stringify(responses.history,null,2):'No response activity recorded. AI recommends actions; execution is not configured.';backend(true,'Backend online');$('activity').textContent=`Wazuh: last log received ${source.last_received_at?date(source.last_received_at):'no data received'}\nManager: status not queried\nAgent: status not queried\nAI queue: ${JSON.stringify(source.ai_queue)}\nForwarder: ${source.forwarder?JSON.stringify(source.forwarder):'no signal available in native mode'}`;if(location.protocol==='file:')throw Error('Open http://localhost:8100 to connect to the backend.')}catch(e){backend(false,'Backend unavailable');toast(e.message,true)}finally{refreshing=false}try{await refreshLogs()}catch(e){$('logs-summary').textContent='Unable to load logs: '+e.message}}
     function openAlert(id){openedAlert=id;const a=alerts.find(x=>String(x.id)===String(id));if(!a)return;$('modal-title').textContent=a.rule?.description||a.attack_type||'Historical alert';$('modal-meta').textContent=`${a.source_product==='zeek'?'Zeek · ':''}${a.agent?.name||'—'} · rule ${a.rule?.id||'—'} / level ${a.rule?.level??'—'} · AI ${a.ai_status||a.status||'unknown'}`;renderLogDetail($('modal-content'),a);$('modal-ai').textContent=investigationText(a);$('modal-progress').innerHTML=progressHTML(a);$('retry-ai').disabled=a.ai_allowed!==true||a.source!=='wazuh'||['queued','running','completed'].includes(a.ai_status);$('retry-ai').onclick=async()=>{try{await api('/api/alerts/'+encodeURIComponent(id)+'/investigate',{method:'POST'});toast('Investigation request queued.');await refreshAll();openAlert(id)}catch(e){toast(e.message,true)}};$('modal').classList.remove('hidden')};function closeModal(){openedAlert=null;$('modal').classList.add('hidden')}function investigationText(a){
       const names={queued:'Queued for AI processing',running:'AI investigation in progress',completed:'Investigation completed',failed:'Investigation failed',skipped:'Not automatically investigated'};
       const lines=[names[a.ai_status]||'No results yet',`Agent: ${a.agent?.name||'—'} · Rule: ${a.rule?.id||'—'}`,a.rule?.description||''];
@@ -332,41 +332,36 @@
       mobile(){return !matchMedia('(min-width:1200px)').matches}
       setRatio(value,persist=true){const ratio=Math.max(35,Math.min(75,Number.isFinite(value)?value:58));$('view-logs').style.setProperty('--logs-table-share',ratio+'%');$('logs-resizer').setAttribute('aria-valuenow',Math.round(ratio));if(persist)logsStorage.set('aisoc.logs.ratio',ratio)}
       bindResizer(){const handle=$('logs-resizer');let drag=null;handle.onpointerdown=e=>{if(e.button!==0)return;e.preventDefault();drag={id:e.pointerId,rect:$('logs-split').getBoundingClientRect()};handle.setPointerCapture(e.pointerId);document.body.classList.add('logs-resizing')};handle.onpointermove=e=>{if(drag)this.setRatio((e.clientX-drag.rect.left)/drag.rect.width*100)};const end=()=>{drag=null;document.body.classList.remove('logs-resizing')};handle.onpointerup=end;handle.onpointercancel=end;handle.onlostpointercapture=end;handle.onkeydown=e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const current=Number(handle.getAttribute('aria-valuenow'));this.setRatio(e.key==='Home'?35:e.key==='End'?75:current+(e.key==='ArrowRight'?2:-2))}}
-      encodeCursor(record){return btoa(unescape(encodeURIComponent(JSON.stringify([record.received_at||record.timestamp||'',record.id]))))}
-      matches(record){const f=this.filters,stamp=Date.parse(record.received_at||record.timestamp);if(f.from&&stamp<Date.parse(f.from))return false;if(f.to&&stamp>Date.parse(f.to))return false;if(f.q){const text=JSON.stringify(record).toLowerCase();if(!f.q.toLowerCase().split(/\s+/).every(term=>text.includes(term)))return false}return true}
       error(message){$('logs-error').textContent=message||'';$('logs-error').classList.toggle('hidden',!message)}
       async load(force=false){
         if(!force&&(!document.body.classList.contains('logs-view')||this.loading||this.before||(this.loaded&&Date.now()-this.lastLoad<15000)))return;
         if(this.filters.from&&this.filters.to&&Date.parse(this.filters.from)>Date.parse(this.filters.to)){this.controller?.abort();this.version++;this.loading=false;this.setBusy(false);this.error('Received from must be earlier than Received to.');return}
         if(force)this.controller?.abort();else if(this.loading)return;
         const version=++this.version,controller=new AbortController();this.controller=controller;this.loading=true;this.error('');this.setBusy(true);$('logs-summary').textContent='Loading matching entries…';
-        const f={...this.filters},records=[];let cursor=this.before,next=null,scanned=0,done=false,batches=0,total=0,all=0,scanLimited=false;
+        const f={...this.filters},loadStarted=performance.now();
         try{
-          while(!done&&records.length<f.limit&&batches<10){
-            const params=new URLSearchParams({limit:'500'});if(cursor)params.set('before',cursor);if(f.source)params.set('source',f.source);if(f.type)params.set('log_type',f.type);if(f.category||f.hide)params.set('kind',f.category||(f.hide?'alert':''));
-            const data=await api('/api/logs?'+params,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30000)])});if(version!==this.version)return;
-            batches++;total=data.total||0;all=data.total_all||0;this.types=data.log_types||[];const page=data.logs||[];
-            if(!page.length){done=true;next=null;break}
-            for(let i=0;i<page.length;i++){
-              const record=page[i];scanned++;cursor=this.encodeCursor(record);
-              if(f.from&&Date.parse(record.received_at||record.timestamp)<Date.parse(f.from)){done=true;next=null;break}
-              if(this.matches(record))records.push(record);
-              if(records.length===f.limit){next=i<page.length-1?cursor:data.next_cursor;done=true;break}
-            }
-            if(!done){next=data.next_cursor;cursor=data.next_cursor;if(!cursor)done=true}
-            $('logs-page-info').textContent=`Scanning… ${scanned.toLocaleString('en-GB')} entries examined`;
-          }
+          const params=new URLSearchParams({limit:String(f.limit)});
+          if(this.before)params.set('before',this.before);
+          if(f.source)params.set('source',f.source);
+          if(f.type)params.set('log_type',f.type);
+          if(f.category||f.hide)params.set('kind',f.category||(f.hide?'alert':''));
+          if(f.q)params.set('q',f.q);
+          if(f.from)params.set('since',new Date(f.from).toISOString());
+          if(f.to)params.set('until',new Date(f.to).toISOString());
+          const data=await api('/api/logs?'+params,{signal:AbortSignal.any([controller.signal,AbortSignal.timeout(30000)])});
           if(version!==this.version)return;
-          scanLimited=!done&&batches===10&&Boolean(next);this.records=records;unifiedLogs=records;this.next=next;this.serverTotal=total;this.total=all;this.loaded=true;this.lastLoad=Date.now();this.updateTypes();$('logs-count').textContent=all.toLocaleString('en-GB');this.renderTable();
-          $('logs-summary').textContent=`${records.length} shown · ${total.toLocaleString('en-GB')} source/type/category matches · ${all.toLocaleString('en-GB')} stored`;
-          if(scanLimited)this.error(`Scanned ${scanned.toLocaleString('en-GB')} entries. Select Older to continue searching earlier records.`);
+          const records=data.logs||[],total=data.total||0,all=data.total_all||0;
+          this.types=data.log_types||[];this.records=records;unifiedLogs=records;this.next=data.next_cursor;
+          this.serverTotal=total;this.total=all;this.loaded=true;this.lastLoad=Date.now();this.updateTypes();
+          $('logs-count').textContent=all.toLocaleString('en-GB');this.renderTable();$('logs-table-scroll').dataset.loadMs=String(Math.round(performance.now()-loadStarted));
+          $('logs-summary').textContent=`${records.length} shown · ${total.toLocaleString('en-GB')} matches · ${all.toLocaleString('en-GB')} stored`;
           let selected=records.find(a=>a.id===this.selectedId);
           if(!selected&&this.selectedId&&this.record?.id===this.selectedId)selected=this.record;
           if(!selected&&this.selectedId?.startsWith('WAZUH-')){try{selected=await api('/api/alerts/'+encodeURIComponent(this.selectedId),{signal:controller.signal})}catch(e){if(controller.signal.aborted)throw e}}
           if(version!==this.version)return;
           if(!selected)selected=records.find(a=>a.event_kind==='alert');
           if(selected)this.select(selected,{open:false});else{this.clearSelection();this.syncURL()}
-          $('logs-page-info').textContent=`Page ${this.history.length+1} · ${records.length} entries${f.q||f.from||f.to?' · '+scanned.toLocaleString('en-GB')+' examined':''}`;
+          $('logs-page-info').textContent=`Page ${this.history.length+1} · ${records.length} entries`;
         }catch(e){if(version!==this.version||controller.signal.aborted)return;this.error(e.name==='TimeoutError'?'The server is taking too long. Select Latest to retry.':'Unable to load logs: '+e.message);if(!this.loaded)$('logs-rows').innerHTML=empty(7,'Logs could not be loaded. Select Latest to retry.')}
         finally{if(version===this.version){this.loading=false;this.setBusy(false)}}
       }
@@ -427,16 +422,36 @@
     }
     const logsWorkspace=new LogsWorkspace();
     async function refreshLogs(force=false){
+      if(document.hidden)return;
       if(!force&&!document.body.classList.contains('logs-view')){
-        if(!logsWorkspace.countLoading&&Date.now()-(logsWorkspace.countUpdated||0)>15000){
-          logsWorkspace.countLoading=true;
-          try{const data=await api('/api/logs?limit=1',{signal:AbortSignal.timeout(10000)});$('logs-count').textContent=(data.total_all||0).toLocaleString('en-GB');logsWorkspace.countUpdated=Date.now()}catch{}finally{logsWorkspace.countLoading=false}
-        }
         return;
       }
       return logsWorkspace.load(force);
     }
-    function showView(name){views.forEach(v=>$('view-'+v).classList.toggle('hidden',v!==name));document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));$('page-label').textContent=labels[name];$('sidebar').classList.remove('open');logsWorkspace.onView(name);if(name!=='logs')scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>showView(b.dataset.view));$('menu').onclick=()=>$('sidebar').classList.toggle('open');$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});if(location.protocol==='file:'){location.replace('http://localhost:8100/')}else{const requested=new URLSearchParams(location.search);const initial=requested.get('view');showView(views.includes(initial)?initial:([...requested.keys()].some(k=>['source','type','category','selected','q','before'].includes(k))?'logs':'dashboard'));refreshAll();timer=setInterval(refreshAll,3000);progressTimer=setInterval(renderProgress,1000);}addEventListener('beforeunload',()=>{clearInterval(timer);clearInterval(progressTimer)});
+    let alertRevision=null,statusPolling=false,alertNextCursor=null,alertTotal=0;
+    async function loadOlderAlerts(){
+      if(!alertNextCursor)return;
+      const button=$('alerts-older');button.disabled=true;
+      try{const page=await api('/api/alerts?limit=100&before='+alertNextCursor);const ids=new Set(alerts.map(a=>a.id));alerts.push(...page.alerts.filter(a=>!ids.has(a.id)));alertNextCursor=page.next_cursor;button.hidden=!alertNextCursor;renderAlerts()}catch(e){toast(e.message,true)}finally{button.disabled=false}
+    }
+
+    async function pollStatus(){
+      if(document.hidden||statusPolling)return;
+      statusPolling=true;
+      try{
+        const source=await api('/api/sources/status',{signal:AbortSignal.timeout(10000)});
+        backend(true,'Backend online');$('logs-count').textContent=(source.log_total||0).toLocaleString('en-GB');
+        if(alertRevision!==null&&source.alert_revision!==alertRevision){await refreshAll();return}
+        alertRevision=source.alert_revision;
+        for(const item of source.investigations||[]){
+          const current=alerts.find(a=>a.id===item.id);
+          if(current&&current.ai_status!==item.ai_status){Object.assign(current,await api('/api/alerts/'+encodeURIComponent(item.id)))}
+          else if(current)Object.assign(current,item);
+        }
+        renderAlerts();renderProgress();if(openedAlert)openAlert(openedAlert);if(selectedInvestigation)investigate(selectedInvestigation);
+      }catch(e){backend(false,'Backend unavailable')}finally{statusPolling=false}
+    }
+    function showView(name){views.forEach(v=>$('view-'+v).classList.toggle('hidden',v!==name));document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));$('page-label').textContent=labels[name];$('sidebar').classList.remove('open');logsWorkspace.onView(name);if(name!=='logs')scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{showView(b.dataset.view);if(b.dataset.view!=='logs')refreshAll()});$('menu').onclick=()=>$('sidebar').classList.toggle('open');$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});if(location.protocol==='file:'){location.replace('http://localhost:8100/')}else{const requested=new URLSearchParams(location.search);const initial=requested.get('view');showView(views.includes(initial)?initial:([...requested.keys()].some(k=>['source','type','category','selected','q','before'].includes(k))?'logs':'dashboard'));refreshAll();timer=setInterval(pollStatus,12000);progressTimer=setInterval(()=>{if(!document.hidden)renderProgress()},1000);}document.addEventListener('visibilitychange',()=>{if(!document.hidden){pollStatus();if(document.body.classList.contains('logs-view'))refreshLogs()}});addEventListener('beforeunload',()=>{clearInterval(timer);clearInterval(progressTimer)});
   </script>
 </body>
 </html>

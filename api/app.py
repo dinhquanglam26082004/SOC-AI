@@ -137,25 +137,26 @@ def create_app(db_path=None, workers=True):
     def unified_logs(limit: int = Query(100, ge=1, le=500), before: str = Query(None, max_length=512),
                      source: Literal['zeek', 'wazuh'] | None = None,
                      log_type: str = Query(None, max_length=512),
-                     kind: Literal['alert', 'telemetry'] | None = None):
+                     kind: Literal['alert', 'telemetry'] | None = None,
+                     since: str = Query(None, max_length=64), until: str = Query(None, max_length=64),
+                     q: str = Query(None, max_length=512)):
         try:
-            return app.state.store.list_logs(limit=limit, before=before, source=source, log_type=log_type, kind=kind)
+            return app.state.store.list_logs(limit=limit, before=before, source=source, log_type=log_type, kind=kind, since=since, until=until, q=q)
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
     @app.get('/api/alerts')
-    def alerts(severity: str = None, status: str = None, search: str = None):
-        all_events = app.state.store.list_events()
-        items = [a for a in all_events if (not severity or severity.upper() == str(a.get('severity')).upper()) and (not status or status == a.get('ai_status', a.get('status')))]
-        if search:
-            items = [a for a in items if search.lower() in json.dumps(a).lower()]
-        metrics = {s.lower(): sum(a.get('severity') == s for a in all_events) for s in ('CRITICAL','HIGH','MEDIUM','LOW')}
-        return {'alerts': items, 'metrics': {'total': len(all_events), **metrics}, 'active_model': {'name': AGENT_MODEL}}
+    def alerts(severity: str = None, status: str = None, search: str = None,
+               limit: int = Query(100, ge=1, le=500), before: int = Query(None, ge=1)):
+        rows = app.state.store.list_events(limit=limit+1, before=before, severity=severity, status=status, search=search)
+        items = rows[:limit]
+        cursor = app.state.store.event_cursor(items[-1]['id']) if len(rows)>limit else None
+        return {'alerts': items, 'next_cursor': cursor, 'metrics': app.state.store.event_metrics(), 'active_model': {'name': AGENT_MODEL}}
 
     @app.get('/api/alerts/timeseries')
     def timeseries(time_range: str = '24h'):
         try:
-            return {'buckets': build_alert_buckets(app.state.store.list_events(), time_range)}
+            return {'buckets': build_alert_buckets(app.state.store.event_summaries(), time_range)}
         except ValueError as exc:
             raise HTTPException(400, str(exc))
 
@@ -217,11 +218,7 @@ def create_app(db_path=None, workers=True):
 
     @app.get('/api/sources/status')
     def sources():
-        events = [a for a in app.state.store.list_events() if a.get('source') == 'wazuh']
-        last = max((a['received_at'] for a in events), default=None)
-        zeek_page = app.state.store.list_zeek_logs(limit=1)
-        zeek_last = zeek_page['logs'][0]['received_at'] if zeek_page['logs'] else None
-        last = max(filter(None, (last, zeek_last)), default=None)
+        stats = app.state.store.log_stats()
         forwarder = None
         status_file = os.getenv('WAZUH_FORWARDER_STATUS_FILE', '')
         if status_file:
@@ -230,8 +227,9 @@ def create_app(db_path=None, workers=True):
                 forwarder['stale'] = time.time() - forwarder['updated'] > 30
             except (OSError, ValueError, KeyError):
                 forwarder = {'state': 'unknown', 'stale': True}
-        return {'source': 'wazuh', 'last_received_at': last, 'forwarder': forwarder,
-                'zeek': {'total': zeek_page['total'], 'log_types': zeek_page['log_types'], 'last_received_at': zeek_last},
+        return {'source': 'wazuh', 'last_received_at': stats['last_received_at'], 'forwarder': forwarder, 'log_total': stats['total'],
+                'zeek': stats['zeek'], 'alert_revision': stats['alert_revision'],
+                'investigations': app.state.store.investigation_status(),
                 'manager_status': 'unknown (no authenticated status query)', 'agent_status': 'unknown (no authenticated status query)',
                 'ai_queue': app.state.store.queue_stats()}
 

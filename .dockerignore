@@ -8,4 +8,5 @@ secrets/
 artifacts/
 data/soc_runtime.sqlite3*
 data/backups/
+data/
 .git/
