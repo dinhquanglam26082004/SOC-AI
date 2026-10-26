@@ -6,6 +6,8 @@ Ho tro Smart Retrieval:
 """
 import re
 import logging
+import threading
+from pathlib import Path
 import chromadb
 
 from common.config import CHROMA_PATH, EMBEDDING_MODEL, CHROMA_COLLECTION_NAME
@@ -16,6 +18,7 @@ _client = None
 _collection = None
 _embedder = None
 _embedder_error = None
+_collection_lock = threading.RLock()
 
 logger = logging.getLogger(__name__)
 
@@ -25,17 +28,24 @@ CVE_KEYWORDS = ["cve", "vulnerability", "lỗ hổng", "lo hong", "exploit", "pa
 
 def _get_collection():
     global _client, _collection
-    if _collection is None:
-        _client = chromadb.PersistentClient(path=CHROMA_PATH)
-        _collection = _client.get_or_create_collection(name=COLLECTION_NAME)
-    return _collection
+    # Status, browsing and retrieval share one initialization. Chroma's process
+    # registry can race when separate request threads construct clients together.
+    with _collection_lock:
+        if _collection is None:
+            if not (Path(CHROMA_PATH)/'chroma.sqlite3').is_file():
+                raise RuntimeError('Knowledge database is not initialized; run rag.ingest during setup')
+            _client = chromadb.PersistentClient(path=CHROMA_PATH,
+                settings=chromadb.Settings(anonymized_telemetry=False))
+            _collection = _client.get_collection(name=COLLECTION_NAME)
+        return _collection
 
 
 class _EmbedderWrapper:
     def __init__(self):
         try:
             from sentence_transformers import SentenceTransformer
-            self._st = SentenceTransformer(EMBEDDING_MODEL)
+            # Runtime retrieval is offline. Download/cache models explicitly during setup/ingest.
+            self._st = SentenceTransformer(EMBEDDING_MODEL,local_files_only=True)
         except Exception as exc:
             raise RuntimeError(f"Could not load configured embedding model {EMBEDDING_MODEL}: {exc}") from exc
 

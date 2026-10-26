@@ -27,14 +27,42 @@ def reject_json_constant(value):
     raise ValueError('Non-finite JSON number')
 
 
-def analyze(record, on_progress=None):
+def analyze(record, on_progress=None, store=None, audit=None):
     if not is_security_alert(record):
         raise ValueError('AI investigation requires a security alert')
+    if os.getenv('AI_WORKFLOW','langgraph')=='langgraph':
+        from agents.investigation_graph import InvestigationGraph
+        def compact(summary):
+            return {k:v for k,v in summary.items() if k not in {'hypotheses','verification'}}
+        def progress(stage,step,summary):
+            record['investigation']=compact(summary)
+            if on_progress:
+                on_progress(stage,step)
+        report=InvestigationGraph(store,audit,model=AGENT_MODEL,on_progress=progress).run_alert(record)
+        current=audit.current(record['id'])
+        record['investigation']=compact(current['summary'])
+        # Timeline/history remain in the dossier DB; event payload and status polling stay compact.
+        report={k:v for k,v in report.items() if k not in {'timeline','verification_checks'}}
+        report['tool_outcomes']=[{k:v for k,v in item.items() if k!='authentication_summary'} for item in report.get('tool_outcomes',[])]
+        # Response recommendations are separate from the bounded investigation.
+        proposal={'status':'not_requested','actions':[],
+                  'notes':'Review investigation recommendations. No response action has been executed.'}
+        record['investigation_report']=report
+        if os.getenv('AI_PLAYBOOK_ENABLED','false').lower()=='true':
+            try:
+                from agents.playbook_agent import propose_playbook
+                proposal=propose_playbook(report,model=AGENT_MODEL,on_progress=on_progress)
+            except Exception as exc:
+                proposal={'status':'failed','error':type(exc).__name__,'actions':[]}
+        return report,proposal
     from agents.investigation_agent import investigate
     from agents.playbook_agent import propose_playbook
     report = investigate(record, model=AGENT_MODEL, on_progress=on_progress)
     record['investigation_report'] = report
-    proposal = propose_playbook(report, model=AGENT_MODEL, on_progress=on_progress)
+    try:
+        proposal = propose_playbook(report, model=AGENT_MODEL, on_progress=on_progress)
+    except Exception as exc:
+        proposal = {'status':'failed','error':type(exc).__name__,'actions':[]}
     if on_progress:
         on_progress('saving', 6)
     return report, proposal
@@ -59,14 +87,23 @@ async def ai_worker(app):
         try:
             async with app.state.ai_slots:
                 report, proposal = await asyncio.to_thread(
-                    analyze, record, lambda stage, step: store.progress(record, stage, step, AGENT_MODEL))
+                    analyze, record, lambda stage, step: store.progress(record, stage, step, AGENT_MODEL),
+                    store, getattr(app.state,'investigation_store',None))
             record['investigation_report'], record['playbook_proposal'] = report, proposal
             # The source rule severity is never overwritten by an inference.
         except asyncio.CancelledError:
             raise  # leave running job recoverable on next startup
         except Exception as exc:
             logger.warning('AI job failed (%s)', type(exc).__name__)
-            error = 'AI/RAG unavailable or invalid response; check local service health'
+            from agents.investigation_schema import WorkflowError
+            error = str(exc) if isinstance(exc,WorkflowError) else 'AI workflow failed ('+type(exc).__name__+'); inspect saved investigation diagnostics'
+            audit=getattr(app.state,'investigation_store',None)
+            try:
+                current=audit.current(record['id']) if audit else None
+            except Exception:
+                current=None
+            if current:
+                record['investigation']=current['summary']
         while True:
             try:
                 await asyncio.to_thread(store.finish, record, error)
@@ -83,9 +120,18 @@ def create_app(db_path=None, workers=True):
         if enabled and not os.getenv('WAZUH_WEBHOOK_TOKEN', '').strip():
             raise RuntimeError('WAZUH_WEBHOOK_TOKEN is required when WAZUH_ENABLED=true')
         app.state.store = EventStore(db_path or os.getenv('RUNTIME_DB_PATH', str(ROOT / 'data/soc_runtime.sqlite3')), int(os.getenv('AI_QUEUE_LIMIT', '1000')))
+        workflow=os.getenv('AI_WORKFLOW','langgraph')
+        if workflow not in {'legacy','langgraph'}:
+            raise RuntimeError('AI_WORKFLOW must be legacy or langgraph')
+        from agents.investigation_store import InvestigationStore
+        audit_path=Path(app.state.store.path).with_name('soc_investigations.sqlite3')
+        app.state.investigation_store=InvestigationStore(audit_path)
+        if workers:
+            app.state.investigation_store.recover_leases()
         app.state.store.recover()
-        app.state.ai_slots = asyncio.Semaphore(max(1, min(4, int(os.getenv('AI_MAX_CONCURRENCY', '1')))))
-        tasks = [asyncio.create_task(ai_worker(app)) for _ in range(max(1, min(4, int(os.getenv('AI_MAX_CONCURRENCY', '1')))))] if workers else []
+        slots=1 if workflow=='langgraph' else max(1,min(4,int(os.getenv('AI_MAX_CONCURRENCY','1'))))
+        app.state.ai_slots = asyncio.Semaphore(slots)
+        tasks = [asyncio.create_task(ai_worker(app)) for _ in range(slots)] if workers else []
         app.state.worker_tasks = tasks
         yield
         for task in tasks:
@@ -185,6 +231,46 @@ def create_app(db_path=None, workers=True):
         items = app.state.store.list_cases()
         return {'cases': items, 'stats': {'total': len(items)}}
 
+    @app.get('/api/alerts/{alert_id}/investigation')
+    def investigation_summary(alert_id: str):
+        item=app.state.investigation_store.current(alert_id)
+        if not item:
+            raise HTTPException(404,'No saved graph investigation')
+        return {'id':item['id'],'status':item['status'],'summary':item['summary']}
+
+    @app.get('/api/investigations/{incident_id}')
+    def investigation_detail(incident_id: str,section: Literal['evidence','tools','models','activity']='evidence',
+                             limit: int=Query(20,ge=1,le=100),offset: int=Query(0,ge=0,le=100000)):
+        item=app.state.investigation_store.detail(incident_id,section,limit,offset)
+        if not item:
+            raise HTTPException(404,'Investigation not found')
+        # Raw prompts/model responses stay in the local audit DB, not the browser API.
+        if section=='models':
+            item['items']=[{k:v for k,v in row.items() if k not in {'args','result'}} for row in item['items']]
+        return item
+
+    @app.get('/api/investigations')
+    def pending_investigations(limit: int=Query(20,ge=1,le=100),offset: int=Query(0,ge=0,le=100000)):
+        return app.state.investigation_store.pending_reviews(limit,offset)
+
+    from agents.investigation_schema import AnalystReview
+
+    @app.post('/api/investigations/{incident_id}/review',status_code=201)
+    def analyst_review(incident_id: str,body: AnalystReview):
+        try:
+            summary=app.state.investigation_store.review(incident_id,body.decision,body.notes,body.evidence_ids)
+        except KeyError:
+            raise HTTPException(404,'Investigation not found')
+        except ValueError as exc:
+            raise HTTPException(409,str(exc))
+        with app.state.store.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            row=db.execute('SELECT payload FROM events WHERE id=?',(summary['alert_id'],)).fetchone()
+            if row:
+                record=json.loads(row[0]);record['investigation']=summary
+                db.execute('UPDATE events SET payload=? WHERE id=?',(json.dumps(record),summary['alert_id']))
+        return {'summary':summary}
+
     @app.get('/api/cases/{case_id}')
     def case(case_id: str):
         item = next((c for c in app.state.store.list_cases() if c['id'] == case_id), None)
@@ -233,9 +319,34 @@ def create_app(db_path=None, workers=True):
                 'manager_status': 'unknown (no authenticated status query)', 'agent_status': 'unknown (no authenticated status query)',
                 'ai_queue': app.state.store.queue_stats()}
 
+    @app.get('/api/knowledge/chunks')
+    def knowledge_chunks(q: str = Query('', max_length=200),
+                         doc_type: str = Query('', max_length=64),
+                         limit: int = Query(25, ge=1, le=50),
+                         offset: int = Query(0, ge=0, le=1000000)):
+        from rag.browse import browse_chunks
+        try:
+            return browse_chunks(query=q.strip(), doc_type=doc_type.strip(),
+                                 limit=limit, offset=offset)
+        except Exception:
+            logger.exception('Knowledge browsing failed')
+            raise HTTPException(503, 'Knowledge index unavailable. Check the ChromaDB collection and ingestion setup.')
+
+    @app.get('/api/knowledge/chunk')
+    def knowledge_chunk(id: str = Query(..., min_length=1, max_length=512)):
+        from rag.browse import read_chunk
+        try:
+            item = read_chunk(id)
+        except Exception:
+            logger.exception('Knowledge chunk read failed')
+            raise HTTPException(503, 'Knowledge index unavailable')
+        if item is None:
+            raise HTTPException(404, 'Indexed chunk not found')
+        return item
+
     @app.get('/api/system/status')
     def system_status():
-        from rag.query import embedding_status
+        from rag.query import embedding_status, _get_collection
         try:
             r = requests.get(OLLAMA_HOST + '/api/tags', timeout=3)
             r.raise_for_status()
@@ -243,8 +354,7 @@ def create_app(db_path=None, workers=True):
         except requests.RequestException:
             ollama = {'connected': False, 'models': []}
         try:
-            import chromadb
-            count = chromadb.PersistentClient(path=CHROMA_PATH).get_collection(CHROMA_COLLECTION_NAME).count()
+            count = _get_collection().count()
             chroma = {'connected': True, 'count': count}
         except Exception:
             chroma = {'connected': False, 'count': 0}

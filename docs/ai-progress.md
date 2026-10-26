@@ -1,5 +1,20 @@
 # Theo dõi tiến độ điều tra AI
 
+## Workflow LangGraph hiện tại
+
+Mặc định dùng `AI_WORKFLOW=langgraph`. Giao diện hiển thị bước đang chạy,
+thời gian đã dùng, giới hạn thời gian và số lượt gọi model/tool thực tế. Không
+hiển thị phần trăm hoàn thành hoặc thời gian còn lại giả định. Trạng thái backend
+được lấy mỗi 12 giây, đồng hồ cập nhật mỗi giây trên trình duyệt.
+
+Hồ sơ bằng chứng, lịch sử tool và thông tin lượt gọi model được tải riêng khi
+chọn điều tra, phân trang 20 mục. Khi khôi phục sau gián đoạn, graph giữ ID,
+bằng chứng, thời điểm bắt đầu và ngân sách lượt gọi. Nếu một lượt model bị ngắt
+mà chưa lưu phản hồi, điều tra báo lỗi rõ ràng để người dùng chủ động thử lại.
+Xem [hướng dẫn LangGraph](langgraph-investigation.md).
+
+## Workflow legacy và báo cáo lịch sử
+
 Thanh tiến độ có tại Dashboard, Investigations và cửa sổ chi tiết cảnh báo.
 Giao diện lấy trạng thái từ backend mỗi 3 giây, cập nhật đồng hồ mỗi giây.
 

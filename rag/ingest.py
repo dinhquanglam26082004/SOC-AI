@@ -263,7 +263,7 @@ def main():
         show_progress_bar=True,
     ).tolist()
 
-    client     = chromadb.PersistentClient(path=CHROMA_PATH)
+    client     = chromadb.PersistentClient(path=CHROMA_PATH,settings=chromadb.Settings(anonymized_telemetry=False))
     collection = client.get_or_create_collection(name=COLLECTION_NAME)
 
     # Clear existing collection and re-populate (full rebuild)

@@ -65,13 +65,13 @@ def migrate_index(db):
     db.execute("INSERT INTO migrations VALUES('log_index_v1')")
 
 
-def backup_before_migration(path):
+def backup_before_migration(path, migration_name="log_index_v1"):
     path = Path(path)
     if not path.exists() or path.stat().st_size == 0:
         return None
     with closing(sqlite3.connect(path)) as source:
         if source.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='migrations'").fetchone():
-            if source.execute("SELECT 1 FROM migrations WHERE name='log_index_v1'").fetchone():
+            if source.execute("SELECT 1 FROM migrations WHERE name=?", (migration_name,)).fetchone():
                 return None
         backup = path.parent / 'backups' / ('pre-log-index-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S%f') + '.sqlite3')
         backup.parent.mkdir(parents=True, exist_ok=True)

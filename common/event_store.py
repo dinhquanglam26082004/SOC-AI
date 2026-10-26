@@ -7,6 +7,7 @@ from datetime import datetime
 from contextlib import contextmanager
 from pathlib import Path
 from common.runtime_store import RuntimeStore
+from common.investigation_index import migrate as migrate_investigation_index, write_index as write_investigation_index
 from common.log_index import backup_before_migration, migrate_index, upsert_index, utc_stamp
 from wazuh_integration.mapper import is_security_alert
 
@@ -20,6 +21,8 @@ class EventStore:
         self.path, self.max_jobs = str(path), max_jobs
         Path(path).parent.mkdir(parents=True, exist_ok=True)
         backup_before_migration(path)
+        backup_before_migration(path, 'investigation_index_v1')
+        backup_before_migration(path, 'authentication_facts_v1')
         legacy = RuntimeStore(str(path)).load()
         with self.connect() as db:
             db.executescript('''
@@ -44,6 +47,8 @@ class EventStore:
 
         with self.connect() as db:
             migrate_index(db)
+        with self.connect() as db:
+            migrate_investigation_index(db)
 
     @contextmanager
     def connect(self):
@@ -161,8 +166,9 @@ class EventStore:
 
     def investigation_status(self):
         with self.connect() as db:
-            return [{'id': r[0], 'ai_status': r[1], 'ai_progress': json.loads(r[2] or '{}'), 'ai_error': r[3]}
-                    for r in db.execute("SELECT e.id,json_extract(e.payload,'$.ai_status'),json_extract(e.payload,'$.ai_progress'),json_extract(e.payload,'$.ai_error') FROM ai_jobs j JOIN events e ON e.id=j.event_id WHERE j.state IN ('queued','running') OR j.updated>? ORDER BY j.updated DESC LIMIT 50", (time.time()-60,))]
+            return [{'id': r[0], 'ai_status': r[1], 'ai_progress': json.loads(r[2] or '{}'), 'ai_error': r[3],
+                     'investigation':json.loads(r[4] or '{}')}
+                    for r in db.execute("SELECT e.id,json_extract(e.payload,'$.ai_status'),json_extract(e.payload,'$.ai_progress'),json_extract(e.payload,'$.ai_error'),json_extract(e.payload,'$.investigation') FROM ai_jobs j JOIN events e ON e.id=j.event_id WHERE j.state IN ('queued','running') OR j.updated>? ORDER BY j.updated DESC LIMIT 50", (time.time()-60,))]
 
     def list_zeek_logs(self, limit=100, before=None, log_type=None):
         # A rowid cursor keeps pagination stable while new logs arrive.
@@ -188,6 +194,7 @@ class EventStore:
             return json.loads(row[0]) if row else None
 
     def _update_log_index(self, db, record):
+        write_investigation_index(db, record)
         if record.get('source_product') == 'zeek':
             z = db.execute('SELECT received_at,log_type FROM zeek_logs WHERE id=?', (record['id'],)).fetchone()
             e = db.execute('SELECT payload FROM events WHERE id=?', (record['id'],)).fetchone()

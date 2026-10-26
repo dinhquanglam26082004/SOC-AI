@@ -13,6 +13,11 @@ riêng; không dùng mật khẩu hoặc địa chỉ IP cố định của ngư
 
 ## Tổng quan
 
+AI điều tra cảnh báo bằng **LangGraph**, thu thập bằng chứng cục bộ rồi kiểm tra
+báo cáo có cấu trúc. Xem [workflow, cấu hình, lưu trữ và rollback](docs/langgraph-investigation.md).
+Log thông thường không kích hoạt AI. Kết quả thiếu bằng chứng được giữ ở trạng thái
+`inconclusive`; đề xuất phản ứng không tự thực thi.
+
 Tiếp nhận **cảnh báo mới qua Wazuh**, bao gồm toàn bộ file log Zeek nếu Agent đã cấu hình
 đọc `/opt/zeek/logs/current/*.log` theo [hướng dẫn](docs/zeek-notice-alerts.md).
 Mục [Logs chung](docs/unified-logs.md) hiển thị Zeek và Wazuh trên một dòng thời gian,
