@@ -33,9 +33,11 @@
    model reports, failed validation, tool selection, denied invalid requests,
    inconclusive results and verdict agreement with each case's expected evidence.
 
-Triage supplies recommended tools for the alert type: network/Zeek, file/malware,
-or authentication. The model still chooses the calls; scope checks and the tool
-allowlist apply to every request. This guidance does not guarantee correct reasoning.
+Triage supplies the only model-visible and executable investigation tools for the
+alert type: network/Zeek, file/malware, or authentication. The initial trigger
+read remains internal to triage. A tool request outside the selected set is
+recorded as rejected; every accepted request still passes the scope checks and
+argument validation. Tool routing does not guarantee correct reasoning.
 
 ## Storage, safety and compatibility
 

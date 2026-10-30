@@ -45,9 +45,10 @@ DESCRIPTIONS = {
     'search_runbook': 'Retrieve local response guidance, never proof that an event happened.'}
 
 
-def definitions():
+def definitions(allowed_tools=None):
+    names = MODELS if allowed_tools is None else allowed_tools
     return [{'type':'function','function':{'name':name,'description':DESCRIPTIONS[name],
-            'parameters':model.model_json_schema()}} for name,model in MODELS.items()]
+            'parameters':MODELS[name].model_json_schema()}} for name in names if name in MODELS]
 
 
 def observation(record):
@@ -65,9 +66,11 @@ def observation(record):
 
 
 class LocalTools:
-    def __init__(self, event_store, audit, incident_id, alert, seconds=15, retrieve=None):
+    def __init__(self, event_store, audit, incident_id, alert, seconds=15, retrieve=None,
+                 allowed_tools=None):
         self.store, self.audit, self.incident_id, self.alert = event_store,audit,incident_id,alert
         self.seconds, self.retrieve = seconds,retrieve
+        self.allowed_tools = set(MODELS if allowed_tools is None else allowed_tools)
         self.agent=str((alert.get('agent') or {}).get('id') or '')
         anchor=datetime.fromisoformat(alert['timestamp'].replace('Z','+00:00'))
         self.since=utc_stamp((anchor-timedelta(minutes=15)).isoformat())
@@ -79,7 +82,7 @@ class LocalTools:
                 'coverage':'Only events actually retained in SOC SQLite; absence is not proof of safety.', **kwargs}
 
     def execute(self, name, arguments, timeout=None):
-        if name not in MODELS:
+        if name not in MODELS or name not in self.allowed_tools:
             return self.envelope('error',error='tool_not_allowed')
         try:
             args=MODELS[name].model_validate(arguments).model_dump()

@@ -4,7 +4,10 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync(require('node:path').join(__dirname,'../web/index.html'),'utf8');
 const source = html.slice(html.indexOf('    const aiStages='),html.indexOf('    function renderProgress(){'));
-const scope = {icon:()=>'',esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),date:String};
+const scope = {
+  icon:()=>'',esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),
+  date:String,state:s=>String(s),duration:s=>String(s)
+};
 vm.runInNewContext(source+'\nthis.render=progressHTML;',scope);
 let out=scope.render({ai_status:'running',ai_progress:{model:'qwen3:8b'},investigation:{
   incident_id:'INV-test',node:'collecting',model_calls:2,tool_calls:3,started_at:Date.now()/1000-5,

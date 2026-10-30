@@ -401,7 +401,7 @@
       const g=a.investigation;
       if(['completed','failed'].includes(status)){
         const start=g?.started_at||p.started_at,end=g?.finished_at||p.finished_at;
-        return `<div class="investigation-result-line ${status}">${state(status)}${start&&end?`<span>${esc(duration(end-start))}</span>`:''}${g?`<span>${g.tool_calls||0} tool calls · ${g.model_calls||0} model calls</span>`:''}${status==='failed'?`<span>${esc(g?.error||a.ai_error||'Open AI activity for failure details.')}</span>`:''}</div>`;
+        return `<div class="investigation-result-line ${status}">${state(status)}${start&&end?`<span>${esc(duration(end-start))}</span>`:''}${g?`<span>${g.tool_calls||0} tool calls · ${g.model_calls||0} model calls</span>`:''}${status==='failed'?`<span>${esc([g?.stop_reason,g?.error||a.ai_error].filter(Boolean).join(': ')||'Open AI activity for failure details.')}</span>`:''}</div>`;
       }
       if(g?.incident_id){
         const now=Date.now()/1000,elapsed=(g.finished_at||now)-g.started_at,limits=g.limits||{};

@@ -21,8 +21,10 @@ security alert → scope/triage → investigate → local tools
                               structured conclusion → safety verification → save report
 ```
 
-The planner uses native Ollama `messages` and `tool_calls`. Tool outputs and log
-text are untrusted data. Final output uses an Ollama JSON Schema and Pydantic
+The planner uses native Ollama `messages` and `tool_calls`. It is offered only
+the deterministic alert-type tool set, and the same set is enforced at dispatch;
+an unsupported model request is recorded as `tool_not_allowed`. Tool outputs and
+log text are untrusted data. Final output uses an Ollama JSON Schema and Pydantic
 validation. Unknown evidence references and guidance-only findings are rejected.
 The transport schema omits string-length grammar constraints: Ollama 0.13.5
 rejects large bounded repetitions when generating the grammar. The complete

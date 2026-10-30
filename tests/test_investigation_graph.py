@@ -107,6 +107,27 @@ def test_graph_bounded_persisted_and_cached(lab):
         assert db.execute('SELECT COUNT(*) FROM checkpoints').fetchone()[0]>0
 
 
+def test_model_tools_are_routed_and_enforced(lab):
+    store,audit,trigger,_=lab
+    trigger['source_product']='zeek'
+    trigger['rule']['groups']=['zeek_detection']
+    available=[]
+
+    def client(messages,**kwargs):
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,audit.current(trigger['id'])['id']))}}
+        available.extend(tool['function']['name'] for tool in kwargs['tools'])
+        return {'message':{'content':'','tool_calls':[
+            {'function':{'name':'search_auth_events','arguments':{}}}]}}
+
+    result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
+    assert set(available)=={'search_zeek_connections','search_related_alerts'}
+    assert all(name in {'search_zeek_connections','search_related_alerts'} for name in available)
+    tool_calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
+    rejected=[call for call in tool_calls if call['name']=='search_auth_events']
+    assert rejected and rejected[0]['result']['error']=='tool_not_allowed'
+
+
 @pytest.mark.parametrize('verdict',['malicious','benign'])
 def test_trigger_alone_cannot_support_definitive_verdict(lab,verdict):
     store,audit,trigger,_=lab

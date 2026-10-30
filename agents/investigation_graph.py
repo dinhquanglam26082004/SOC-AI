@@ -89,7 +89,7 @@ class InvestigationGraph:
         if self.remaining()<=0:
             raise WorkflowError('time_budget','Investigation time budget exhausted')
         args={'messages':messages,'schema':ollama_report_schema() if final else None,
-              'tools':None if final else definitions()}
+              'tools':None if final else definitions(self.tool_plan)}
         def dispatch():
             self.progress('concluding' if final else 'investigating',4 if final else 2)
             remaining=self.remaining()
@@ -107,7 +107,7 @@ class InvestigationGraph:
         # Tool/schema instructions, recent conversation and output must fit too.
         context_tokens=int(os.getenv('OLLAMA_NUM_CTX','4096'))
         prediction_tokens=int(os.getenv('OLLAMA_NUM_PREDICT','1024'))
-        fixed=len(SYSTEM)+len(encode(ollama_report_schema() if final else definitions()))
+        fixed=len(SYSTEM)+len(encode(ollama_report_schema() if final else definitions(self.tool_plan)))
         fixed+=len(encode(state.get('messages',[]))) if not final else 0
         allowance=min(self.limits.context_chars,max(800,3*max(0,context_tokens-prediction_tokens-256)-fixed-1200))
         for e in self.audit.evidence(self.id):
@@ -124,7 +124,7 @@ class InvestigationGraph:
                 continue
             summaries.append(item); used+=size
         return {'alert_id':self.alert['id'],'scope':self.tools.envelope('ok')['scope'],
-                'recommended_tools':recommended_tools(self.alert),
+                'recommended_tools':self.tool_plan,
                 'trigger_summary':{'description':self.alert.get('rule',{}).get('description','')[:200],
                     'username':self.alert.get('username'),'source_ip':self.alert.get('src_ip'),'event_time':self.alert['timestamp']},
                 'evidence':summaries,'context_truncated':len(summaries)<len(self.audit.evidence(self.id)),
@@ -139,7 +139,7 @@ class InvestigationGraph:
         self.progress('triage',1)
         self.audit.update(self.id,{'trigger_title':str(self.alert.get('rule',{}).get('description',''))[:180],
                                   'agent_name':(self.alert.get('agent') or {}).get('name'),
-                                  'recommended_tools':recommended_tools(self.alert)})
+                                  'recommended_tools':self.tool_plan})
         result=self.tool('get_alert',{'alert_id':self.alert['id']})
         initial={'id':'H-001','statement':'The activity described by the alert may be unauthorized.',
                  'status':'open','supporting':[],'refuting':[],'evidence_ids':[],
@@ -363,7 +363,9 @@ class InvestigationGraph:
             self.run=previous if previous and previous['status']=='running' else self.audit.create(alert['id'],self.default_limits.model_dump())
             self.id,self.alert=self.run['id'],alert
             self.limits=Limits.model_validate(self.run['summary']['limits'])
-            self.tools=LocalTools(self.store,self.audit,self.id,alert,self.limits.tool_seconds,self.retrieve)
+            self.tool_plan=recommended_tools(alert)
+            self.tools=LocalTools(self.store,self.audit,self.id,alert,self.limits.tool_seconds,self.retrieve,
+                                  {'get_alert',*self.tool_plan})
             Path(self.checkpoint_path).parent.mkdir(parents=True,exist_ok=True)
             conn=sqlite3.connect(self.checkpoint_path,check_same_thread=False,timeout=15)
             conn.execute('PRAGMA synchronous=FULL')
