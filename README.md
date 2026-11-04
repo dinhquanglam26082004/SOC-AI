@@ -225,7 +225,7 @@ Trang current có thể đổi theo bản mới; lab đối chiếu thêm source
 thực tế. Khi nâng version phải kiểm tra lại Agent/config.
 
 Chức năng hỏi đáp Copilot và endpoint `/api/chat` đã được gỡ bỏ. RAG tiếp tục phục vụ
-AI điều tra cảnh báo và đề xuất playbook.
+AI điều tra cảnh báo và truy xuất playbook phù hợp từ knowledge base hiện có.
 # Wazuh all-event collection
 
 SOC-AI collects both Wazuh alerts and non-alert events from Manager JSON archives.
@@ -241,4 +241,3 @@ rule catalog, evidence requirements, deployment, and limitations.
 For suspected DoS detections, see [DoS policy and victim installation](docs/zeek-dos.md).
 Live aggregation requires installing the supplied Zeek policy on the victim;
 the Manager-only fallback counts failed TCP log records.
-

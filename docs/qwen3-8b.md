@@ -1,7 +1,8 @@
 # AI điều tra: Qwen3-8B
 
-Model mặc định hiện tại: `qwen3:8b` qua Ollama. Cả Investigation và Playbook dùng
-cùng model, chạy một lượt đồng thời. Chức năng hỏi đáp Copilot đã được gỡ.
+Model mặc định hiện tại: `qwen3:8b` qua Ollama, dùng cho điều tra. Playbook được
+truy xuất từ knowledge base hiện có, không gọi model để sinh playbook hay hành động.
+Chức năng hỏi đáp Copilot đã được gỡ.
 
 ## Cấu hình
 

@@ -8,11 +8,11 @@ Updated 26 October 2026. Implementation: `web/index.html`.
 | Dashboard | Severity totals, grouped attention items, collection/queue health | Alerts, selected investigation |
 | Alerts | Full detection list, severity, investigation status, concise alert summary | Source log, selected investigation |
 | Logs | Collected events, structured source fields, original and JSON representations | Selected investigation for security alerts |
-| Investigations | AI assessment, findings, hypotheses, analyst checklist and review | Source log, response proposal, report download |
+| Investigations | AI assessment, findings, hypotheses, analyst checklist and review | Source log, matched playbook, report download |
 | AI activity tab | One timeline of workflow steps, model decisions and tools | Expand a step for details |
 | Evidence tab | Observations and retrieval guidance with their references | Expand a record for source fields |
 | Knowledge Sources | Paginated indexed content, type filters, text search, chunk reader; collection/model status in a disclosure | Select a chunk to read its complete indexed text and metadata |
-| Response | Collapsed action proposals per alert and recorded history | Selected investigation |
+| Response | Existing playbooks matched to alerts and recorded action history | Selected investigation |
 
 Removed duplicated sidebar counters/status, repeated body page headings, duplicate
 refresh controls, full AI reports inside alert modals, AI state in raw log rows,

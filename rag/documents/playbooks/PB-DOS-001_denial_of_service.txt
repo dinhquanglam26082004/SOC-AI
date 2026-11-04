@@ -1,0 +1,63 @@
+PLAYBOOK ID: PB-DOS-001
+
+NAME:
+Suspected Denial of Service Response
+
+TRIGGER:
+Network or application telemetry shows an unusual increase in requests,
+connections, or failed flows targeting a service. A threshold alert is a
+signal to investigate, not proof that the service is unavailable or that
+the traffic is malicious. This playbook applies to suspected DoS and
+possible DDoS activity.
+
+INVESTIGATION:
+1. Identify the affected service, destination, port, protocol, detection
+   window, observed count, configured threshold, and available source count.
+2. Confirm service impact with the service owner using health checks,
+   latency, error rates, resource utilization, and user reports.
+3. Compare the observation with the service's normal baseline, expected
+   business traffic, scheduled jobs, and recent deployments or load tests.
+4. Review relevant load balancer, firewall, application, and network
+   telemetry for request patterns and whether traffic reached the service.
+5. Check sensor health, capture loss, event backlog, aggregation limits,
+   and time synchronization. Counts may represent observed flows or
+   requests, not packets or unique clients.
+6. Assess whether traffic comes from one source or many. NAT, proxies,
+   spoofed addresses, and shared infrastructure can make source counts
+   misleading; multiple sources alone do not prove a distributed attack.
+7. Preserve the relevant alerts, logs, service-health measurements, and
+   timeline before making changes.
+8. Record the assessment as suspected or confirmed service impact, and
+   document remaining uncertainty. Do not infer attacker identity or intent
+   from traffic volume alone.
+
+RESPONSE:
+1. If service impact is not corroborated, continue monitoring and gather
+   service-owner and telemetry evidence; do not block sources solely because
+   a threshold alert fired.
+2. If impact is confirmed, coordinate mitigation with the service owner and
+   network/hosting provider. Prefer scoped, reversible controls such as
+   rate limits, filtering for a verified traffic pattern, or provider
+   scrubbing where available.
+3. Before applying a control, identify its target, duration, expected effect,
+   customer impact, monitoring criteria, and rollback procedure.
+4. Avoid broad IP, country, or network-range blocks unless an analyst and
+   service owner validate the scope and business impact.
+5. Monitor service health and legitimate traffic after mitigation; roll back
+   or adjust controls if they disrupt expected service.
+6. Preserve incident evidence and record decisions, approvals, changes,
+   timestamps, and observed outcomes.
+7. After recovery, review capacity, upstream protections, alert thresholds,
+   and operational lessons with the service owner.
+
+ESCALATION:
+Escalate promptly to the SOC lead and affected service owner when availability
+impact is confirmed, critical services are affected, or mitigation requires
+provider or production changes. Engage the network/hosting provider for
+upstream traffic mitigation. Escalate to incident management when impact is
+prolonged, widespread, or affects critical business operations.
+
+Human approval from the incident lead and affected service owner is required
+before production traffic filtering, rate-limit changes, service isolation,
+or other controls that may affect legitimate users. No response action is
+executed by this playbook.

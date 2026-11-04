@@ -29,3 +29,15 @@ assert.match(scope.review({summary:{needs_analyst:true,review_reasons:['Need aut
 assert.match(scope.review({summary:{analyst_review:{decision:'benign',notes:'<untrusted>',created:1}}}),/&lt;untrusted&gt;/);
 assert.match(scope.hypotheses({summary:{hypotheses:[{id:'H-001',statement:'Check access',status:'open',supporting:['EV-test'],refuting:[],question:'<verify>'}]}}),/EV-test/);
 console.log('Analyst and hypothesis UI render checks passed.');
+const responseSource=html.slice(html.indexOf('    function renderResponse('),html.indexOf('    async function loadKnowledge('));
+const elements={'response-proposals':{innerHTML:'',querySelectorAll:()=>[]},'response-history':{innerHTML:''}};
+scope.alerts=[{id:'alert-1',rule:{description:'SSH brute force'},agent:{name:'host-1'},timestamp:1,
+  playbook_proposal:{status:'matched',playbook_id:'PB-SSH-001',playbook_name:'SSH Brute Force Response',
+    playbook_source:'ssh_bruteforce.txt',playbook_text:'PLAYBOOK ID: PB-SSH-001\n<script>untrusted</script>'}}];
+scope.responseHistory=[];scope.$=id=>elements[id];scope.goInvestigation=()=>{};
+vm.runInNewContext(responseSource+'\nthis.renderResponse=renderResponse;',scope);
+scope.renderResponse([]);
+assert.match(elements['response-proposals'].innerHTML,/PB-SSH-001/);
+assert.match(elements['response-proposals'].innerHTML,/&lt;script&gt;untrusted&lt;\/script&gt;/);
+assert.match(elements['response-proposals'].innerHTML,/ssh_bruteforce\.txt/);
+console.log('Matched playbook UI rendering checks passed.');

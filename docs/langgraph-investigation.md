@@ -150,7 +150,7 @@ supported; do not run multiple app instances against the same databases.
 | `AI_GRAPH_TIMEOUT` | 900 | Total investigation wall-clock seconds, retained on restart |
 | `AI_TOOL_TIMEOUT` | 15 | Per-tool seconds, capped by remaining investigation budget |
 | `AI_GRAPH_CONTEXT_CHARS` | 9000 | Evidence context allowance; full evidence stays in audit |
-| `AI_PLAYBOOK_ENABLED` | false | Optional separate legacy playbook step after durable report |
+| `AI_PLAYBOOK_ENABLED` | true | Retrieve the best-matching existing playbook after the durable report |
 
 The planner reserves room for the conclusion and one repair. Therefore the
 default four model calls often permit two planning rounds, rather than three.
@@ -165,10 +165,16 @@ Use `LANGGRAPH_STRICT_MSGPACK=true`, `LANGCHAIN_TRACING_V2=false`,
 `LANGSMITH_TRACING=false`. Checkpoint serialization disables pickle and arbitrary
 msgpack object revival. No remote tracing is configured.
 
-Optional playbook work has its own existing model timeout; it is **outside** the
-investigation budget and off by default. Its failure does not erase or fail the
-saved investigation. Actions are recommendations only. The legacy workflow
-remains available for controlled rollback.
+Playbook lookup runs after the durable report and is outside the investigation
+budget. It uses RAG to select the best-matching existing playbook, then returns
+the source file verbatim. It does not call a model to generate or rewrite
+playbooks or response actions. Benign and inconclusive reports do not select a
+playbook, except a clearly identified suspected DoS may retrieve its dedicated
+existing playbook while retaining the inconclusive verdict. If that playbook is
+not indexed, no unrelated playbook is substituted. Lookup failure does not
+erase or fail the saved investigation.
+`AI_PLAYBOOK_ENABLED=false` disables lookup. The legacy workflow remains
+available for controlled rollback.
 
 ## UI and API
 

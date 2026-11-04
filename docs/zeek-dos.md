@@ -2,6 +2,8 @@
 
 This policy flags traffic anomalies, not confirmed service outages. It is a
 baseline requiring tuning against normal traffic. No automatic blocking is added.
+For analyst triage and cautious mitigation guidance, see the existing
+`PB-DOS-001` playbook in `rag/documents/playbooks/PB-DOS-001_denial_of_service.txt`.
 
 ## Manager-only fallback
 

@@ -14,9 +14,9 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 AVAILABLE_MODELS: dict[str, dict] = {
     "qwen3_8b": {
         "name": "qwen3:8b",
-        "label": "Qwen3-8B (Investigation / Playbook)",
+        "label": "Qwen3-8B (Investigation)",
         "size": "8B · Q4_K_M · khoảng 5.2 GB tải xuống",
-        "desc": "Điều tra và đề xuất playbook; tốc độ phụ thuộc CPU/GPU và RAM.",
+        "desc": "Phân tích điều tra; tốc độ phụ thuộc CPU/GPU và RAM.",
     },
     "qwen3": {
         "name": "qwen3:8b",

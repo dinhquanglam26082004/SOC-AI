@@ -48,11 +48,12 @@ def analyze(record, on_progress=None, store=None, audit=None):
         proposal={'status':'not_requested','actions':[],
                   'notes':'Review investigation recommendations. No response action has been executed.'}
         record['investigation_report']=report
-        if os.getenv('AI_PLAYBOOK_ENABLED','false').lower()=='true':
+        if os.getenv('AI_PLAYBOOK_ENABLED','true').lower()=='true':
             try:
                 from agents.playbook_agent import propose_playbook
-                proposal=propose_playbook(report,model=AGENT_MODEL,on_progress=on_progress)
+                proposal=propose_playbook(report,on_progress=on_progress,alert=record)
             except Exception as exc:
+                logger.warning('Playbook lookup failed (%s)', type(exc).__name__)
                 proposal={'status':'failed','error':type(exc).__name__,'actions':[]}
         return report,proposal
     from agents.investigation_agent import investigate
@@ -60,7 +61,7 @@ def analyze(record, on_progress=None, store=None, audit=None):
     report = investigate(record, model=AGENT_MODEL, on_progress=on_progress)
     record['investigation_report'] = report
     try:
-        proposal = propose_playbook(report, model=AGENT_MODEL, on_progress=on_progress)
+        proposal = propose_playbook(report, on_progress=on_progress, alert=record)
     except Exception as exc:
         proposal = {'status':'failed','error':type(exc).__name__,'actions':[]}
     if on_progress:
