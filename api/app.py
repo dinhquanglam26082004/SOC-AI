@@ -17,6 +17,7 @@ import requests
 from common.config import AGENT_MODEL, OLLAMA_HOST, CHROMA_PATH, CHROMA_COLLECTION_NAME
 from common.event_store import EventStore, QueueFull
 from common.alert_timeseries import build_alert_buckets
+from common.telegram_notifier import send_investigation_alert
 from wazuh_integration.mapper import map_wazuh_alert, ai_eligible, is_security_alert
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -112,6 +113,11 @@ async def ai_worker(app):
             except Exception:
                 logger.error('AI result commit unavailable; retaining running job and retrying')
                 await asyncio.sleep(3)
+        if error is None:
+            try:
+                await asyncio.to_thread(send_investigation_alert, record)
+            except Exception as exc:
+                logger.warning('Telegram notification failed (%s)', type(exc).__name__)
 
 
 def create_app(db_path=None, workers=True):
@@ -120,6 +126,10 @@ def create_app(db_path=None, workers=True):
         enabled = os.getenv('WAZUH_ENABLED', 'true').lower() == 'true'
         if enabled and not os.getenv('WAZUH_WEBHOOK_TOKEN', '').strip():
             raise RuntimeError('WAZUH_WEBHOOK_TOKEN is required when WAZUH_ENABLED=true')
+        telegram_token = os.getenv('TELEGRAM_BOT_TOKEN', '').strip()
+        telegram_chat_id = os.getenv('TELEGRAM_CHAT_ID', '').strip()
+        if bool(telegram_token) != bool(telegram_chat_id):
+            raise RuntimeError('TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID must be configured together')
         app.state.store = EventStore(db_path or os.getenv('RUNTIME_DB_PATH', str(ROOT / 'data/soc_runtime.sqlite3')), int(os.getenv('AI_QUEUE_LIMIT', '1000')))
         workflow=os.getenv('AI_WORKFLOW','langgraph')
         if workflow not in {'legacy','langgraph'}:

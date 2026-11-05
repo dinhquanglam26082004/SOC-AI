@@ -130,6 +130,7 @@ alert cuối; không suy ra Agent online/offline từ im lặng. Xác minh Agent
 | WAZUH_AI_GROUP_ALLOWLIST | syscheck; FIM vẫn điều tra dù dưới ngưỡng |
 | AI_MAX_CONCURRENCY | 1; worker và Copilot dùng chung semaphore; tối đa 4 |
 | AI_QUEUE_LIMIT | 1000 queued/running; đầy trả 503 để forwarder giữ và retry |
+| TELEGRAM_BOT_TOKEN / TELEGRAM_CHAT_ID | Tùy chọn; gửi tóm tắt sau mỗi điều tra AI thành công |
 | WAZUH_MAX_PAYLOAD_BYTES | 262144; lớn hơn trả 413, forwarder đưa DLQ |
 | WAZUH_SPOOL_MAX_BYTES | 268435456; 256 MiB cho file spool |
 | AI_CONTEXT_CHARS / AI_ALERT_CHARS | 6000 / 5000; raw_event vẫn lưu đầy đủ |
@@ -139,6 +140,16 @@ alert cuối; không suy ra Agent online/offline từ im lặng. Xác minh Agent
 Manager integration và log_alert_level cùng mặc định ≥3. Muốn chuyển mức thấp hơn phải
 sửa cả hai trong `docker/wazuh/ossec.conf`, cùng WAZUH_FORWARD_MIN_LEVEL. Không dùng ngưỡng
 AI làm ngưỡng chuyển FIM. Recreate container để nạp biến thay đổi.
+
+## Telegram cho SOC analyst
+
+Có thể bật thông báo sau khi AI hoàn tất điều tra và lưu kết quả, bao gồm verdict,
+finding, khuyến nghị và tên/trạng thái playbook. Tạo bot qua `@BotFather`, lấy chat ID
+của SOC analyst/nhóm (mở chat với bot bằng `/start` trước), rồi đặt `TELEGRAM_BOT_TOKEN`
+và `TELEGRAM_CHAT_ID` trong `.env`.
+Hai biến phải được cấu hình cùng nhau; để trống cả hai thì tắt thông báo. Không commit
+token vào Git. Khởi động lại ứng dụng để nạp cấu hình. Lỗi gửi Telegram được ghi log,
+không làm mất hoặc đổi trạng thái kết quả điều tra.
 
 ## Độ bền, migration và giới hạn
 
