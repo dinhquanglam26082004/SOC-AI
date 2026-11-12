@@ -1,0 +1,13 @@
+[PB-ATTACK-AN0266] Account Manipulation Behavior Chain Detection — T1098 Account Manipulation
+Source: https://attack.mitre.org/detectionstrategies/DET0096#AN0266
+MITRE analytic: AN0266; version: 1.0; source modified: 2025-10-21T15:10:28.402Z; retrieved: 2026-11-02.
+Platforms: Linux
+Provenance: Official MITRE ATT&CK detection guidance, reproduced under MITRE-ATTACK.LICENSE in this directory. © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
+Guidance only. This document is not an observation from the victim.
+
+Investigation guidance:
+Official analytic text:
+Use of native tools or scripting (e.g., `usermod`, `passwd`, `groupmod`) to escalate permissions or persist access on existing users, correlated with login or process events.
+
+Local applicability (SOC-AI project guidance, not MITRE text):
+Use retained Wazuh authentication/FIM/sudo records and Zeek conn/HTTP/DNS only when the required source exists. These are historical observations, not live endpoint inspection. Process lineage, resource utilization, service availability and authorization may require additional sources or analyst verification. Do not claim those signals were checked unless an actual tool returned them. No numerical threshold here establishes an attack by itself. Cite source event IDs for incident findings; this document supports investigation recommendations only. An absent result does not prove safety. Public examples or MITRE technique names are not proof that the same attack occurred locally.

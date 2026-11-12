@@ -13,6 +13,16 @@ execution tool is provided. Recommendations require analyst review.
 
 ## Workflow
 
+New investigations default to `AI_GRAPH_PROGRESS_MODE=true`: there is no fixed
+round, model-call, tool-call or overall elapsed-time budget. After two consecutive
+tool rounds produce no new evidence the workflow stops with `no_new_evidence`;
+a repeated review question may also stop the loop. A tool failure or incomplete
+source remains visible and does not prove safety. Individual model and tool
+requests still have timeouts; report validation allows one repair. LangGraph has
+a high technical recursion guard. Scope, evidence, context and query limits remain.
+Previously started investigations retain their saved settings. Set
+`AI_GRAPH_PROGRESS_MODE=false` to use the numerical budgets documented below.
+
 ```text
 security alert → scope/triage → investigate → local tools
                                   ↑             │
@@ -25,7 +35,7 @@ The planner uses native Ollama `messages` and `tool_calls`. It is offered only
 the deterministic alert-type tool set, and the same set is enforced at dispatch;
 an unsupported model request is recorded as `tool_not_allowed`. Tool outputs and
 log text are untrusted data. Final output uses an Ollama JSON Schema and Pydantic
-validation. Unknown evidence references and guidance-only findings are rejected.
+validation. Unknown evidence references and any guidance citations in findings are rejected.
 The transport schema omits string-length grammar constraints: Ollama 0.13.5
 rejects large bounded repetitions when generating the grammar. The complete
 Pydantic schema still validates all string lengths after generation; types,
@@ -52,7 +62,7 @@ Confidence, when provided, is a model estimate, not calibrated probability.
 - The planner can return a structured review decision with `need_more` and a
   concrete question. A code review gate runs before conclusion, can route back
   to the planner, and records its decision. Repeated questions and original
-  round/model/tool/time limits bound the loop. Review is part of the planner's
+  configured limits or the no-new-evidence guard bound the loop. Review is part of the planner's
   existing model calls, not a mandatory additional model call every round.
 - Authentication tool results include exact retained-record aggregates per
   agent, exact username and source IP, independent of the displayed row limit.
@@ -77,7 +87,7 @@ The analyst interface follows the existing single-user, loopback deployment.
 `actor=local-analyst` is an audit label, not an authenticated multi-user identity.
 No response action is executed by review submission.
 
-## Five local tools
+## Ten local tools
 
 | Tool | Reads | Boundary |
 | --- | --- | --- |
@@ -85,11 +95,16 @@ No response action is executed by review submission.
 | `search_auth_events` | Retained authentication success and failure records | Exact agent; incident time window |
 | `search_related_alerts` | Retained security alerts | Same agent/window |
 | `search_zeek_connections` | Historical Zeek `conn` observations | Same agent/window; not live sockets/process ownership |
+| `search_zeek_http` | Retained HTTP requests/responses | Exact host/method/status/UID; literal URI substring; no TLS decryption |
+| `search_zeek_dns` | Retained DNS queries and answers | Exact query/rcode/UID; unusual names alone are not exfiltration proof |
+| `search_file_changes` | Wazuh FIM `syscheck` records | Exact path; source who-data only, no invented actor |
+| `search_privilege_events` | sudo/su records, including PAM companions | Separate source actor and target user; a request is not proof of command execution |
+| `get_event_details` | Bounded original data for collected evidence | Same incident evidence ID, agent and window; no arbitrary paths or records |
 | `search_runbook` | Existing local Chroma knowledge | Guidance only; never incident proof |
 
 Search window is source event time ±15 minutes. The caller can narrow it but
 cannot expand it or select another agent. Optional IP must match the original
-alert's source/destination or agent address. Default 50, maximum 100 rows.
+alert's source/destination or agent address. Default 20, maximum 100 rows.
 SQLite connections use `mode=ro`, `query_only` and a query progress deadline.
 Runbook retrieval uses a bounded single-thread executor and timeout. A timed-out
 retrieval can continue in that one thread; further retrieval reports busy instead
@@ -101,6 +116,44 @@ Empty means no retained matches; it does not prove the source collected all
 events, or that the host is safe. Authentication categorization uses rule groups,
 decoder names and Windows event IDs. Unrecognized archive formats may require
 additional normalization before the authentication tool can find them.
+
+### Routing and evidence preparation
+
+HTTP, DNS, connection, SSH, FIM and sudo alerts receive focused tool sets, with
+`get_event_details` available for drill-down. Pure sudo events are read directly
+by the privilege tool; the auth index may only include their PAM companions.
+Generic malware signatures are not assumed to be file-change events.
+Malformed tool JSON is rejected, not converted into an unfiltered query.
+
+Searches return `total_matched`, `returned_count`, truncation and explicit retained-record
+coverage. Counts obey the same agent/window/filters and query timeout. They do
+not measure unique sessions or guarantee collection completeness. HTTP/DNS
+tools query existing indexed event windows; no new runtime schema migration is
+needed. Large windows can still reach the configured query deadline.
+
+Model context prioritizes the trigger, requested details and observations from
+different tools. Structured HTTP/DNS/FIM/privilege fields are preserved with
+explicit excerpts. Full bounded evidence is available in the dossier. Runbooks
+are placed in a separate `guidance` section; `allowed_factual_evidence_ids`
+contains only supplied event observations. Report repair rebuilds the prompt
+within the same budget and never offers guidance IDs as factual citations.
+This reduces unsupported citations; it cannot verify the semantic truth of a
+model claim. Invalid reports still fail visibly after the bounded repair.
+
+No process-tree tool is advertised: reliable process collection and indexed
+queries must be implemented before such a tool can provide useful evidence.
+No service restart or re-analysis of historical alerts is implied by editing
+these files. To deploy the application changes while preserving this setup's
+database volume and GPU configuration:
+
+```powershell
+docker compose -f docker-compose.yml -f data/local-runtime.compose.yml --profile app up -d --build --no-deps soc-ai-app
+```
+
+Start Docker Desktop first and allow active investigations to finish before
+recreating the application. Manager/forwarder/Ollama rebuilds are not required
+for this tool expansion. Validate real-model quality separately from mocked
+tests; existing eight-case evaluation does not establish HTTP/DNS/FIM accuracy.
 
 ## Storage and restart
 

@@ -222,7 +222,8 @@ Thêm channel vào Agent (nếu thiếu), restart Agent:
 Marker chỉ tạo event, muốn có alert dùng rule thử nghiệm tùy chọn trong
 `docker/wazuh/lab_rules.xml`; copy nó vào Manager etc/rules rồi restart Manager.
 Rule match 4104 + marker, level3, group soc_lab; đây là quy tắc lab, không gọi mọi
-PowerShell là độc hại. Muốn AI cho rule này, thêm 100110 vào WAZUH_AI_RULE_ALLOWLIST.
+PowerShell là độc hại. Để nhận diện rule này cho điều tra thủ công, thêm 100110
+vào WAZUH_AI_RULE_ALLOWLIST; rule level 3 không được tự điều tra với ngưỡng mặc định 7.
 
 ```powershell
 docker compose cp docker/wazuh/lab_rules.xml wazuh-manager:/var/ossec/etc/rules/soc_lab_rules.xml

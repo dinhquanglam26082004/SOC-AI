@@ -18,6 +18,7 @@ from wazuh_integration.mapper import map_wazuh_alert
 @pytest.fixture
 def lab(tmp_path,monkeypatch):
     monkeypatch.setenv('WAZUH_WEBHOOK_TOKEN','test-only')
+    monkeypatch.setenv('AI_GRAPH_PROGRESS_MODE','false')
     store=EventStore(tmp_path/'logs.sqlite3');audit=InvestigationStore(tmp_path/'soc_investigations.sqlite3')
     def add(number,**kwargs):
         record=map_wazuh_alert(raw(number,**kwargs));store.accept(record,False);return record

@@ -48,6 +48,7 @@ class InvestigationReport(BaseModel):
 
 
 class Limits(BaseModel):
+    progress_mode: bool = False
     rounds: int = Field(default=3, ge=1, le=10)
     model_calls: int = Field(default=4, ge=1, le=10)
     tool_calls: int = Field(default=6, ge=1, le=20)
@@ -58,7 +59,7 @@ class Limits(BaseModel):
 
     @classmethod
     def configured(cls):
-        return cls(**{key: os.environ[env] for key, env in {
+        return cls(progress_mode=os.getenv('AI_GRAPH_PROGRESS_MODE','true').lower() == 'true', **{key: os.environ[env] for key, env in {
             'rounds':'AI_GRAPH_MAX_ROUNDS', 'model_calls':'AI_GRAPH_MAX_MODEL_CALLS',
             'tool_calls':'AI_GRAPH_MAX_TOOL_CALLS', 'seconds':'AI_GRAPH_TIMEOUT',
             'tool_seconds':'AI_TOOL_TIMEOUT', 'context_chars':'AI_GRAPH_CONTEXT_CHARS'}.items() if env in os.environ})

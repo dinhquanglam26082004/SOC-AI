@@ -3,13 +3,13 @@ import json
 import base64
 import sqlite3
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
 from contextlib import contextmanager
 from pathlib import Path
 from common.runtime_store import RuntimeStore
 from common.investigation_index import migrate as migrate_investigation_index, write_index as write_investigation_index
 from common.log_index import backup_before_migration, migrate_index, upsert_index, utc_stamp
-from wazuh_integration.mapper import is_security_alert
+from wazuh_integration.mapper import is_security_alert, fim_manual_only
 
 
 class QueueFull(Exception):
@@ -72,11 +72,38 @@ class EventStore:
                 db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), row[0]))
             db.execute("UPDATE ai_jobs SET state='queued',updated=? WHERE state='running'", (time.time(),))
 
+    def _related_dos_job(self, db, record):
+        """Find a recent representative without suppressing or deleting alerts."""
+        rule=str((record.get('rule') or {}).get('id',''))
+        if record.get('source_product')!='zeek' or rule not in {'100142','100145'}:
+            return None
+        agent=str((record.get('agent') or {}).get('id') or '')
+        src,dst,port=record.get('src_ip'),record.get('dst_ip'),record.get('dst_port')
+        if not agent or not dst or not str(port or '').isdigit() or (rule=='100142' and not src):
+            return None
+        anchor=datetime.fromisoformat(record['timestamp'].replace('Z','+00:00'))
+        since=utc_stamp((anchor-timedelta(minutes=5)).isoformat())
+        until=utc_stamp((anchor+timedelta(minutes=5)).isoformat())
+        query='''SELECT j.event_id, j.state, i.event_time FROM investigation_event_index i
+            JOIN ai_jobs j ON j.event_id=i.id JOIN events e ON e.id=i.id
+            WHERE i.agent_id=? AND i.event_time>=? AND i.event_time<=?
+              AND j.state IN ('queued','running','completed')
+              AND json_extract(e.payload,'$.source_product')='zeek'
+              AND CAST(json_extract(e.payload,'$.rule.id') AS TEXT)=?
+              AND i.dst_ip=? AND CAST(json_extract(e.payload,'$.dst_port') AS TEXT)=?'''
+        params=[agent,since,until,rule,dst,str(port)]
+        if rule=='100142':
+            query+=' AND i.src_ip=?';params.append(src)
+        query+=' ORDER BY ABS(julianday(i.event_time)-julianday(?)), i.id LIMIT 1'
+        params.append(utc_stamp(record['timestamp']))
+        return db.execute(query,params).fetchone()
+
     def accept(self, record, eligible):
         record['ai_allowed'] = is_security_alert(record)
         eligible = bool(eligible and record['ai_allowed'])
         record['ai_skip_reason'] = (None if eligible else
             'Not a security alert; retained as log only' if not record['ai_allowed'] else
+            'FIM path outside automatic critical-path policy; manual investigation available' if fim_manual_only(record) else
             'Below automatic investigation policy; manual investigation available')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
@@ -101,6 +128,14 @@ class EventStore:
                 # An archive may arrive before the corresponding alert. Upgrade
                 # the same event without creating a second log or losing AI state.
                 record['received_at'] = previous.get('received_at', record['received_at'])
+            if eligible:
+                representative=self._related_dos_job(db,record)
+                if representative:
+                    eligible=False
+                    record['ai_group']={'representative_alert_id':representative['event_id'],
+                        'representative_state':representative['state'], 'window_seconds':300,
+                        'match':'same agent, rule, destination and port'+(', source' if str(record['rule']['id'])=='100142' else '')}
+                    record['ai_skip_reason']='Grouped with a related DoS alert within 5 minutes; manual investigation available'
             if eligible and self._pending(db) >= self.max_jobs:
                 raise QueueFull('AI queue full; source must retry')
             record['ai_status'] = 'queued' if eligible else 'skipped'

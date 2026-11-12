@@ -1,0 +1,5 @@
+PLAYBOOK ID: PB-EXT-CICDDOS
+NAME: CICDDoS2019 network denial of service dataset reference
+Provenance: Curated summary of https://www.unb.ca/cic/datasets/ddos-2019.html , Canadian Institute for Cybersecurity, UNB. Reviewed 2026-11-02. Reference guidance only; not current incident evidence.
+CICDDoS2019 provides benign traffic and DDoS scenarios as PCAP and labeled flow CSV data. Scenarios include SYN, UDP and reflective traffic involving protocols such as DNS, NTP and LDAP. Training and testing scenarios differ; their traffic composition should not be assumed to represent a production environment.
+Local application guidance: distinguish DNS reflection/amplification from DNS tunneling. A DNS query with a long name is not proof of either. Compare direction, request/response volumes and targeted services when those fields are available. Validate local service impact independently. Never substitute the dataset's attack labels for actual victim evidence, reuse historical addresses as local indicators, or assume the model is more accurate merely because this reference was retrieved. Raw data are not loaded into this RAG collection.

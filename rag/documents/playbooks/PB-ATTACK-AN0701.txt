@@ -1,0 +1,13 @@
+[PB-ATTACK-AN0701] Detection of Systemd Service Creation or Modification on Linux — T1543.002 Systemd Service
+Source: https://attack.mitre.org/detectionstrategies/DET0253#AN0701
+MITRE analytic: AN0701; version: 1.0; source modified: 2025-10-21T15:10:28.402Z; retrieved: 2026-11-02.
+Platforms: Linux
+Provenance: Official MITRE ATT&CK detection guidance, reproduced under MITRE-ATTACK.LICENSE in this directory. © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
+Guidance only. This document is not an observation from the victim.
+
+Investigation guidance:
+Official analytic text:
+Detects the creation or modification of `.service` unit files in system/user-level directories, combined with execution of `systemctl`, `service`, or dynamically created drop-ins via systemd generators. Detects persistence by analyzing the `ExecStart` path, file entropy, and symlink usage, especially when paired with execution from `/tmp`, `/dev/shm`, or unmounted volumes.
+
+Local applicability (SOC-AI project guidance, not MITRE text):
+Use retained Wazuh authentication/FIM/sudo records and Zeek conn/HTTP/DNS only when the required source exists. These are historical observations, not live endpoint inspection. Process lineage, resource utilization, service availability and authorization may require additional sources or analyst verification. Do not claim those signals were checked unless an actual tool returned them. No numerical threshold here establishes an attack by itself. Cite source event IDs for incident findings; this document supports investigation recommendations only. An absent result does not prove safety. Public examples or MITRE technique names are not proof that the same attack occurred locally.

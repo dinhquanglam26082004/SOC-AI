@@ -176,7 +176,7 @@ class InvestigationStore:
                 if kind!='tool' or old['state']!='running':
                     raise WorkflowError('interrupted_call','A reserved model call did not finish; explicitly retry as a new investigation')
             used=db.execute('SELECT COUNT(*) FROM calls WHERE incident_id=? AND kind=?',(incident_id,kind)).fetchone()[0]
-            if not old and used>=maximum:
+            if not old and maximum is not None and used>=maximum:
                 raise WorkflowError(kind+'_budget','Call budget exhausted')
             if not old:
                 db.execute('INSERT INTO calls VALUES(?,?,?,?,?,?,NULL,?,NULL)',

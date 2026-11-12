@@ -3,5 +3,6 @@
   <!-- syslog reads each text line, including JSON logs and startup/error text. -->
   <log_format>syslog</log_format>
   <location>/opt/zeek/logs/current/*.log</location>
+  <exclude>/opt/zeek/logs/current/telemetry.log</exclude>
   <only-future-events>no</only-future-events>
 </localfile>

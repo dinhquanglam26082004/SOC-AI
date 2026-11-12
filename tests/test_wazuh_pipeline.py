@@ -41,7 +41,7 @@ def test_fim_mapping_and_no_attacker_inference(event):
     assert r['source'] == 'wazuh' and r['src_ip'] is None and r['dst_ip'] is None
     assert r['timestamp'] == '2026-10-20T01:00:00Z'
     assert r['raw_event'] == event and r['file_event'] == 'modified'
-    assert ai_eligible(r)
+    assert not ai_eligible(r)
     event['syscheck']['path'] = '/tmp/soc-lab/hello.txt'
     assert map_wazuh_alert(event)['file_path'].startswith('/tmp/')
 
@@ -67,10 +67,13 @@ def test_filters_are_independent(event, monkeypatch):
     event['rule']['groups'] = ['authentication_failed']
     assert not ai_eligible(map_wazuh_alert(event))
     monkeypatch.setenv('WAZUH_AI_RULE_ALLOWLIST', '550')
+    assert not ai_eligible(map_wazuh_alert(event))
+    event['rule']['level'] = 7
     assert ai_eligible(map_wazuh_alert(event))
 
 
 def test_webhook_auth_durable_async_and_restart_dedup(tmp_path, event):
+    event['rule']['level'] = 7
     path = tmp_path / 'runtime.db'
     headers = {'X-Webhook-Token': 'test-only-token'}
     app = create_app(path, workers=False)
@@ -233,3 +236,24 @@ def test_context_cites_only_visible_documents(monkeypatch):
     monkeypatch.setenv('AI_CONTEXT_CHARS', '100')
     context, citations = bounded_context([{'text': 'x' * 150, 'metadata': {'source': 'one'}}, {'text': 'y' * 100, 'metadata': {'source': 'two'}}])
     assert len(context) <= 100 and citations == [{'source': 'one'}]
+from copy import deepcopy
+from wazuh_integration.mapper import map_wazuh_alert, ai_eligible
+
+def test_exact_zeek_duplicate_from_archive_and_alert(event):
+    event.update(location='/opt/zeek/logs/current/conn.log',full_log='{"uid":"C1","ts":42}',data={'uid':'C1'})
+    event['rule']={'id':'100142','level':8,'description':'Suspected DoS','groups':['zeek_detection']}
+    archive=deepcopy(event);archive['_soc_stream']='archives';archive['id']='different-manager-id'
+    first=map_wazuh_alert(event);second=map_wazuh_alert(archive)
+    assert first['id']==second['id'] and ai_eligible(first)
+    other=deepcopy(archive);other['data']['uid']='C2';other['full_log']='{"uid":"C2","ts":42}'
+    assert map_wazuh_alert(other)['id']!=first['id']
+    other=deepcopy(archive);other['rule']['id']='100143'
+    assert map_wazuh_alert(other)['id']!=first['id']
+    other=deepcopy(archive);other['timestamp']='2026-10-20T08:01:00+07:00'
+    assert map_wazuh_alert(other)['id']!=first['id']
+
+def test_agent_queue_alerts_remain_visible_but_skip_ai(event):
+    for rule in ('202','203','204'):
+        event['rule']={'id':rule,'level':8,'description':'Agent queue pressure','groups':['ossec']}
+        mapped=map_wazuh_alert(event)
+        assert mapped['event_kind']=='alert' and not ai_eligible(mapped)

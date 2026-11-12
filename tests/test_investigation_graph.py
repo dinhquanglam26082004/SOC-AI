@@ -20,6 +20,7 @@ from wazuh_integration.mapper import map_wazuh_alert
 def lab(tmp_path,monkeypatch):
     monkeypatch.setenv('WAZUH_WEBHOOK_TOKEN','test-only')
     monkeypatch.setenv('AI_WORKFLOW','langgraph')
+    monkeypatch.setenv('AI_GRAPH_PROGRESS_MODE','false')
     store=EventStore(tmp_path/'logs.db')
     audit=InvestigationStore(tmp_path/'soc_investigations.sqlite3')
     def event(number,groups=None,agent='007',minute='00'):
@@ -107,7 +108,7 @@ def test_graph_bounded_persisted_and_cached(lab):
         assert db.execute('SELECT COUNT(*) FROM checkpoints').fetchone()[0]>0
 
 
-def test_model_tools_are_routed_and_enforced(lab):
+def test_model_can_use_tools_outside_recommendations(lab):
     store,audit,trigger,_=lab
     trigger['source_product']='zeek'
     trigger['rule']['groups']=['zeek_detection']
@@ -121,11 +122,10 @@ def test_model_tools_are_routed_and_enforced(lab):
             {'function':{'name':'search_auth_events','arguments':{}}}]}}
 
     result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
-    assert set(available)=={'search_zeek_connections','search_related_alerts'}
-    assert all(name in {'search_zeek_connections','search_related_alerts'} for name in available)
+    assert {'search_zeek_connections','search_related_alerts','get_event_details','search_auth_events'} <= set(available)
     tool_calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
     rejected=[call for call in tool_calls if call['name']=='search_auth_events']
-    assert rejected and rejected[0]['result']['error']=='tool_not_allowed'
+    assert rejected and rejected[0]['result'].get('error') != 'tool_not_allowed'
 
 
 @pytest.mark.parametrize('verdict',['malicious','benign'])

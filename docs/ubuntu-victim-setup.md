@@ -255,11 +255,15 @@ không giữ cả hai. Giữ nguyên cấu hình thu auth.log/journald và các 
 <localfile>
   <log_format>syslog</log_format>
   <location>/opt/zeek/logs/current/*.log</location>
+  <exclude>/opt/zeek/logs/current/telemetry.log</exclude>
   <only-future-events>no</only-future-events>
 </localfile>
 ```
 
-syslog là chế độ đọc từng dòng, nhận cả JSON và text log vận hành. Zeek JSON được
+syslog là chế độ đọc từng dòng, nhận cả JSON và text log vận hành. Cấu hình loại
+riêng `telemetry.log` để giảm tải; các log mạng vẫn được thu. Nếu Agent có block
+localfile Zeek cục bộ khác, thêm exclude vào block đó hoặc bỏ cấu hình thu trùng.
+Zeek JSON được
 Manager giải mã tự động. Đây là thu file log, không phải thu PCAP; wildcard này không
 đọc kho archive `.gz`. Việc đọc bù chịu checkpoint và giới hạn Wazuh, không bảo đảm
 nhập lại toàn bộ lịch sử. Không chmod 777; Agent cần đọc được file mới sau rotation.

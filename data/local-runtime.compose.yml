@@ -7,7 +7,7 @@ services:
       NVIDIA_DRIVER_CAPABILITIES: compute,utility
   soc-ai-app:
     environment:
-      RUNTIME_DB_PATH: /app/data/soc_runtime.sqlite3
+      RUNTIME_DB_PATH: /app/runtime/soc_runtime.sqlite3
     volumes:
       - runtime_db:/app/runtime
 volumes:

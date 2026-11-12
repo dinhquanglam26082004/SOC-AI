@@ -39,6 +39,13 @@ read remains internal to triage. A tool request outside the selected set is
 recorded as rejected; every accepted request still passes the scope checks and
 argument validation. Tool routing does not guarantee correct reasoning.
 
+The available local tools now also cover retained Zeek HTTP/DNS, Wazuh FIM,
+sudo/su and original-event drill-down. Scope remains one agent and ±15 minutes.
+HTTP/DNS/FIM/sudo alerts receive dedicated tool sets; generic signature detections
+do not automatically imply FIM evidence. Report context separates guidance from
+observations and repair excludes guidance from factual citation candidates.
+See `langgraph-investigation.md` for filters, storage, limits and deployment.
+
 ## Storage, safety and compatibility
 
 - Runtime: additive `authentication_facts`, indexed by existing event IDs;

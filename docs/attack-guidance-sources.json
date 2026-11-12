@@ -1,0 +1,673 @@
+{
+  "source": "https://github.com/mitre-attack/attack-stix-data",
+  "retrieved": "2026-11-02",
+  "snapshot_sha256": "81113ba98afa2928f3dcff62022539f7ce30c315c32e14422f11ff95ce534352",
+  "documents": [
+    {
+      "file": "PB-ATTACK-AN0296.txt",
+      "analytic": "AN0296",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0105#AN0296",
+      "techniques": "T1110.002 Password Cracking"
+    },
+    {
+      "file": "PB-ATTACK-AN0771.txt",
+      "analytic": "AN0771",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0277#AN0771",
+      "techniques": "T1098.003 Additional Cloud Roles"
+    },
+    {
+      "file": "PB-ATTACK-AN0224.txt",
+      "analytic": "AN0224",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0080#AN0224",
+      "techniques": "T1190 Exploit Public-Facing Application"
+    },
+    {
+      "file": "PB-ATTACK-AN0211.txt",
+      "analytic": "AN0211",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0076#AN0211",
+      "techniques": "T1059.005 Visual Basic"
+    },
+    {
+      "file": "PB-ATTACK-AN1143.txt",
+      "analytic": "AN1143",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0408#AN1143",
+      "techniques": "T1498.002 Reflection Amplification"
+    },
+    {
+      "file": "PB-ATTACK-AN0142.txt",
+      "analytic": "AN0142",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0052#AN0142",
+      "techniques": "T1548.003 Sudo and Sudo Caching"
+    },
+    {
+      "file": "PB-ATTACK-AN0266.txt",
+      "analytic": "AN0266",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0096#AN0266",
+      "techniques": "T1098 Account Manipulation"
+    },
+    {
+      "file": "PB-ATTACK-AN0805.txt",
+      "analytic": "AN0805",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0290#AN0805",
+      "techniques": "T1053.003 Cron"
+    },
+    {
+      "file": "PB-ATTACK-AN1125.txt",
+      "analytic": "AN1125",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0400#AN1125",
+      "techniques": "T1071.004 DNS"
+    },
+    {
+      "file": "PB-ATTACK-AN1525.txt",
+      "analytic": "AN1525",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0551#AN1525",
+      "techniques": "T1110.001 Password Guessing"
+    },
+    {
+      "file": "PB-ATTACK-AN1522.txt",
+      "analytic": "AN1522",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0551#AN1522",
+      "techniques": "T1110.001 Password Guessing"
+    },
+    {
+      "file": "PB-ATTACK-AN1435.txt",
+      "analytic": "AN1435",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0518#AN1435",
+      "techniques": "T1498 Network Denial of Service"
+    },
+    {
+      "file": "PB-ATTACK-AN1170.txt",
+      "analytic": "AN1170",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0416#AN1170",
+      "techniques": "T1071.002 File Transfer Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN0223.txt",
+      "analytic": "AN0223",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0080#AN0223",
+      "techniques": "T1190 Exploit Public-Facing Application"
+    },
+    {
+      "file": "PB-ATTACK-AN0079.txt",
+      "analytic": "AN0079",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0027#AN0079",
+      "techniques": "T1071.001 Web Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN0605.txt",
+      "analytic": "AN0605",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0215#AN0605",
+      "techniques": "T1486 Data Encrypted for Impact"
+    },
+    {
+      "file": "PB-ATTACK-AN1416.txt",
+      "analytic": "AN1416",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0512#AN1416",
+      "techniques": "T1048.002 Exfiltration Over Asymmetric Encrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1268.txt",
+      "analytic": "AN1268",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0460#AN1268",
+      "techniques": "T1110.004 Credential Stuffing"
+    },
+    {
+      "file": "PB-ATTACK-AN0735.txt",
+      "analytic": "AN0735",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0264#AN0735",
+      "techniques": "T1059.007 JavaScript"
+    },
+    {
+      "file": "PB-ATTACK-AN1084.txt",
+      "analytic": "AN1084",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0384#AN1084",
+      "techniques": "T1059.004 Unix Shell"
+    },
+    {
+      "file": "PB-ATTACK-AN1337.txt",
+      "analytic": "AN1337",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0487#AN1337",
+      "techniques": "T1110.003 Password Spraying"
+    },
+    {
+      "file": "PB-ATTACK-AN0473.txt",
+      "analytic": "AN0473",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0166#AN0473",
+      "techniques": "T1505.002 Transport Agent"
+    },
+    {
+      "file": "PB-ATTACK-AN0512.txt",
+      "analytic": "AN0512",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0181#AN0512",
+      "techniques": "T1505.001 SQL Stored Procedures"
+    },
+    {
+      "file": "PB-ATTACK-AN0851.txt",
+      "analytic": "AN0851",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0304#AN0851",
+      "techniques": "T1499.004 Application or System Exploitation"
+    },
+    {
+      "file": "PB-ATTACK-AN1537.txt",
+      "analytic": "AN1537",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0558#AN1537",
+      "techniques": "T1059.012 Hypervisor CLI"
+    },
+    {
+      "file": "PB-ATTACK-AN0259.txt",
+      "analytic": "AN0259",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0094#AN0259",
+      "techniques": "T1053 Scheduled Task/Job"
+    },
+    {
+      "file": "PB-ATTACK-AN1166.txt",
+      "analytic": "AN1166",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0415#AN1166",
+      "techniques": "T1499.003 Application Exhaustion Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN0371.txt",
+      "analytic": "AN0371",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0131#AN0371",
+      "techniques": "T1048 Exfiltration Over Alternative Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN0078.txt",
+      "analytic": "AN0078",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0027#AN0078",
+      "techniques": "T1071.001 Web Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN1429.txt",
+      "analytic": "AN1429",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0516#AN1429",
+      "techniques": "T1059 Command and Scripting Interpreter"
+    },
+    {
+      "file": "PB-ATTACK-AN0399.txt",
+      "analytic": "AN0399",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0142#AN0399",
+      "techniques": "T1059.008 Network Device CLI"
+    },
+    {
+      "file": "PB-ATTACK-AN0807.txt",
+      "analytic": "AN0807",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0290#AN0807",
+      "techniques": "T1053.003 Cron"
+    },
+    {
+      "file": "PB-ATTACK-AN0003.txt",
+      "analytic": "AN0003",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0002#AN0003",
+      "techniques": "T1071.005 Publish/Subscribe Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN0972.txt",
+      "analytic": "AN0972",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0343#AN0972",
+      "techniques": "T1498.001 Direct Network Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN0587.txt",
+      "analytic": "AN0587",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0208#AN0587",
+      "techniques": "T1499 Endpoint Denial of Service"
+    },
+    {
+      "file": "PB-ATTACK-AN1267.txt",
+      "analytic": "AN1267",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0460#AN1267",
+      "techniques": "T1110.004 Credential Stuffing"
+    },
+    {
+      "file": "PB-ATTACK-AN0354.txt",
+      "analytic": "AN0354",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0126#AN0354",
+      "techniques": "T1098.004 SSH Authorized Keys"
+    },
+    {
+      "file": "PB-ATTACK-AN0701.txt",
+      "analytic": "AN0701",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0253#AN0701",
+      "techniques": "T1543.002 Systemd Service"
+    },
+    {
+      "file": "PB-ATTACK-AN1578.txt",
+      "analytic": "AN1578",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0571#AN1578",
+      "techniques": "T1543 Create or Modify System Process"
+    },
+    {
+      "file": "PB-ATTACK-AN1083.txt",
+      "analytic": "AN1083",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0384#AN1083",
+      "techniques": "T1059.004 Unix Shell"
+    },
+    {
+      "file": "PB-ATTACK-AN1431.txt",
+      "analytic": "AN1431",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0516#AN1431",
+      "techniques": "T1059 Command and Scripting Interpreter"
+    },
+    {
+      "file": "PB-ATTACK-AN1510.txt",
+      "analytic": "AN1510",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0547#AN1510",
+      "techniques": "T1505 Server Software Component"
+    },
+    {
+      "file": "PB-ATTACK-AN0606.txt",
+      "analytic": "AN0606",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0215#AN0606",
+      "techniques": "T1486 Data Encrypted for Impact"
+    },
+    {
+      "file": "PB-ATTACK-AN0174.txt",
+      "analytic": "AN0174",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0063#AN0174",
+      "techniques": "T1059.006 Python"
+    },
+    {
+      "file": "PB-ATTACK-AN0427.txt",
+      "analytic": "AN0427",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0149#AN0427",
+      "techniques": "T1048.003 Exfiltration Over Unencrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1172.txt",
+      "analytic": "AN1172",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0416#AN1172",
+      "techniques": "T1071.002 File Transfer Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN1508.txt",
+      "analytic": "AN1508",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0547#AN1508",
+      "techniques": "T1505 Server Software Component"
+    },
+    {
+      "file": "PB-ATTACK-AN0588.txt",
+      "analytic": "AN0588",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0208#AN0588",
+      "techniques": "T1499 Endpoint Denial of Service"
+    },
+    {
+      "file": "PB-ATTACK-AN1341.txt",
+      "analytic": "AN1341",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0487#AN1341",
+      "techniques": "T1110.003 Password Spraying"
+    },
+    {
+      "file": "PB-ATTACK-AN0944.txt",
+      "analytic": "AN0944",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0333#AN0944",
+      "techniques": "T1053.002 At"
+    },
+    {
+      "file": "PB-ATTACK-AN0225.txt",
+      "analytic": "AN0225",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0080#AN0225",
+      "techniques": "T1190 Exploit Public-Facing Application"
+    },
+    {
+      "file": "PB-ATTACK-AN0350.txt",
+      "analytic": "AN0350",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0126#AN0350",
+      "techniques": "T1098.004 SSH Authorized Keys"
+    },
+    {
+      "file": "PB-ATTACK-AN0368.txt",
+      "analytic": "AN0368",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0131#AN0368",
+      "techniques": "T1048 Exfiltration Over Alternative Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN0269.txt",
+      "analytic": "AN0269",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0096#AN0269",
+      "techniques": "T1098 Account Manipulation"
+    },
+    {
+      "file": "PB-ATTACK-AN0005.txt",
+      "analytic": "AN0005",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0002#AN0005",
+      "techniques": "T1071.005 Publish/Subscribe Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN0281.txt",
+      "analytic": "AN0281",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0101#AN0281",
+      "techniques": "T1059.011 Lua"
+    },
+    {
+      "file": "PB-ATTACK-AN0382.txt",
+      "analytic": "AN0382",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0135#AN0382",
+      "techniques": "T1071.003 Mail Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN0492.txt",
+      "analytic": "AN0492",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0173#AN0492",
+      "techniques": "T1499.002 Service Exhaustion Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN0293.txt",
+      "analytic": "AN0293",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0105#AN0293",
+      "techniques": "T1110.002 Password Cracking"
+    },
+    {
+      "file": "PB-ATTACK-AN0426.txt",
+      "analytic": "AN0426",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0149#AN0426",
+      "techniques": "T1048.003 Exfiltration Over Unencrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1168.txt",
+      "analytic": "AN1168",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0415#AN1168",
+      "techniques": "T1499.003 Application Exhaustion Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN0370.txt",
+      "analytic": "AN0370",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0131#AN0370",
+      "techniques": "T1048 Exfiltration Over Alternative Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN0976.txt",
+      "analytic": "AN0976",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0345#AN0976",
+      "techniques": "T1548 Abuse Elevation Control Mechanism"
+    },
+    {
+      "file": "PB-ATTACK-AN0979.txt",
+      "analytic": "AN0979",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0345#AN0979",
+      "techniques": "T1548 Abuse Elevation Control Mechanism"
+    },
+    {
+      "file": "PB-ATTACK-AN1263.txt",
+      "analytic": "AN1263",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0460#AN1263",
+      "techniques": "T1110.004 Credential Stuffing"
+    },
+    {
+      "file": "PB-ATTACK-AN1475.txt",
+      "analytic": "AN1475",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0535#AN1475",
+      "techniques": "T1505.006 vSphere Installation Bundles"
+    },
+    {
+      "file": "PB-ATTACK-AN1226.txt",
+      "analytic": "AN1226",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0444#AN1226",
+      "techniques": "T1071 Application Layer Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1576.txt",
+      "analytic": "AN1576",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0571#AN1576",
+      "techniques": "T1543 Create or Modify System Process"
+    },
+    {
+      "file": "PB-ATTACK-AN1173.txt",
+      "analytic": "AN1173",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0416#AN1173",
+      "techniques": "T1071.002 File Transfer Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN1432.txt",
+      "analytic": "AN1432",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0516#AN1432",
+      "techniques": "T1059 Command and Scripting Interpreter"
+    },
+    {
+      "file": "PB-ATTACK-AN0064.txt",
+      "analytic": "AN0064",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0021#AN0064",
+      "techniques": "T1489 Service Stop"
+    },
+    {
+      "file": "PB-ATTACK-AN1109.txt",
+      "analytic": "AN1109",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0394#AN1109",
+      "techniques": "T1505.003 Web Shell"
+    },
+    {
+      "file": "PB-ATTACK-AN1414.txt",
+      "analytic": "AN1414",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0512#AN1414",
+      "techniques": "T1048.002 Exfiltration Over Asymmetric Encrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN0380.txt",
+      "analytic": "AN0380",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0135#AN0380",
+      "techniques": "T1071.003 Mail Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN0220.txt",
+      "analytic": "AN0220",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0080#AN0220",
+      "techniques": "T1190 Exploit Public-Facing Application"
+    },
+    {
+      "file": "PB-ATTACK-AN0222.txt",
+      "analytic": "AN0222",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0080#AN0222",
+      "techniques": "T1190 Exploit Public-Facing Application"
+    },
+    {
+      "file": "PB-ATTACK-AN0645.txt",
+      "analytic": "AN0645",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0231#AN0645",
+      "techniques": "T1053.006 Systemd Timers"
+    },
+    {
+      "file": "PB-ATTACK-AN0970.txt",
+      "analytic": "AN0970",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0343#AN0970",
+      "techniques": "T1498.001 Direct Network Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN0424.txt",
+      "analytic": "AN0424",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0149#AN0424",
+      "techniques": "T1048.003 Exfiltration Over Unencrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1105.txt",
+      "analytic": "AN1105",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0393#AN1105",
+      "techniques": "T1548.005 Temporary Elevated Cloud Access"
+    },
+    {
+      "file": "PB-ATTACK-AN0175.txt",
+      "analytic": "AN0175",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0063#AN0175",
+      "techniques": "T1059.006 Python"
+    },
+    {
+      "file": "PB-ATTACK-AN0603.txt",
+      "analytic": "AN0603",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0215#AN0603",
+      "techniques": "T1486 Data Encrypted for Impact"
+    },
+    {
+      "file": "PB-ATTACK-AN1470.txt",
+      "analytic": "AN1470",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0531#AN1470",
+      "techniques": "T1098.001 Additional Cloud Credentials"
+    },
+    {
+      "file": "PB-ATTACK-AN1579.txt",
+      "analytic": "AN1579",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0572#AN1579",
+      "techniques": "T1098.006 Additional Container Cluster Roles"
+    },
+    {
+      "file": "PB-ATTACK-AN0585.txt",
+      "analytic": "AN0585",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0208#AN0585",
+      "techniques": "T1499 Endpoint Denial of Service"
+    },
+    {
+      "file": "PB-ATTACK-AN1340.txt",
+      "analytic": "AN1340",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0487#AN1340",
+      "techniques": "T1110.003 Password Spraying"
+    },
+    {
+      "file": "PB-ATTACK-AN1228.txt",
+      "analytic": "AN1228",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0444#AN1228",
+      "techniques": "T1071 Application Layer Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1081.txt",
+      "analytic": "AN1081",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0384#AN1081",
+      "techniques": "T1059.004 Unix Shell"
+    },
+    {
+      "file": "PB-ATTACK-AN0490.txt",
+      "analytic": "AN0490",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0173#AN0490",
+      "techniques": "T1499.002 Service Exhaustion Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN0307.txt",
+      "analytic": "AN0307",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0110#AN0307",
+      "techniques": "T1548.001 Setuid and Setgid"
+    },
+    {
+      "file": "PB-ATTACK-AN0076.txt",
+      "analytic": "AN0076",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0027#AN0076",
+      "techniques": "T1071.001 Web Protocols"
+    },
+    {
+      "file": "PB-ATTACK-AN1276.txt",
+      "analytic": "AN1276",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0463#AN1276",
+      "techniques": "T1110 Brute Force"
+    },
+    {
+      "file": "PB-ATTACK-AN1122.txt",
+      "analytic": "AN1122",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0400#AN1122",
+      "techniques": "T1071.004 DNS"
+    },
+    {
+      "file": "PB-ATTACK-AN0261.txt",
+      "analytic": "AN0261",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0094#AN0261",
+      "techniques": "T1053 Scheduled Task/Job"
+    },
+    {
+      "file": "PB-ATTACK-AN0352.txt",
+      "analytic": "AN0352",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0126#AN0352",
+      "techniques": "T1098.004 SSH Authorized Keys"
+    },
+    {
+      "file": "PB-ATTACK-AN1392.txt",
+      "analytic": "AN1392",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0503#AN1392",
+      "techniques": "T1048.001 Exfiltration Over Symmetric Encrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1390.txt",
+      "analytic": "AN1390",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0503#AN1390",
+      "techniques": "T1048.001 Exfiltration Over Symmetric Encrypted Non-C2 Protocol"
+    },
+    {
+      "file": "PB-ATTACK-AN1270.txt",
+      "analytic": "AN1270",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0460#AN1270",
+      "techniques": "T1110.004 Credential Stuffing"
+    },
+    {
+      "file": "PB-ATTACK-AN1304.txt",
+      "analytic": "AN1304",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0473#AN1304",
+      "techniques": "T1543.005 Container Service"
+    },
+    {
+      "file": "PB-ATTACK-AN0233.txt",
+      "analytic": "AN0233",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0083#AN0233",
+      "techniques": "T1059.013 Container CLI/API"
+    },
+    {
+      "file": "PB-ATTACK-AN0262.txt",
+      "analytic": "AN0262",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0094#AN0262",
+      "techniques": "T1053 Scheduled Task/Job"
+    },
+    {
+      "file": "PB-ATTACK-AN0353.txt",
+      "analytic": "AN0353",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0126#AN0353",
+      "techniques": "T1098.004 SSH Authorized Keys"
+    },
+    {
+      "file": "PB-ATTACK-AN0062.txt",
+      "analytic": "AN0062",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0021#AN0062",
+      "techniques": "T1489 Service Stop"
+    },
+    {
+      "file": "PB-ATTACK-AN1141.txt",
+      "analytic": "AN1141",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0408#AN1141",
+      "techniques": "T1498.002 Reflection Amplification"
+    },
+    {
+      "file": "PB-ATTACK-AN0853.txt",
+      "analytic": "AN0853",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0304#AN0853",
+      "techniques": "T1499.004 Application or System Exploitation"
+    },
+    {
+      "file": "PB-ATTACK-AN0582.txt",
+      "analytic": "AN0582",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0206#AN0582",
+      "techniques": "T1053.007 Container Orchestration Job"
+    },
+    {
+      "file": "PB-ATTACK-AN0279.txt",
+      "analytic": "AN0279",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0101#AN0279",
+      "techniques": "T1059.011 Lua"
+    },
+    {
+      "file": "PB-ATTACK-AN0215.txt",
+      "analytic": "AN0215",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0078#AN0215",
+      "techniques": "T1059.009 Cloud API"
+    },
+    {
+      "file": "PB-ATTACK-AN1013.txt",
+      "analytic": "AN1013",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0356#AN1013",
+      "techniques": "T1499.001 OS Exhaustion Flood"
+    },
+    {
+      "file": "PB-ATTACK-AN1124.txt",
+      "analytic": "AN1124",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0400#AN1124",
+      "techniques": "T1071.004 DNS"
+    },
+    {
+      "file": "PB-ATTACK-AN0866.txt",
+      "analytic": "AN0866",
+      "source": "https://attack.mitre.org/detectionstrategies/DET0310#AN0866",
+      "techniques": "T1098.007 Additional Local or Domain Groups"
+    }
+  ]
+}

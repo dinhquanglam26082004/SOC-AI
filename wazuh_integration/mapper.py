@@ -5,6 +5,7 @@ import os
 import json
 import ipaddress
 import math
+import posixpath
 
 
 def network_ip(value):
@@ -126,6 +127,16 @@ def map_wazuh_alert(raw):
         record['raw_line'] = raw.get('full_log')
         record['severity_origin'] = 'wazuh_detection_rule' if detection else 'wazuh_delivery_rule'
         if detection:
+            # Wazuh archives and alerts can assign different IDs to the same Zeek
+            # event. Only collapse an exact sensor observation with a Zeek UID,
+            # same agent, rule, event timestamp and original log line.
+            uid = data.get('uid')
+            full_log = raw.get('full_log')
+            if isinstance(uid, str) and uid and isinstance(full_log, str) and full_log:
+                identity = [manager['name'], agent['id'], rule['id'],
+                            record['timestamp'], location, uid, full_log]
+                record['id'] = 'WAZUH-' + sha256(json.dumps(identity, ensure_ascii=False,
+                    separators=(',', ':')).encode()).hexdigest()
             record['detection'] = {'engine': 'wazuh', 'rule_id': rule['id'],
                                    'reason': rule['description'], 'groups': groups,
                                    'evidence': data, 'conclusion': 'Suspicious activity; not proof of successful compromise'}
@@ -172,11 +183,32 @@ def is_security_alert(record):
             or str(rule.get('id')) == '5404' or str(rule.get('id')) in rules)
 
 
+def fim_manual_only(record):
+    """Only ordinary Linux rule-550 FIM paths are diverted; unknowns fail open."""
+    rule=record.get('rule') or {}
+    if str(rule.get('id'))!='550' or 'syscheck' not in (rule.get('groups') or []):
+        return False
+    path=record.get('file_path')
+    if not isinstance(path,str) or not path.startswith('/') or '\x00' in path:
+        return False
+    path=posixpath.normpath(path)
+    exact={'/etc/passwd','/etc/shadow','/etc/group','/etc/gshadow','/etc/sudoers',
+           '/etc/ssh/sshd_config','/etc/crontab','/etc/ld.so.preload','/etc/profile',
+           '/etc/bash.bashrc','/etc/environment'}
+    trees=('/etc/sudoers.d/','/etc/ssh/','/etc/pam.d/','/etc/security/',
+           '/etc/systemd/system/','/etc/init.d/','/etc/cron.d/','/etc/cron.daily/',
+           '/etc/cron.hourly/','/etc/cron.weekly/','/etc/cron.monthly/',
+           '/var/spool/cron/','/etc/ld.so.conf.d/','/root/.ssh/')
+    home_ssh=path.startswith('/home/') and '/.ssh/' in path
+    return not (path in exact or any(path.startswith(prefix) for prefix in trees) or home_ssh)
+
+
 def ai_eligible(record):
     if not is_security_alert(record):
         return False
-    rules = {x.strip() for x in os.getenv('WAZUH_AI_RULE_ALLOWLIST', '').split(',') if x.strip()}
-    groups = {x.strip() for x in os.getenv('WAZUH_AI_GROUP_ALLOWLIST', 'syscheck').split(',') if x.strip()}
+    if str(record.get('rule', {}).get('id')) in {'202', '203', '204'}:
+        return False
+    if fim_manual_only(record):
+        return False
     rule = record['rule']
-    return (rule['level'] >= int(os.getenv('WAZUH_AI_MIN_LEVEL', '7'))
-            or rule['id'] in rules or bool(groups.intersection(rule.get('groups', []))))
+    return rule['level'] >= int(os.getenv('WAZUH_AI_MIN_LEVEL', '7'))

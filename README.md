@@ -1,5 +1,7 @@
 # SOC-AI · Wazuh Endpoint Operations
 
+**Tra cứu lệnh vận hành:** [Sổ tay PowerShell: Docker, Wazuh rules, log, AI, Knowledge và SQLite](LENH_POWERSHELL.md). Chạy phần chuẩn bị trong sổ tay trước để dùng đúng Compose override và volume của máy.
+
 ## Bắt đầu ở đây khi tải từ GitHub
 
 1. Chạy các dịch vụ trên máy chính theo mục **Khởi động máy chính** bên dưới.
