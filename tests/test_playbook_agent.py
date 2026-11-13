@@ -4,7 +4,7 @@ from agents import playbook_agent
 
 
 def test_returns_existing_playbook_verbatim_without_model_call(tmp_path, monkeypatch):
-    source = "PB-SSH-001_ssh_bruteforce.txt"
+    source = "ssh_bruteforce.txt"
     expected = (
         "PLAYBOOK ID: PB-SSH-001\n\n"
         "NAME:\nSSH Brute Force Response\n\n"
@@ -13,17 +13,11 @@ def test_returns_existing_playbook_verbatim_without_model_call(tmp_path, monkeyp
     )
     (tmp_path / source).write_text(expected, encoding="utf-8")
     monkeypatch.setattr(playbook_agent, "PLAYBOOK_ROOT", tmp_path)
-    calls = []
 
-    def retrieve(query, top_k):
-        calls.append((query, top_k))
-        return [
-            {"text": "RESPONSE: 1. Block the source IP.", "metadata": {
-                "type": "playbooks", "source": source, "chunk_idx": 2,
-            }},
-        ]
+    def unexpected_retrieval(*args, **kwargs):
+        raise AssertionError("SSH playbook selection should not depend on RAG ranking")
 
-    monkeypatch.setattr(playbook_agent, "_retrieve_playbooks", retrieve)
+    monkeypatch.setattr(playbook_agent, "_retrieve_playbooks", unexpected_retrieval)
     report = {
         "_alert_id": "alert-1",
         "verdict": "malicious",
@@ -32,7 +26,6 @@ def test_returns_existing_playbook_verbatim_without_model_call(tmp_path, monkeyp
 
     result = playbook_agent.propose_playbook(report)
 
-    assert len(calls) == 1 and calls[0][1] == 16
     assert result["status"] == "matched"
     assert result["playbook_id"] == "PB-SSH-001"
     assert result["playbook_name"] == "SSH Brute Force Response"
@@ -145,6 +138,45 @@ def test_inconclusive_dos_can_retrieve_playbook_without_claiming_confirmation(mo
 
     assert result["status"] == "matched"
     assert "remains inconclusive" in result["notes"]
+    assert result["actions"] == []
+
+
+def test_inconclusive_ssh_alert_selects_local_playbook_without_rag_match(tmp_path, monkeypatch):
+    source = "ssh_bruteforce.txt"
+    expected = (
+        "PLAYBOOK ID: PB-SSH-001\n\n"
+        "NAME:\nSSH Brute Force Response\n"
+    )
+    (tmp_path / source).write_text(expected, encoding="utf-8")
+    monkeypatch.setattr(playbook_agent, "PLAYBOOK_ROOT", tmp_path)
+
+    def unexpected_retrieval(*args, **kwargs):
+        raise AssertionError("SSH playbook selection should not depend on RAG ranking")
+
+    monkeypatch.setattr(playbook_agent, "_retrieve_playbooks", unexpected_retrieval)
+    result = playbook_agent.propose_playbook(
+        {
+            "verdict": "inconclusive",
+            "incident_type": "Authentication",
+            "unknowns": ["Authorization of the successful login is unverified."],
+        },
+        alert={
+            "rule": {
+                "id": "40112",
+                "description": "Multiple authentication failures followed by a success",
+                "groups": ["authentication_success"],
+            },
+            "raw_event": {
+                "decoder": {"name": "sshd"},
+                "predecoder": {"program_name": "sshd"},
+            },
+        },
+    )
+
+    assert result["status"] == "matched"
+    assert result["playbook_id"] == "PB-SSH-001"
+    assert result["playbook_source"] == source
+    assert "does not establish compromise" in result["notes"]
     assert result["actions"] == []
 
 

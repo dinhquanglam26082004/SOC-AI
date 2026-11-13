@@ -4,6 +4,7 @@ from pathlib import Path, PureWindowsPath
 import re
 
 PLAYBOOK_ROOT = Path(__file__).resolve().parent.parent / "rag" / "documents" / "playbooks"
+SSH_PLAYBOOK_SOURCE = "ssh_bruteforce.txt"
 
 
 def _build_query(report: dict, alert: dict | None = None) -> str:
@@ -61,6 +62,29 @@ def _is_dos_alert(alert: dict) -> bool:
     )
 
 
+def _is_ssh_context(report: dict, alert: dict) -> bool:
+    rule = alert.get("rule") or {}
+    raw = alert.get("raw_event") or {}
+    decoder = raw.get("decoder") or {}
+    predecoder = raw.get("predecoder") or {}
+    groups = rule.get("groups") or []
+    if isinstance(groups, str):
+        groups = re.split(r"[\s,]+", groups)
+    if any(group.lower() in {"ssh", "sshd", "ssh_bruteforce"} or group.lower().startswith("zeek_ssh")
+           for group in groups if isinstance(group, str)):
+        return True
+
+    text = " ".join(str(value) for value in (
+        report.get("incident_type", ""),
+        rule.get("description", ""),
+        decoder.get("name", ""),
+        predecoder.get("program_name", ""),
+        raw.get("full_log", ""),
+        alert.get("log_type", ""),
+    )).lower()
+    return bool(re.search(r"\bssh(?:d)?\b|zeek_ssh", text))
+
+
 def _read_playbook(source: str) -> str:
     if not source or Path(source).name != source or PureWindowsPath(source).name != source:
         raise ValueError("Retrieved playbook has an invalid source filename")
@@ -90,7 +114,8 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
         )
     verdict = report.get("verdict")
     dos_context = _is_dos_report(report) or _is_dos_alert(alert or {})
-    if verdict == "benign" or (verdict == "inconclusive" and not dos_context):
+    ssh_context = _is_ssh_context(report, alert or {})
+    if verdict == "benign" or (verdict == "inconclusive" and not dos_context and not ssh_context):
         return _skipped(
             report,
             "not_applicable",
@@ -99,31 +124,33 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
     if verdict not in {"malicious", "inconclusive"}:
         return _skipped(report, "not_applicable", "No supported investigation verdict for playbook lookup.")
 
-    matches = _retrieve_playbooks(_build_query(report, alert), top_k=16)
-    if not matches:
-        return _skipped(
-            report,
-            "not_found",
-            "No existing playbook was found in the knowledge base.",
-        )
-
-    if dos_context:
-        selected = next(
-            (
-                match for match in matches
-                if (match.get("metadata") or {}).get("source")
-                == "PB-DOS-001_denial_of_service.txt"
-            ),
-            None,
-        )
-        if not selected:
+    if ssh_context:
+        selected = {"metadata": {"source": SSH_PLAYBOOK_SOURCE, "type": "playbooks"}}
+    else:
+        matches = _retrieve_playbooks(_build_query(report, alert), top_k=16)
+        if not matches:
             return _skipped(
                 report,
                 "not_found",
-                "The DoS playbook is not indexed. Rebuild the knowledge base before retrying.",
+                "No existing playbook was found in the knowledge base.",
             )
-    else:
-        selected = matches[0]
+        if dos_context:
+            selected = next(
+                (
+                    match for match in matches
+                    if (match.get("metadata") or {}).get("source")
+                    == "PB-DOS-001_denial_of_service.txt"
+                ),
+                None,
+            )
+            if not selected:
+                return _skipped(
+                    report,
+                    "not_found",
+                    "The DoS playbook is not indexed. Rebuild the knowledge base before retrying.",
+                )
+        else:
+            selected = matches[0]
     metadata = selected.get("metadata") or {}
     source = metadata.get("source")
     if metadata.get("type") != "playbooks":
@@ -137,6 +164,18 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
 
     if on_progress:
         on_progress("playbook_selected", 5)
+    if verdict == "inconclusive" and ssh_context:
+        notes = (
+            "Existing SSH response playbook selected for review; a successful login after failures alone "
+            "does not establish compromise. No actions were generated or executed."
+        )
+    elif verdict == "inconclusive":
+        notes = (
+            "Existing playbook retrieved from the knowledge base; the DoS assessment remains inconclusive "
+            "until service impact is corroborated. No actions were generated or executed."
+        )
+    else:
+        notes = "Existing playbook retrieved from the knowledge base; no actions were generated or executed."
     return {
         "_alert_id": report.get("_alert_id"),
         "status": "matched",
@@ -145,12 +184,7 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
         "playbook_source": source,
         "playbook_text": playbook_text,
         "actions": [],
-        "notes": (
-            "Existing playbook retrieved from the knowledge base; the DoS assessment remains inconclusive "
-            "until service impact is corroborated. No actions were generated or executed."
-            if verdict == "inconclusive"
-            else "Existing playbook retrieved from the knowledge base; no actions were generated or executed."
-        ),
+        "notes": notes,
         "citations": [metadata],
     }
 

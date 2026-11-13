@@ -4,23 +4,30 @@ NAME:
 SSH Brute Force Response
 
 TRIGGER:
-More than 20 failed SSH authentication attempts
-within 5 minutes.
+Repeated failed SSH authentication attempts, a Wazuh SSH brute-force alert,
+or failures followed by a successful SSH login. More than 20 failures from
+the same source IP against the same account within 5 minutes is a HIGH-severity
+criterion, not a prerequisite for investigating a subsequent successful login.
 
 INVESTIGATION:
-1. Review authentication logs.
-2. Check successful SSH logins.
-3. Check activity of the targeted account.
-4. Investigate source IP.
-5. Check whether other hosts received connections
-   from the same source.
+1. Review the original authentication records and correlate PAM and sshd entries
+   so duplicate records are not mistaken for distinct password attempts.
+2. Group failures by target host, source IP, and username; preserve event order
+   and distinguish retained log records from unique login attempts.
+3. Check for successful SSH authentication after the failures. Verify the
+   account, source IP, timestamp, and whether the login was authorized.
+4. If a login succeeded, review available session, command, sudo/su, account,
+   SSH-key, and persistence records after that login. Record collection gaps.
+5. Check whether the source targeted other accounts or hosts, and review the
+   source IP using approved local threat-intelligence sources.
 
 RESPONSE:
-1. Block the source IP.
-2. Collect authentication logs.
-3. Review the targeted account.
-4. Reset credentials if compromise is confirmed.
-5. Increase monitoring.
+1. Preserve the relevant authentication and post-login records.
+2. If unauthorized access is confirmed, follow the incident containment
+   procedure for the host and account, and rotate affected credentials.
+3. Apply approved source-IP blocking and increase monitoring as appropriate.
+4. If authorization or session activity cannot be verified, escalate for
+   analyst review rather than treating a successful login alone as compromise.
 
-Human approval is required before blocking an IP,
-disabling an account, or changing firewall rules.
+Human approval is required before blocking an IP, disabling an account,
+isolating a host, resetting credentials, or changing firewall rules.
