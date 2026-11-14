@@ -3,6 +3,10 @@ const fs = require('node:fs');
 const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const html = fs.readFileSync(require('node:path').join(__dirname,'../web/index.html'),'utf8');
+assert.doesNotMatch(html, /#analyst-queue\s*\{\s*display:\s*none\s*!important;/);
+assert.match(html, /if\(name==='investigations'\)loadAnalystQueue\(\)/);
+assert.match(html, /\['overview','Overview'\]/);
+assert.match(html, /const overviewContent=\[assessmentPanel\(data,a\),analystPanel\(data\),hypothesisPanel\(data\)\]/);
 const source = html.slice(html.indexOf('    const aiStages='),html.indexOf('    function renderProgress(){'));
 const scope = {
   icon:()=>'',esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),

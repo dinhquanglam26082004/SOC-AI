@@ -187,7 +187,6 @@
     .evidence-field{min-width:0}.evidence-field dt{color:var(--muted);font-size:11px}.evidence-field dd{margin:3px 0 0;overflow-wrap:anywhere;color:#e5edf5;font-size:13px}
     .evidence-log{margin:12px 0;padding:12px;background:#07101b;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 Consolas,monospace;color:#d5e3ee}
     .evidence-card details{margin-top:12px;color:var(--muted);font-size:12px}.evidence-card details summary{cursor:pointer;color:var(--cyan)}
-      #analyst-queue{display:none!important}
   </style>
 </head>
 <body>
@@ -358,7 +357,7 @@
 
       return lines.join('\n');
     }
-    let dossierKey='',dossierSection='activity',dossierOffset=0,dossierItems=[],dossierRequest=0,dossierBusyKey='',dossierSignature='';
+    let dossierKey='',dossierSection='overview',dossierOffset=0,dossierItems=[],dossierRequest=0,dossierBusyKey='',dossierSignature='';
     let reviewQueueAt=0,reviewQueueBusy=false,reviewQueueRows=[];
     async function loadAnalystQueue(force=false,offset=0){
       if($('view-investigations').classList.contains('hidden')||reviewQueueBusy||!force&&Date.now()-reviewQueueAt<12000)return;
@@ -413,7 +412,7 @@
       const kind=item.evidence_type==='guidance'?'Guidance · not incident proof':item.evidence_type==='trigger'?'Triggering alert':'Observed event';
       return `<article class="evidence-card"><div class="evidence-card-head"><strong>${esc(title)}</strong><span class="evidence-kind">${esc(kind)}</span></div><dl class="evidence-grid">${fields.map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${esc(show(v))}</dd></div>`).join('')}</dl>${d.full_log?`<div class="evidence-field"><dt>Recorded log</dt></div><div class="evidence-log">${esc(d.full_log)}</div>`:''}${d.summary_truncated?'<p class="muted">This evidence summary was truncated; inspect the saved details.</p>':''}<details><summary>Source and evidence IDs</summary><dl class="evidence-grid">${[['Evidence ID',item.evidence_id],['Source',item.source],['Source record ID',item.source_record_id],['Collected at',item.collected_at]].filter(([,v])=>present(v)).map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${esc(show(v))}</dd></div>`).join('')}</dl></details><details><summary>View recorded data (JSON)</summary><pre class="detail">${esc(JSON.stringify(item.data,null,2))}</pre></details></article>`;
     }
-    function investigate(id){if(String(selectedInvestigation)!==String(id)){dossierSection='activity';dossierKey='';dossierSignature=''}selectedInvestigation=id;document.querySelectorAll('[data-investigation]').forEach(b=>b.setAttribute('aria-current',String(b.dataset.investigation===String(id))));const a=alerts.find(x=>String(x.id)===String(id));$('investigation-detail').textContent=a?investigationText(a):'Alert not found.';$('investigation-detail').hidden=true;if($('investigation-context'))$('investigation-context').innerHTML=a?`<h2>${esc(a.rule?.description||a.attack_type||'Security alert')}</h2><div class="log-chips"><span class="log-chip">${esc(a.agent?.name||'Unknown agent')}</span><span class="severity ${esc(a.severity||'low')}">${esc(a.severity||'Unknown')}</span><span class="log-chip">Rule ${esc(a.rule?.id||'—')}</span></div>`:'';$('investigation-progress').innerHTML=a?progressHTML(a):'';loadDossier(a)}
+    function investigate(id){if(String(selectedInvestigation)!==String(id)){dossierSection='overview';dossierKey='';dossierSignature=''}selectedInvestigation=id;document.querySelectorAll('[data-investigation]').forEach(b=>b.setAttribute('aria-current',String(b.dataset.investigation===String(id))));const a=alerts.find(x=>String(x.id)===String(id));$('investigation-detail').textContent=a?investigationText(a):'Alert not found.';$('investigation-detail').hidden=true;if($('investigation-context'))$('investigation-context').innerHTML=a?`<h2>${esc(a.rule?.description||a.attack_type||'Security alert')}</h2><div class="log-chips"><span class="log-chip">${esc(a.agent?.name||'Unknown agent')}</span><span class="severity ${esc(a.severity||'low')}">${esc(a.severity||'Unknown')}</span><span class="log-chip">Rule ${esc(a.rule?.id||'—')}</span></div>`:'';$('investigation-progress').innerHTML=a?progressHTML(a):'';loadDossier(a)}
     async function loadDossier(a,more=false,force=false){
       let box=$('investigation-dossier');if(!box){box=document.createElement('div');box.id='investigation-dossier';box.style.padding='16px';$('investigation-detail').before(box)}
       const run=a?.investigation?.incident_id||a?.investigation_report?.incident_id;
@@ -429,11 +428,12 @@
         if(request!==dossierRequest||String(selectedInvestigation)!==String(a.id))return;
         dossierItems.push(...data.items);dossierOffset=data.next_offset;
         const signature=JSON.stringify([key,data.summary,dossierItems]);if(signature===dossierSignature)return;dossierSignature=signature;
-        const tabs=[['activity','Investigation steps'],['evidence','Evidence']].map(([s,label])=>`<button class="btn" data-dossier-tab="${s}" aria-pressed="${s===dossierSection}">${label}</button>`).join('');
+        const tabs=[['overview','Overview'],['activity','Investigation steps'],['evidence','Evidence']].map(([s,label])=>`<button class="btn" data-dossier-tab="${s}" aria-pressed="${s===dossierSection}">${label}</button>`).join('');
+        const overviewContent=[assessmentPanel(data,a),analystPanel(data),hypothesisPanel(data)].filter(Boolean).join('');
         const visibleItems=dossierSection==='activity'?dossierItems.filter(item=>item.kind==='tool'||item.kind==='model'||item.state==='error'):dossierItems;
         const items=visibleItems.map((item,index)=>dossierSection==='activity'?activityHTML(item,index):dossierSection==='evidence'?evidenceHTML(item):`<details style="padding:12px 0;border-bottom:1px solid var(--border)"><summary><b>${esc(item.name)}</b> · ${esc(item.state)} · ${esc(duration((item.finished||Date.now()/1000)-item.started))}</summary><pre class="detail">${esc(JSON.stringify(dossierSection==='models'?{id:item.id,started:item.started,finished:item.finished}: {query:item.args,result:item.result},null,2))}</pre></details>`).join('');
         const flow=[['triage','Scope'],['investigating','Plan'],['collecting','Tools'],['reviewing','Review evidence'],['concluding','Assess'],['verifying','Verify'],['saving','Save']].map(([node,label])=>`<span class="${node===data.summary.node?'active':''}">${label}</span>`).join(' → ');
-        box.innerHTML=`<div class="investigation-tabs" role="group" aria-label="Investigation sections">${tabs}</div><div class="investigation-tab-content">${`<div class="section-caption"><h3>${esc({activity:'AI activity',evidence:'Collected evidence',tools:'Tool history',models:'Model calls'}[dossierSection])}</h3><span>${data.total} recorded entries</span></div>${dossierSection==='activity'?`<details class="investigation-extra"><summary>Workflow stages</summary><div class="ai-flow">${flow}</div></details>`:''}${items||'<div class="empty">No recorded entries in this section yet.</div>'}${dossierOffset!==null?'<button class="btn" id="dossier-more">Load more</button>':''}<p class="investigation-note">Recorded activity refreshes while AI is running. Empty results do not establish safety.</p>`}</div>`;
+        box.innerHTML=`<div class="investigation-tabs" role="group" aria-label="Investigation sections">${tabs}</div><div class="investigation-tab-content">${dossierSection==='overview'?overviewContent:`<div class="section-caption"><h3>${esc({activity:'AI activity',evidence:'Collected evidence',tools:'Tool history',models:'Model calls'}[dossierSection])}</h3><span>${data.total} recorded entries</span></div>${dossierSection==='activity'?`<details class="investigation-extra"><summary>Workflow stages</summary><div class="ai-flow">${flow}</div></details>`:''}${items||'<div class="empty">No recorded entries in this section yet.</div>'}${dossierOffset!==null?'<button class="btn" id="dossier-more">Load more</button>':''}<p class="investigation-note">Recorded activity refreshes while AI is running. Empty results do not establish safety.</p>`}</div>`;
         if($('download-report'))$('download-report').onclick=()=>downloadReport(data,a);
         if($('investigation-source'))$('investigation-source').onclick=()=>goSourceLog(a);
         if($('investigation-response'))$('investigation-response').onclick=()=>{renderResponse();showView('response');const item=document.getElementById('response-'+a.id);if(item){item.open=true;item.scrollIntoView({block:'center'})}};
@@ -720,7 +720,26 @@
         renderAlerts();renderProgress();if(openedAlert)openAlert(openedAlert);if(selectedInvestigation)investigate(selectedInvestigation);
       }catch(e){backend(false,'Backend unavailable')}finally{statusPolling=false}
     }
-    function showView(name){if(name==='response')renderResponse();if(name==='intel')setTimeout(()=>loadKnowledge(),0);views.forEach(v=>$('view-'+v).classList.toggle('hidden',v!==name));document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));$('page-label').textContent=labels[name];$('page-description').textContent=pageDescriptions[name];$('sidebar').classList.remove('open');logsWorkspace.onView(name);if(name!=='logs')scrollTo({top:0,behavior:'smooth'})}document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{showView(b.dataset.view);if(b.dataset.view!=='logs')refreshAll()});$('menu').onclick=()=>$('sidebar').classList.toggle('open');$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});if(location.protocol==='file:'){location.replace('http://localhost:8100/')}else{const requested=new URLSearchParams(location.search);const initial=requested.get('view');showView(views.includes(initial)?initial:([...requested.keys()].some(k=>['source','type','category','selected','q','before'].includes(k))?'logs':'dashboard'));refreshAll();timer=setInterval(pollStatus,12000);progressTimer=setInterval(()=>{if(!document.hidden)renderProgress()},1000);}document.addEventListener('visibilitychange',()=>{if(!document.hidden){pollStatus();if(document.body.classList.contains('logs-view'))refreshLogs()}});addEventListener('beforeunload',()=>{clearInterval(timer);clearInterval(progressTimer)});
+    function showView(name){
+      if(name==='response')renderResponse();
+      if(name==='intel')setTimeout(()=>loadKnowledge(),0);
+      views.forEach(v=>$('view-'+v).classList.toggle('hidden',v!==name));
+      if(name==='investigations')loadAnalystQueue();
+      document.querySelectorAll('[data-view]').forEach(b=>b.classList.toggle('active',b.dataset.view===name));
+      $('page-label').textContent=labels[name];$('page-description').textContent=pageDescriptions[name];
+      $('sidebar').classList.remove('open');logsWorkspace.onView(name);
+      if(name!=='logs')scrollTo({top:0,behavior:'smooth'});
+    }
+    document.querySelectorAll('[data-view]').forEach(b=>b.onclick=()=>{showView(b.dataset.view);if(b.dataset.view!=='logs')refreshAll()});
+    $('menu').onclick=()=>$('sidebar').classList.toggle('open');$('modal').onclick=e=>{if(e.target===$('modal'))closeModal()};
+    document.addEventListener('keydown',e=>{if(e.key==='Escape')closeModal()});
+    if(location.protocol==='file:'){location.replace('http://localhost:8100/')}else{
+      const requested=new URLSearchParams(location.search);const initial=requested.get('view');
+      showView(views.includes(initial)?initial:([...requested.keys()].some(k=>['source','type','category','selected','q','before'].includes(k))?'logs':'dashboard'));
+      refreshAll();timer=setInterval(pollStatus,12000);progressTimer=setInterval(()=>{if(!document.hidden)renderProgress()},1000);
+    }
+    document.addEventListener('visibilitychange',()=>{if(!document.hidden){pollStatus();if(document.body.classList.contains('logs-view'))refreshLogs()}});
+    addEventListener('beforeunload',()=>{clearInterval(timer);clearInterval(progressTimer)});
   </script>
 </body>
 </html>
