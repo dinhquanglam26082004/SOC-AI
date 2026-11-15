@@ -22,8 +22,11 @@ def recommended_tools(alert):
     log_type=str(alert.get('log_type') or location.rsplit('/',1)[-1]).lower().removesuffix('.log')
     zeek=alert.get('source_product')=='zeek' or 'zeek' in groups or any(g.startswith('zeek_') for g in groups)
     malware=bool(groups & {'malware','virus','yara','rootcheck','ransomware'})
-
-    if zeek:
+    if str(rule.get("id")) == "521":
+        names = ["search_rootkit_evidence", "search_related_alerts", "search_runbook",]
+    if ( str(rule.get('id')) == '521' or ('rootcheck' in groups and ( 'rootkit' in description or 'hidden' in description))):
+        names = ['search_rootkit_evidence', 'search_related_alerts', 'search_runbook',]
+    elif zeek:
         if log_type=='dns' or any(g.startswith('zeek_dns') for g in groups) or re.search(r'\bdns\b',description):
             names=['search_zeek_dns','search_zeek_connections','search_related_alerts']
         elif log_type=='http' or 'web_attack' in groups or any(g.startswith('zeek_http') for g in groups) or re.search(r'\bhttp\b',description):
@@ -95,8 +98,53 @@ def assess_verdict(report,evidence,outcomes,context_omitted=False,suspected_dos=
     cited={ref for finding in report['findings'] for ref in finding['evidence_ids']}
     reasons=[]
     gaps=context_omitted or any(o['status'] in {'empty','error','unavailable','truncated'} for o in outcomes if o['tool']!='search_runbook')
+    is_rootkit_case = any(
+        item.get('evidence_type') == 'trigger'
+        and str(((item.get('data') or {}).get('rule') or {}).get('id')) == '521'
+        for item in evidence
+    )
     if report['verdict']!='inconclusive' and not observed&cited:
         reasons.append('No cited corroborating observation beyond the triggering alert.')
+    if is_rootkit_case and report['verdict'] == 'malicious':
+        positive = False
+
+        for item in evidence:
+            if item['evidence_id'] not in cited:
+                continue
+
+            if item.get('evidence_type') != 'observed':
+                continue
+
+            snapshot = (
+                (item.get('data') or {})
+                .get('rootkit_snapshot') or {}
+            )
+
+            for suspect in (
+                snapshot.get('suspects') or []
+            ):
+                if not isinstance(suspect, dict):
+                    continue
+
+                if (
+                    suspect.get('finding')
+                    == 'stable_process_visibility_discrepancy'
+                    and suspect.get('recheck_kill0')
+                    == 'exists'
+                    and suspect.get('recheck_proc_visible')
+                    is False
+                    and suspect.get('recheck_ps_visible')
+                    is False
+                ):
+                    positive = True
+
+        if not positive:
+            reasons.append(
+                'No independent positive endpoint '
+                'snapshot confirms the hidden '
+                'process. Repeated rootcheck alerts '
+                'alone are insufficient.'
+            )
     if report['verdict']=='benign':
         # This installation has no trusted maintenance/authorization connector. Neither
         # successful login, lack of alerts, nor model prose can provide that authorization.

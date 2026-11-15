@@ -49,6 +49,12 @@ class PrivilegeArgs(ScopeArgs):
     actor_user: str | None = Field(default=None, min_length=1, max_length=256)
     target_user: str | None = Field(default=None, min_length=1, max_length=256)
 
+class RootkitArgs(ScopeArgs):
+    pid: int | None = Field(
+        default=None,
+        ge=1,
+        le=4194304,
+    )
 
 class DetailArgs(BaseModel):
     model_config = ConfigDict(extra='forbid', strict=True)
@@ -80,7 +86,9 @@ MODELS = {'get_alert': AlertArgs, 'search_auth_events': SearchArgs,
           'search_file_changes': FileArgs, 'search_privilege_events': PrivilegeArgs,
           'summarize_zeek_flows': FlowSummaryArgs,
           'get_event_details': DetailArgs,
-          'search_runbook': RunbookArgs}
+          'search_runbook': RunbookArgs,
+          'search_rootkit_evidence': RootkitArgs,
+          }
 DESCRIPTIONS = {
     'get_alert': 'Read the triggering alert only. alert_id must match the investigation.',
     'search_auth_events': 'Read collected authentication success AND failure events for this agent within the incident window.',
@@ -92,7 +100,15 @@ DESCRIPTIONS = {
     'search_file_changes': 'Read retained Wazuh FIM records, optionally for one exact file_path. Attribution exists only when source who-data fields exist; temporal proximity is not ownership.',
     'search_privilege_events': 'Read sudo/su records, including failures and successful command records. actor_user filters srcuser and target_user filters dstuser; these are distinct identities. A sudo request does not prove execution.',
     'get_event_details': 'Expand one already collected incident evidence_id into a bounded original record. No arbitrary record or file access. Read details when a summary is insufficient.',
-    'search_runbook': 'Retrieve local response guidance, never proof that an event happened.'}
+    'search_runbook': 'Retrieve local response guidance, never proof that an event happened.',
+    'search_rootkit_evidence': (
+        'Investigate Wazuh rootcheck Rule 521. '
+        'Find related rootcheck and kernel module alerts, '
+        'plus historical endpoint process snapshots '
+        'for the same agent and incident time window. '
+        'Repeated alerts are not independent confirmation. '
+        'No live commands are executed.'),
+    }
 
 
 def definitions(allowed_tools=None):
@@ -155,9 +171,23 @@ def observation(record):
     privilege_source=bool(set((record.get('rule') or {}).get('groups') or []) & {'sudo','su'}) or (
         (raw.get('decoder') or {}).get('name') in {'sudo','su'} or
         (raw.get('predecoder') or {}).get('program_name') in {'sudo','su'})
+    rootkit_snapshot = (data if isinstance(data, dict) and data.get('producer') == 'soc-ai-rootkit-snapshot-v1' else {})
     structured,cut=bounded({'zeek_connection':network,'http':http,'dns':dns,
         'file_change':raw.get('syscheck') or {},
-        'privilege':{k:data[k] for k in ('srcuser','dstuser','command','tty','pwd') if k in data} if privilege_source else {}})
+        'privilege':{k:data[k] for k in ('srcuser','dstuser','command','tty','pwd') if k in data} if privilege_source else {},
+        'rootkit_snapshot': {
+            k: rootkit_snapshot.get(k)
+            for k in (
+               'producer',
+               'observed_at',
+               'scan',
+               'suspects',
+               'modules',
+               'interpretation',
+            )
+            if k in rootkit_snapshot
+        },
+    })
     return {**{k:record.get(k) for k in ('id','timestamp','received_at','source_product','log_type',
              'agent','rule','src_ip','dst_ip','src_port','dst_port','username','event_id','process','file_path','title')},
             'event_time':utc_stamp(record['timestamp']) if record.get('timestamp') else None, 'source':'soc-ai-sqlite',
@@ -208,6 +238,8 @@ class LocalTools:
             if since<self.since or until>self.until or since>until:
                 raise ValueError('time window outside incident scope')
             args.update(agent_id=self.agent,since=since,until=until)
+            if name == 'search_rootkit_evidence':
+                return self.rootkit_evidence(args, min(timeout or self.seconds, self.seconds,),)
             deadline=time.monotonic()+min(timeout or self.seconds,self.seconds)
             # mode=ro and query_only enforce the read-only boundary independently of tool arguments.
             db=sqlite3.connect(Path(self.store.path).resolve().as_uri()+'?mode=ro',uri=True,timeout=.5)
@@ -294,6 +326,44 @@ class LocalTools:
             return self.envelope('error',error='local_query_failed',detail=str(exc)[:300])
         except Exception as exc:
             return self.envelope('error',error='tool_failed',detail=type(exc).__name__)
+    def rootkit_evidence(self, args, timeout):
+        from agents.rootkit_evidence import search
+
+        rule = self.alert.get('rule') or {}
+        groups = set(rule.get('groups') or [])
+        description = str(rule.get('description') or '').lower()
+        is_rootkit = (
+            str(rule.get('id')) == '521'
+            or 'rootcheck' in groups
+            and ('rootkit' in description or 'hidden' in description)
+        )
+
+        if not is_rootkit:
+            return self.envelope('error', error='not_a_rootkit_alert')
+
+        query = search(
+            db_path=self.store.path,
+            agent_id=self.agent,
+            since=args['since'],
+            until=args['until'],
+            alert=self.alert,
+            pid=args.get('pid'),
+            limit=args['limit'],
+            timeout=timeout,
+        )
+        result = self.collect(
+            'search_rootkit_evidence',
+            args,
+            query['records'],
+            query['truncated'],
+        )
+        result['status'] = 'truncated' if query['truncated'] else query['status']
+
+        for key, value in query.items():
+            if key not in {'records', 'status', 'truncated'}:
+                result[key] = value
+        result['returned_count'] = len(result['items'])
+        return result
 
     def summarize_flows(self,args,timeout):
         from agents.zeek_flow_summary import summarize

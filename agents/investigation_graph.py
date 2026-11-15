@@ -54,7 +54,13 @@ SYSTEM += '''\nBefore concluding, review each hypothesis: supporting and refutin
 and the specific unresolved question. If requesting no tool, return JSON with keys
 hypotheses (id, statement, status, supporting, refuting, question), need_more (boolean), question.
 Reuse the supplied H- IDs. Never infer unauthorized login from failure followed by success alone.
-Benign requires independently verified authorization, not successful authentication or empty searches.'''
+Benign requires independently verified authorization, not successful authentication or empty searches.For Wazuh Rule 521, investigate hidden-process evidence
+using search_rootkit_evidence.
+Correlate the PID, same-agent rootcheck history,
+kernel-module alerts and available endpoint snapshots.
+Repeated rootcheck alerts are not independent proof.
+Historical snapshots are not live process inspection.
+Missing evidence does not prove the host is safe.'''
 
 
 class InvestigationGraph:
@@ -97,7 +103,7 @@ class InvestigationGraph:
         if self.remaining()<=0:
             raise WorkflowError('time_budget','Investigation time budget exhausted')
         args={'messages':messages,'schema':ollama_report_schema() if final else None,
-              'tools':None if final else definitions()}
+              'tools':None if final else definitions(['get_alert', *self.tool_plan])}
         def dispatch():
             self.progress('concluding' if final else 'investigating',4 if final else 2)
             remaining=self.remaining()
@@ -113,7 +119,7 @@ class InvestigationGraph:
         # Tool/schema instructions, recent conversation and output must fit too.
         context_tokens=int(os.getenv('OLLAMA_NUM_CTX','4096'))
         prediction_tokens=int(os.getenv('OLLAMA_NUM_PREDICT','1024'))
-        fixed=len(SYSTEM)+len(encode(ollama_report_schema() if final else definitions()))
+        fixed=len(SYSTEM)+len(encode(ollama_report_schema() if final else definitions(['get_alert', *self.tool_plan])))
         fixed+=len(encode(state.get('messages',[]))) if not final else 0
         allowance=min(self.limits.context_chars,max(800,3*max(0,context_tokens-prediction_tokens-256)-fixed-1200))
         packed=pack_evidence(self.audit.evidence(self.id),allowance)
@@ -137,6 +143,40 @@ class InvestigationGraph:
                                   'recommended_tools':self.tool_plan})
         result=self.tool('get_alert',{'alert_id':self.alert['id']})
         observations=[{'tool':'get_alert','status':result['status']}]
+        if (
+            'search_rootkit_evidence'
+            in self.tool_plan
+        ):
+            try:
+                rootkit = self.tool(
+                    'search_rootkit_evidence',
+                    {},
+                )
+
+                observations.append({
+                    'tool': 'search_rootkit_evidence',
+                    'status': rootkit['status'],
+                    'count': len(
+                        rootkit.get('items', [])
+                    ),
+                    'total_matched': rootkit.get(
+                        'total_matched', 0
+                    ),
+                    'coverage': rootkit.get(
+                        'source_coverage'
+                    ),
+                    'truncated': rootkit.get(
+                        'truncated', False
+                    ),
+                })
+
+            except WorkflowError:
+                observations.append({
+                    'tool': 'search_rootkit_evidence',
+                    'status': 'unavailable',
+                    'error': 'tool_budget_or_timeout',
+                    'count': 0,
+                })
         # Rule 100142 uses a 10-second manager window. The retained event time
         # may differ from Zeek packet time; summary explicitly reports its basis.
         if str(self.alert.get('rule',{}).get('id'))=='100142' and 'summarize_zeek_flows' in self.tool_plan:
@@ -395,7 +435,10 @@ class InvestigationGraph:
             self.id,self.alert=self.run['id'],alert
             self.limits=Limits.model_validate(self.run['summary']['limits'])
             self.tool_plan=recommended_tools(alert)
-            self.tools=LocalTools(self.store,self.audit,self.id,alert,self.limits.tool_seconds,self.retrieve)
+            self.tools=LocalTools(self.store,self.audit,self.id,alert,self.limits.tool_seconds,self.retrieve, allowed_tools=[
+                    'get_alert',
+                    *self.tool_plan,
+                ],)
             Path(self.checkpoint_path).parent.mkdir(parents=True,exist_ok=True)
             conn=sqlite3.connect(self.checkpoint_path,check_same_thread=False,timeout=15)
             conn.execute('PRAGMA synchronous=FULL')
