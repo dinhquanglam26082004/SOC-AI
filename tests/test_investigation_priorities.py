@@ -161,10 +161,3 @@ def test_guidance_cannot_resolve_hypothesis(lab):
     evidence={e['evidence_id']:e for e in audit.evidence(run['id'])}
     with pytest.raises(ValueError,match='Guidance'):
         hypotheses([{'statement':'Incident is confirmed','status':'supported','supporting':[eid]}],evidence)
-
-
-@pytest.mark.parametrize('case',cases(),ids=lambda case:case['id'])
-def test_recommended_tools_follow_incident_type(case):
-    from agents.investigation_policy import recommended_tools
-    alert=map_wazuh_alert(case['events'][0])
-    assert recommended_tools(alert)[0]==case['expected_tool']

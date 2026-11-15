@@ -118,7 +118,7 @@ def definitions(allowed_tools=None):
         if isinstance(schema,list):
             return [compact(v) for v in schema]
         return schema
-    names = MODELS if allowed_tools is None else allowed_tools
+    names = (name for name in MODELS if name != 'get_alert') if allowed_tools is None else allowed_tools
     return [{'type':'function','function':{'name':name,'description':DESCRIPTIONS[name],
             'parameters':compact(MODELS[name].model_json_schema())}} for name in names if name in MODELS]
 

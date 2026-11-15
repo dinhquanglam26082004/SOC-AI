@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from agents.investigation_graph import InvestigationGraph
 from agents.investigation_schema import Limits, WorkflowError
 from agents.investigation_store import InvestigationStore
-from agents.investigation_tools import LocalTools
+from agents.investigation_tools import LocalTools, MODELS
 from api.app import create_app, analyze
 from common.event_store import EventStore
 from wazuh_integration.mapper import map_wazuh_alert
@@ -108,24 +108,28 @@ def test_graph_bounded_persisted_and_cached(lab):
         assert db.execute('SELECT COUNT(*) FROM checkpoints').fetchone()[0]>0
 
 
-def test_model_can_use_tools_outside_recommendations(lab):
+def test_model_selects_tools_without_static_recommendations(lab):
     store,audit,trigger,_=lab
     trigger['source_product']='zeek'
     trigger['rule']['groups']=['zeek_detection']
     available=[]
+    first_context={}
 
     def client(messages,**kwargs):
         if kwargs.get('schema'):
             return {'message':{'content':json.dumps(report(audit,audit.current(trigger['id'])['id']))}}
+        if not first_context:
+            first_context.update(json.loads(messages[1]['content']))
         available.extend(tool['function']['name'] for tool in kwargs['tools'])
         return {'message':{'content':'','tool_calls':[
-            {'function':{'name':'search_auth_events','arguments':{}}}]}}
+            {'function':{'name':'search_zeek_connections','arguments':{}}}]}}
 
     result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
-    assert {'search_zeek_connections','search_related_alerts','get_event_details','search_auth_events'} <= set(available)
+    assert set(available)==set(MODELS)-{'get_alert'}
+    assert 'recommended_tools' not in first_context
     tool_calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
-    rejected=[call for call in tool_calls if call['name']=='search_auth_events']
-    assert rejected and rejected[0]['result'].get('error') != 'tool_not_allowed'
+    selected=[call for call in tool_calls if call['name']=='search_zeek_connections']
+    assert selected and selected[0]['result'].get('error') != 'tool_not_allowed'
 
 
 @pytest.mark.parametrize('verdict',['malicious','benign'])
