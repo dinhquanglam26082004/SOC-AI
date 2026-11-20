@@ -96,6 +96,9 @@ class Spool:
 def integration(alert_path):
     """Exit success only after a durable write, or an explicit forwarding filter skip."""
     raw = json.loads(Path(alert_path).read_text(encoding='utf-8'))
+    from wazuh_integration.collection_policy import selected_source
+    if not selected_source(raw):
+        return
     rule = raw.get('rule', {})
     zeek_transport = ('zeek_telemetry' in rule.get('groups', [])
                       and '/zeek/logs/current/' in str(raw.get('location', '')))

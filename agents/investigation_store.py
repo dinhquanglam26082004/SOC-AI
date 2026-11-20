@@ -228,8 +228,28 @@ class InvestigationStore:
                                 (incident_id,kind,limit+1,offset)).fetchall()
                 items=[{**dict(r),'args':json.loads(r['args']),'result':json.loads(r['result']) if r['result'] else None} for r in rows[:limit]]
                 total=db.execute('SELECT COUNT(*) FROM calls WHERE incident_id=? AND kind=?',(incident_id,kind)).fetchone()[0]
-            return {**self._row(row),'section':section,'items':items,'total':total,
-                    'next_offset':offset+limit if len(rows)>limit else None}
+            result = {**self._row(row),'section':section,'items':items,'total':total,
+                      'next_offset':offset+limit if len(rows)>limit else None}
+            if section == 'activity' and offset == 0:
+                report = result.get('report') or {}
+                refs = list(dict.fromkeys(ref for finding in report.get('findings', [])
+                    if isinstance(finding, dict) for ref in finding.get('evidence_ids', [])
+                    if isinstance(ref, str)))[:400]
+                if refs:
+                    placeholders = ','.join('?' for _ in refs)
+                    matches = db.execute('SELECT payload FROM evidence WHERE incident_id=? AND id IN ('
+                                         + placeholders + ')', (incident_id, *refs)).fetchall()
+                    compact = []
+                    for match in matches:
+                        item = json.loads(match['payload'])
+                        data = item.get('data') or {}
+                        compact.append({key:item.get(key) for key in ('evidence_id','evidence_type','event_time','tool')} | {
+                            'data': {key:data.get(key) for key in ('src_ip','dst_ip','dst_port','username',
+                                'auth_outcome','log_type','dns','http','zeek_connection') if data.get(key) is not None}})
+                    result['finding_evidence'] = compact
+                else:
+                    result['finding_evidence'] = []
+            return result
 
     @staticmethod
     def activity_item(row,terminal=False):
@@ -240,6 +260,7 @@ class InvestigationStore:
         if row['kind']=='tool':
             item.update(query=json.loads(row['args']),outcome=result.get('status'),
                         result_count=len(result.get('items',[])),error=result.get('error'),
+                        model_explanation=result.get('model_explanation') or {},
                         evidence_ids=[e['evidence_id'] for e in result.get('items',[]) if 'evidence_id' in e])
             if result.get('authentication_summary'):
                 summary=result['authentication_summary']

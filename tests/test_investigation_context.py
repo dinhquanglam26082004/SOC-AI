@@ -35,6 +35,47 @@ def test_context_budget_and_interleaving():
     assert sum(len(json.dumps(e,ensure_ascii=False)) for e in result['evidence'])<=1200
 
 
+def test_dns_and_flow_aggregates_keep_scope_and_limitations_in_model_context():
+    scope={'agent_id':'001','domain':'lab.test','since':'2026-11-20T00:00:00Z',
+           'until':'2026-11-20T00:30:00Z','window_seconds':1800}
+    dns=item('DNS-AGG','aggregate','summarize_dns_activity',dns_summary={'scope':scope,
+        'matched_records':80,'unique_queries':65,'query_types':{'NULL':25},
+        'records_missing_query_in_scope':3,'coverage':'Retained records only; duplicates may exist.'})
+    flow=item('FLOW-AGG','aggregate','summarize_zeek_flows',flow_summary={'scope':{'agent_id':'001',
+        'src_ip':'192.0.2.1','dst_ip':'192.0.2.2','dst_port':80,'since':scope['since'],'until':scope['until']},
+        'flow_observations':42,'missing_fields':{'orig_pkts':2},'totals':{'orig_pkts':50},
+        'coverage':'Retained records only; service impact is not established.'})
+    result=pack_evidence([dns,flow],4000)
+    data=[e['data'] for e in result['evidence']]
+    assert data[0]['dns_summary']['scope']==scope
+    assert data[0]['dns_summary']['records_missing_query_in_scope']==3
+    assert 'duplicates' in data[0]['dns_summary']['coverage']
+    assert data[1]['flow_summary']['missing_fields']['orig_pkts']==2
+    assert 'service impact' in data[1]['flow_summary']['coverage']
+    assert result['context_coverage']['factual_evidence_items_in_context']==2
+
+
+def test_context_reports_truncated_fields_and_record_counts():
+    result=pack_evidence([item('LONG',full_log='x'*1000),item('EXTRA',full_log='y'*1000)],800)
+    assert result['context_truncated']
+    assert result['context_coverage']['factual_evidence_items_available']==2
+    assert result['context_coverage']['factual_evidence_items_in_context']==len(result['evidence'])
+    assert any('LONG'==e['evidence_id'] for e in result['evidence'])
+
+
+def test_auth_aggregate_keeps_scope_counts_and_marks_omitted_groups():
+    auth={'scope':{'agent_id':'007','source_ip':'192.0.2.7','since':'2026-11-20T00:00:00Z',
+                   'until':'2026-11-20T00:30:00Z'},
+          'groups':[{'username':f'user{n}','failure_count':n} for n in range(8)],
+          'groups_truncated':False,'count_unit':'retained records','counts_scope':'stored only',
+          'interpretation':'Authentication success does not establish compromise.'}
+    result=pack_evidence([item('AUTH-AGG','aggregate','search_auth_events',authentication_summary=auth)],4000)
+    compact=result['evidence'][0]['data']['authentication_summary']
+    assert compact['scope']==auth['scope'] and len(compact['groups'])==5
+    assert compact['groups_truncated'] and result['context_truncated']
+    assert result['allowed_factual_evidence_ids']==['AUTH-AGG']
+
+
 def test_large_trigger_detail_never_silently_disappears():
     evidence=[item('TRIGGER','trigger',details_requested=True,full_log='File modified',
         rule={'description':'Integrity checksum changed'},event_details={'syscheck':{
@@ -81,7 +122,7 @@ def test_repair_contains_only_factual_reference_catalog(tmp_path):
     for messages in seen:
         ctx=json.loads(messages[1]['content'])
         assert not set(ctx['allowed_factual_evidence_ids']) & {g['guidance_id'] for g in ctx['guidance']}
-    assert 'Previous validation error' in seen[-1][-1]['content']
+    assert 'Lỗi kiểm tra trước đó' in seen[-1][-1]['content']
 
 
 def test_invalid_argument_json_never_becomes_unfiltered_search(tmp_path):
@@ -90,7 +131,7 @@ def test_invalid_argument_json_never_becomes_unfiltered_search(tmp_path):
     def client(messages,**kwargs):
         if kwargs.get('schema'):
             return {'message':{'content':json.dumps({'incident_type':'Test','verdict':'inconclusive',
-                'reasoning':'Invalid query','findings':[],'unknowns':['Query failed'],'recommendations':[]})}}
+                'reasoning':'Tham số truy vấn không hợp lệ.','findings':[],'unknowns':['Truy vấn thất bại.'],'recommendations':[]})}}
         return {'message':{'content':'','tool_calls':[{'function':{
             'name':'search_auth_events','arguments':'{invalid json'}}]}}
     report=InvestigationGraph(store,audit,client=client).run_alert(alert)

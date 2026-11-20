@@ -3,12 +3,24 @@ PLAYBOOK ID: PB-DOS-001
 NAME:
 Suspected Denial of Service Response
 
+Provenance: Curated summary of MITRE ATT&CK T1498 (Network Denial of Service,
+sub-techniques Direct Network Flood T1498.001 and Reflection Amplification
+T1498.002), T1499 (Endpoint Denial of Service), mitigation M1037, and the
+CISA/FBI/MS-ISAC guidance on understanding and responding to DDoS attacks,
+reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1498/ ,
+https://attack.mitre.org/techniques/T1499/ , https://attack.mitre.org/mitigations/M1037/
+and https://www.cisa.gov/ (search "Understanding and Responding to DDoS Attacks").
+Guidance, not incident evidence.
+
 TRIGGER:
 Network or application telemetry shows an unusual increase in requests,
 connections, or failed flows targeting a service. A threshold alert is a
 signal to investigate, not proof that the service is unavailable or that
 the traffic is malicious. This playbook applies to suspected DoS and
-possible DDoS activity.
+possible DDoS activity. MITRE maps network floods to T1498 (Impact, TA0040):
+T1498.001 Direct Network Flood from one or many sources, and T1498.002
+Reflection Amplification, which abuses third-party servers that respond to a
+spoofed victim address. DoS aimed at the host itself is T1499.
 
 INVESTIGATION:
 1. Identify the affected service, destination, port, protocol, detection
@@ -25,6 +37,8 @@ INVESTIGATION:
 6. Assess whether traffic comes from one source or many. NAT, proxies,
    spoofed addresses, and shared infrastructure can make source counts
    misleading; multiple sources alone do not prove a distributed attack.
+   Source spoofing and reflection reduce the value of simple source-IP
+   filtering, so prefer behavior-based assessment over fixed source lists.
 7. Preserve the relevant alerts, logs, service-health measurements, and
    timeline before making changes.
 8. Record the assessment as suspected or confirmed service impact, and
@@ -38,7 +52,7 @@ RESPONSE:
 2. If impact is confirmed, coordinate mitigation with the service owner and
    network/hosting provider. Prefer scoped, reversible controls such as
    rate limits, filtering for a verified traffic pattern, or provider
-   scrubbing where available.
+   scrubbing where available (M1037 Filter Network Traffic).
 3. Before applying a control, identify its target, duration, expected effect,
    customer impact, monitoring criteria, and rollback procedure.
 4. Avoid broad IP, country, or network-range blocks unless an analyst and
@@ -47,8 +61,10 @@ RESPONSE:
    or adjust controls if they disrupt expected service.
 6. Preserve incident evidence and record decisions, approvals, changes,
    timestamps, and observed outcomes.
-7. After recovery, review capacity, upstream protections, alert thresholds,
-   and operational lessons with the service owner.
+7. After recovery, follow the CISA/FBI/MS-ISAC guidance: watch for a secondary
+   attack, update the DoS response plan, and refresh the baseline of normal
+   network activity. Review capacity, upstream protections, and alert
+   thresholds with the service owner.
 
 ESCALATION:
 Escalate promptly to the SOC lead and affected service owner when availability

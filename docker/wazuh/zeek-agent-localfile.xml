@@ -1,8 +1,10 @@
-<!-- Add inside an existing ossec_config block on the Ubuntu Agent. -->
-<localfile>
-  <!-- syslog reads each text line, including JSON logs and startup/error text. -->
-  <log_format>syslog</log_format>
-  <location>/opt/zeek/logs/current/*.log</location>
-  <exclude>/opt/zeek/logs/current/telemetry.log</exclude>
-  <only-future-events>no</only-future-events>
-</localfile>
+<!-- Add inside the existing ossec_config. Remove all other Zeek localfiles. -->
+<localfile><log_format>json</log_format><location>/opt/zeek/logs/current/dns.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/conn.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/http.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/ssh.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/ssl.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/notice.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/files.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/dhcp.log</location><only-future-events>yes</only-future-events></localfile>
+<localfile><log_format>syslog</log_format><location>/opt/zeek/logs/current/weird.log</location><only-future-events>yes</only-future-events></localfile>

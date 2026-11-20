@@ -1,0 +1,22 @@
+<group name="soc_local,">
+  <!-- Keep the stock rule's match and diff behavior; lower its priority by one level. -->
+  <rule id="533" level="6" overwrite="yes">
+    <if_sid>530</if_sid>
+    <match>ossec: output: 'netstat listening ports</match>
+    <check_diff />
+    <description>Listened ports status (netstat) changed (new port opened or closed).</description>
+    <group>pci_dss_10.2.7,pci_dss_10.6.1,gpg13_10.1,gdpr_IV_35.7.d,hipaa_164.312.b,nist_800_53_AU.14,nist_800_53_AU.6,tsc_CC6.8,tsc_CC7.2,tsc_CC7.3,</group>
+  </rule>
+</group>
+
+<!-- Preserve the stock syslog rule; only localize its description. -->
+<group name="syslog,access_control,">
+  <rule id="2502" level="10" overwrite="yes">
+    <match>more authentication failures;|REPEATED login failures</match>
+    <description>syslog: Nguoi dung nhap sai mat khau nhieu lan</description>
+    <mitre>
+      <id>T1110</id>
+    </mitre>
+    <group>authentication_failed,pci_dss_10.2.4,pci_dss_10.2.5,gpg13_7.8,gdpr_IV_35.7.d,gdpr_IV_32.2,hipaa_164.312.b,nist_800_53_AU.14,nist_800_53_AC.7,tsc_CC6.1,tsc_CC6.8,tsc_CC7.2,tsc_CC7.3,</group>
+  </rule>
+</group>

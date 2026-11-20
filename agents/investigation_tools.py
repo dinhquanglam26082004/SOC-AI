@@ -1,5 +1,6 @@
 """Allowlisted, bounded local reads. Log contents are untrusted observations."""
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
+from collections import Counter
 from datetime import datetime, timedelta, timezone
 import json
 import sqlite3
@@ -37,8 +38,22 @@ class HttpArgs(ScopeArgs):
 
 class DnsArgs(ScopeArgs):
     query: str | None = Field(default=None, min_length=1, max_length=512)
+    domain_suffix: str | None = Field(default=None, min_length=3, max_length=253)
+    qtype_name: str | None = Field(default=None, min_length=1, max_length=16)
     rcode_name: str | None = Field(default=None, min_length=1, max_length=64)
     uid: str | None = Field(default=None, min_length=1, max_length=128)
+
+
+class DnsSummaryArgs(BaseModel):
+    model_config = ConfigDict(extra='forbid', strict=True)
+    domain: str = Field(min_length=1, max_length=253)
+    since: str = Field(min_length=1, max_length=64)
+    until: str = Field(min_length=1, max_length=64)
+
+
+class DnsBaselineArgs(DnsSummaryArgs):
+    baseline_since: str = Field(min_length=1, max_length=64)
+    baseline_until: str = Field(min_length=1, max_length=64)
 
 
 class FileArgs(ScopeArgs):
@@ -85,42 +100,110 @@ MODELS = {'get_alert': AlertArgs, 'search_auth_events': SearchArgs,
           'search_zeek_http': HttpArgs, 'search_zeek_dns': DnsArgs,
           'search_file_changes': FileArgs, 'search_privilege_events': PrivilegeArgs,
           'summarize_zeek_flows': FlowSummaryArgs,
+          'summarize_dns_activity': DnsSummaryArgs, 'compare_dns_baseline': DnsBaselineArgs,
+          'search_process_events': ScopeArgs, 'search_file_access': FileArgs,
           'get_event_details': DetailArgs,
           'search_runbook': RunbookArgs,
           'search_rootkit_evidence': RootkitArgs,
           }
 DESCRIPTIONS = {
-    'get_alert': 'Read the triggering alert only. alert_id must match the investigation.',
-    'search_auth_events': 'Read collected authentication success AND failure events for this agent within the incident window.',
-    'search_related_alerts': 'Read related Wazuh security alerts for this agent within the incident window.',
-    'search_zeek_connections': 'Read historical Zeek conn observations; these are not live sockets or process ownership.',
-    'summarize_zeek_flows': 'Aggregate retained TCP conn records for exact alert source IP, destination IP and destination port in a bounded time window. Counts are observations, not proof of attack or service impact.',
-    'search_zeek_http': 'Read retained Zeek HTTP requests/responses. Exact host, method, status and uid filters; uri_contains is literal. HTTPS content may be unavailable. A response code does not prove exploitation.',
-    'search_zeek_dns': 'Read retained Zeek DNS queries/answers. query is an exact case-insensitive DNS name; uid and rcode_name are exact. Long queries alone do not prove exfiltration.',
-    'search_file_changes': 'Read retained Wazuh FIM records, optionally for one exact file_path. Attribution exists only when source who-data fields exist; temporal proximity is not ownership.',
-    'search_privilege_events': 'Read sudo/su records, including failures and successful command records. actor_user filters srcuser and target_user filters dstuser; these are distinct identities. A sudo request does not prove execution.',
-    'get_event_details': 'Expand one already collected incident evidence_id into a bounded original record. No arbitrary record or file access. Read details when a summary is insufficient.',
-    'search_runbook': 'Retrieve local response guidance, never proof that an event happened.',
+    # Rule IDs are examples for interpretation, not an automatic routing policy.
+    # Keep descriptions compact because all tool schemas share the model context.
+    'get_alert': (
+        'System-called first for any rule: read the triggering alert, agent, time and fields. '
+        'alert_id must equal the investigation alert.'),
+    'search_auth_events': (
+        'For login failures or SSH brute force, e.g. rules 2502/100172: find retained '
+        'auth successes and failures, with counts by user and source IP. The IP must be '
+        'in incident scope; records are not unique sessions or proof of compromise.'),
+    'search_related_alerts': (
+        'For any rule, look for other retained security alerts on the same agent and time '
+        'window; optionally filter by scoped IP or user. May include the trigger itself. '
+        'Proximity alone does not prove a causal link.'),
+    'search_zeek_connections': (
+        'For scan, DoS or DNS activity, e.g. rules 100141/100142/100143/100145, '
+        'inspect retained Zeek conn flows and bytes. Scoped IP matches either endpoint; '
+        'there is no port filter. Rows are bounded historical observations, not live sockets.'),
+    'summarize_zeek_flows': (
+        'For single-source TCP bursts, e.g. rule 100142, aggregate retained flows, '
+        'packets and IP bytes and their average rates. Source, destination and port must '
+        'exactly match the trigger. It cannot total all sources in DDoS or prove impact.'),
+    'search_zeek_http': (
+        'For web alerts 100130-100134, inspect retained HTTP method, host, URI and status. '
+        'host/method/status/uid are exact; uri_contains is literal. HTTPS content can be '
+        'missing; a response code does not prove exploitation.'),
+    'search_zeek_dns': (
+        'For DNS anomaly/tunneling rules 100151/100153/100156/100157/100181, '
+        'list retained queries, types and answers. Filter with domain_suffix (the domain and '
+        'all its subdomains) and/or qtype_name, otherwise unrelated lookups (PTR, NTP) dominate. '
+        'query matches one full name exactly; use summarize_dns_activity for counts.'),
+    'summarize_dns_activity': (
+        'For DNS tunneling or query bursts, e.g. 100153/100156/100157/100181, count '
+        'retained queries for the supplied domain and subdomains: distinct names, types, '
+        'response codes, lengths and counts per minute. Duplicates may exist; not proof of tunneling.'),
+    'compare_dns_baseline': (
+        'For DNS anomaly/tunneling, compare the same domain in two equal-length windows: '
+        'baseline first, no overlap, both within incident scope. Reports retained counts '
+        'and distributions, not a historical multi-day baseline or proof of normality.'),
+    'search_process_events': (
+        'For suspected execution after DNS, SSH or file alerts, inspect retained Wazuh '
+        'audit_command records for the agent and window. Requires collection of that group; '
+        'not live process enumeration and no result does not prove absence.'),
+    'search_file_access': (
+        'For suspected file reads or exfiltration, inspect retained audit_watch_read events; '
+        'file_path is exact. Requires the relevant audit records to be collected. FIM '
+        'changes do not prove a read, and no result does not prove no access.'),
+    'search_file_changes': (
+        'For FIM alerts such as rule 550 or suspected persistence, read retained syscheck '
+        'file changes; file_path is exact. A user/process is attributable only when '
+        'who-data is present; a file change is not a file-read event.'),
+    'search_privilege_events': (
+        'For suspicious sudo/su or escalation around any alert, inspect retained sudo/su '
+        'records. actor_user matches srcuser and target_user matches dstuser; they are '
+        'different identities. A request or failure alone does not prove execution.'),
+    'get_event_details': (
+        'When a collected event summary is insufficient, expand its evidence_id into a '
+        'bounded original record. Only incident event evidence is accepted; guidance and '
+        'aggregates are not raw event IDs. Details may be truncated or no longer retained.'),
+    'search_runbook': (
+        'For any incident needing investigation or response steps, search local indexed '
+        'playbooks by query. Retrieved guidance is not evidence and does not perform an action.'),
     'search_rootkit_evidence': (
-        'Investigate Wazuh rootcheck Rule 521. '
-        'Find related rootcheck and kernel module alerts, '
-        'plus historical endpoint process snapshots '
-        'for the same agent and incident time window. '
-        'Repeated alerts are not independent confirmation. '
-        'No live commands are executed.'),
+        'Only for rule 521 or rootcheck alerts whose description mentions rootkit/hidden: '
+        'find retained related alerts and existing endpoint snapshots for the agent/window. '
+        'If supplied, pid must match the trigger. No live scan; repeated alerts are not independent proof.'),
     }
 
 
 def definitions(allowed_tools=None):
+    # Tool schemas are rendered into every planning prompt of a small-context local model.
+    # Publish only names, types and descriptions; Pydantic still enforces optionality,
+    # length and range limits on every call, so dropping them here loses no safety.
     def compact(schema):
         if isinstance(schema,dict):
-            return {k:compact(v) for k,v in schema.items() if k!='title'}
+            options=schema.get('anyOf')
+            if isinstance(options,list):
+                concrete=[o for o in options if o.get('type')!='null']
+                if len(concrete)==1:
+                    schema={**{k:v for k,v in schema.items() if k!='anyOf'},**concrete[0]}
+            return {k:compact(v) for k,v in schema.items()
+                    if k not in {'title','maxLength','minLength','additionalProperties','minimum','maximum'}
+                    and not (k=='default' and v is None)}
         if isinstance(schema,list):
             return [compact(v) for v in schema]
         return schema
     names = (name for name in MODELS if name != 'get_alert') if allowed_tools is None else allowed_tools
-    return [{'type':'function','function':{'name':name,'description':DESCRIPTIONS[name],
-            'parameters':compact(MODELS[name].model_json_schema())}} for name in names if name in MODELS]
+    result=[]
+    for name in names:
+        if name not in MODELS:
+            continue
+        schema=compact(MODELS[name].model_json_schema())
+        schema.setdefault('properties', {}).update({
+            '_verification_question': {'type':'string', 'description':'Câu hỏi cần xác minh'},
+            '_selection_reason': {'type':'string', 'description':'Lý do chọn'},
+        })
+        result.append({'type':'function','function':{'name':name,'description':DESCRIPTIONS[name], 'parameters':schema}})
+    return result
 
 
 def bounded(value, budget=6000):
@@ -172,7 +255,7 @@ def observation(record):
         (raw.get('decoder') or {}).get('name') in {'sudo','su'} or
         (raw.get('predecoder') or {}).get('program_name') in {'sudo','su'})
     rootkit_snapshot = (data if isinstance(data, dict) and data.get('producer') == 'soc-ai-rootkit-snapshot-v1' else {})
-    structured,cut=bounded({'zeek_connection':network,'http':http,'dns':dns,
+    structured,cut=bounded({'zeek_connection':network,'http':http,'dns':dns,'audit':data.get('audit') if isinstance(data.get('audit'),dict) else {},
         'file_change':raw.get('syscheck') or {},
         'privilege':{k:data[k] for k in ('srcuser','dstuser','command','tty','pwd') if k in data} if privilege_source else {},
         'rootkit_snapshot': {
@@ -196,6 +279,73 @@ def observation(record):
             'data':json.dumps(raw.get('data') or {},ensure_ascii=False)[:2500],
             **structured,'summary_truncated':cut or len(str(raw.get('full_log') or ''))>2000
                 or len(json.dumps(data,ensure_ascii=False))>2500}
+
+
+def summarize_dns_records(path, agent, domain, since, until, timeout):
+    domain=domain.lower().rstrip('.')
+    if not domain or len(domain)>253 or any(not part for part in domain.split('.')):
+        raise ValueError('A valid exact domain suffix is required')
+    since,until=utc_stamp(since),utc_stamp(until)
+    if since>=until: raise ValueError('Window must have positive duration')
+    deadline=time.monotonic()+timeout
+    db=sqlite3.connect(Path(path).resolve().as_uri()+'?mode=ro',uri=True,timeout=.5)
+    db.execute('PRAGMA query_only=ON');db.set_progress_handler(lambda:int(time.monotonic()>deadline),1000)
+    count=0;missing=0;names=set();types=Counter();rcodes=Counter();minutes=Counter();fallback=[];lengths=[];first=None;last=None
+    first_sample=last_sample=longest_sample=success_sample=error_sample=None
+    try:
+        rows=db.execute('''SELECT i.event_time,COALESCE(e.payload,z.payload) FROM investigation_event_index i
+            JOIN log_index l ON l.id=i.id LEFT JOIN events e ON e.id=i.id LEFT JOIN zeek_logs z ON z.id=i.id
+            WHERE i.agent_id=? AND i.event_time>=? AND i.event_time<? AND l.origin='zeek' AND l.log_type='dns'
+            ORDER BY i.event_time,i.id''',(agent,since,until))
+        scanned=0
+        for stamp,payload in rows:
+            scanned+=1
+            if scanned>100000: return {'status':'unavailable','error':'aggregation_record_limit','detail':'Narrow the window; no partial totals returned.'}
+            record=json.loads(payload);z=record.get('zeek_data') or {};q=z.get('query')
+            if not isinstance(q,str) or not q.strip(): missing+=1;continue
+            q=q.lower().rstrip('.')
+            if q!=domain and not q.endswith('.'+domain): continue
+            count+=1;names.add(q);lengths.append(len(q));types[str(z.get('qtype_name') or 'unknown')]+=1;rcodes[str(z.get('rcode_name') or 'unknown')]+=1;minutes[stamp[:16]]+=1
+            first=first or stamp;last=stamp
+            if first_sample is None:first_sample=record
+            last_sample=record
+            if longest_sample is None or len(q)>longest_sample[0]:longest_sample=(len(q),record)
+            response=str(z.get('rcode_name') or '').upper()
+            if response=='NOERROR' and success_sample is None:success_sample=record
+            if response and response not in ('NOERROR','UNKNOWN') and error_sample is None:error_sample=record
+            if len(fallback)<5:fallback.append(record)
+    finally: db.close()
+    # These are deliberately diverse examples, not a random or representative sample.
+    samples=[];sample_ids=set()
+    candidates=[first_sample,last_sample,longest_sample[1] if longest_sample else None,error_sample,success_sample,*fallback]
+    for record in candidates:
+        if record is not None and record['id'] not in sample_ids:
+            samples.append(record);sample_ids.add(record['id'])
+            if len(samples)==5:break
+    seconds=(datetime.fromisoformat(until.replace('Z','+00:00'))-datetime.fromisoformat(since.replace('Z','+00:00'))).total_seconds()
+    return {'status':'ok','summary':{'scope':{'agent_id':agent,'domain':domain,'since':since,'until':until,'window_seconds':seconds},
+        'matched_records':count,'unique_queries':len(names),'unique_subdomains':sum(q!=domain for q in names),
+        'first_event_time':first,'last_event_time':last,'query_types':dict(types),'response_codes':dict(rcodes),
+        'counts_by_minute_utc':dict(minutes),'average_query_length':sum(lengths)/len(lengths) if lengths else None,
+        'max_query_length':max(lengths) if lengths else None,'records_missing_query_in_scope':missing,
+        'timestamp_basis':'normalized event time; half-open window [since, until)',
+        'sample_selection':'Up to five distinct records: first, last, longest query, first error and first NOERROR where available; remaining slots use early records. Not a representative sample.',
+        'coverage':'Counts are retained records, not unique DNS requests or complete capture; duplicates may exist. Missing query records cannot be attributed to a domain.'},'samples':samples}
+
+
+def compare_dns_records(path, agent, args, timeout):
+    names=('baseline_since','baseline_until','since','until')
+    values=[utc_stamp(args[n]) for n in names]
+    b0,b1,i0,i1=values
+    stamp=lambda v:datetime.fromisoformat(v.replace('Z','+00:00'))
+    if not b0<b1<=i0<i1 or (stamp(b1)-stamp(b0))!=(stamp(i1)-stamp(i0)):
+        raise ValueError('Baseline must precede incident without overlap; windows must have equal duration')
+    before=summarize_dns_records(path,agent,args['domain'],b0,b1,timeout/2)
+    if before['status']!='ok':return before
+    during=summarize_dns_records(path,agent,args['domain'],i0,i1,timeout/2)
+    if during['status']!='ok':return during
+    return {'status':'ok','baseline':before['summary'],'incident':during['summary'],
+            'samples':during['samples'], 'interpretation':'Comparison of retained records only; missing data and normal variability are not ruled out.'}
 
 
 class LocalTools:
@@ -227,6 +377,8 @@ class LocalTools:
                 return self.runbook(args,min(timeout or self.seconds,self.seconds))
             if not self.agent:
                 return self.envelope('unavailable',error='agent identity missing')
+            if name in {'summarize_dns_activity','compare_dns_baseline'}:
+                return self.dns_aggregate(name,args,min(timeout or self.seconds,self.seconds))
             if name=='summarize_zeek_flows':
                 return self.summarize_flows(args,min(timeout or self.seconds,self.seconds))
             if name=='get_event_details':
@@ -260,6 +412,10 @@ class LocalTools:
                     params.append(kind)
                 elif name=='search_file_changes':
                     where.extend(["i.category!='network'",field('raw_event.syscheck.path')+' IS NOT NULL'])
+                elif name in {'search_process_events','search_file_access'}:
+                    group='audit_command' if name=='search_process_events' else 'audit_watch_read'
+                    where.extend(["i.category!='network'", "EXISTS (SELECT 1 FROM json_each("+payload+", '$.rule.groups') WHERE value=?)"])
+                    params.append(group)
                 elif name=='search_privilege_events':
                     where.extend(["i.category!='network'",'('+field('raw_event.decoder.name')+" IN ('sudo','su') OR "+
                         field('raw_event.predecoder.program_name')+" IN ('sudo','su') OR EXISTS (SELECT 1 FROM json_each("+
@@ -273,11 +429,17 @@ class LocalTools:
                         where.append('(i.src_ip=? OR i.dst_ip=?)'); params.extend([args['ip'],args['ip']])
                 if args.get('username'):
                     where.append('i.username=?');params.append(args['username'])
-                exact_fields={'uid':'zeek_data.uid','file_path':'raw_event.syscheck.path',
+                exact_fields={'uid':'zeek_data.uid','file_path':('raw_event.data.audit.file.name' if name=='search_file_access' else 'raw_event.syscheck.path'),
                     'actor_user':'raw_event.data.srcuser','target_user':'raw_event.data.dstuser'}
                 for arg,path in exact_fields.items():
                     if args.get(arg) is not None:
                         where.append(field(path)+'=?');params.append(args[arg])
+                if args.get('domain_suffix') is not None:
+                    suffix=args['domain_suffix'].lower().rstrip('.')
+                    q='LOWER('+field('zeek_data.query')+')'
+                    where.append('('+q+'=? OR substr('+q+',-?)=?)');params.extend([suffix,len(suffix)+1,'.'+suffix])
+                if args.get('qtype_name') is not None:
+                    where.append('UPPER('+field('zeek_data.qtype_name')+')=UPPER(?)');params.append(args['qtype_name'])
                 for arg in ('host','query','method','rcode_name'):
                     if args.get(arg) is not None:
                         where.append('LOWER('+field('zeek_data.'+arg)+')=LOWER(?)');params.append(args[arg])
@@ -302,7 +464,9 @@ class LocalTools:
                     for bucket in buckets.values():
                         bucket['failure_before_success']=bool(bucket['username'] and bucket['source_ip'] and
                             bucket['first_failure'] and bucket['last_success'] and bucket['first_failure']<bucket['last_success'])
-                    auth_summary={'groups':list(buckets.values()),'groups_truncated':len(groups)>100,
+                    auth_summary={'scope':{'agent_id':self.agent,'since':since,'until':until,
+                                           'source_ip':args.get('ip'),'username':args.get('username')},
+                        'groups':list(buckets.values()),'groups_truncated':len(groups)>100,
                         'count_unit':'Retained normalized records, not unique authentication sessions.',
                         'counts_scope':'Exact for included agent/user/source-IP groups in retained data; not collection completeness.',
                         'interpretation':'Failure followed by success does not establish unauthorized access or compromise.'}
@@ -317,6 +481,11 @@ class LocalTools:
             result=self.collect(name,args,[json.loads(r[0]) for r in rows[:args['limit']]],len(rows)>args['limit'])
             if auth_summary is not None:
                 result['authentication_summary']=auth_summary
+                import hashlib
+                source_id='auth-aggregate-'+hashlib.sha256(json.dumps(auth_summary['scope'],sort_keys=True).encode()).hexdigest()
+                result['aggregate_evidence_id']=self.audit.add_evidence(
+                    self.incident_id,source_id,'aggregate',
+                    {'source':'derived-soc-sqlite','event_time':until,'authentication_summary':auth_summary},name,args)
             result.update(total_matched=total,returned_count=len(result['items']),
                 count_unit='Retained records matching this query; not unique sessions or proof of collection completeness.')
             return result
@@ -364,6 +533,23 @@ class LocalTools:
                 result[key] = value
         result['returned_count'] = len(result['items'])
         return result
+
+    def dns_aggregate(self,name,args,timeout):
+        for key in ('since','until','baseline_since','baseline_until'):
+            if key in args:
+                args[key]=utc_stamp(args[key])
+                if args[key]<self.since or args[key]>self.until:
+                    raise ValueError('time window outside incident scope')
+        result=(summarize_dns_records(self.store.path,self.agent,args['domain'],args['since'],args['until'],timeout)
+                if name=='summarize_dns_activity' else compare_dns_records(self.store.path,self.agent,args,timeout))
+        if result['status']!='ok':return self.envelope(**result)
+        samples=self.collect(name,args,result.pop('samples'),False)
+        import hashlib
+        source_id='aggregate-'+hashlib.sha256(json.dumps([name,self.agent,args],sort_keys=True).encode()).hexdigest()
+        summary=result.get('summary') or {'baseline':result['baseline'],'incident':result['incident'],'interpretation':result['interpretation']}
+        payload={'source':'derived-soc-sqlite','event_time':args['until'],'dns_summary':summary}
+        eid=self.audit.add_evidence(self.incident_id,source_id,'aggregate',payload,name,args)
+        return self.envelope('ok',items=samples['items'],summary=summary,aggregate_evidence_id=eid,query=args)
 
     def summarize_flows(self,args,timeout):
         from agents.zeek_flow_summary import summarize

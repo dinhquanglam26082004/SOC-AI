@@ -46,6 +46,26 @@ def legacy_page(db, limit=17, before=None, source=None, log_type=None, kind=None
             'cursor': base64.urlsafe_b64encode(json.dumps([page[-1]['received_at'], page[-1]['id']]).encode()).decode() if len(rows)>limit else None}
 
 
+def test_selected_log_view_hides_old_types_without_deleting_them(tmp_path):
+    store = EventStore(tmp_path / 'selected.sqlite3')
+    with store.connect() as db:
+        for index, (origin, log_type) in enumerate([
+                ('zeek', 'dns'), ('zeek', 'capture_loss'), ('zeek', 'conn-summary.26-11'),
+                ('wazuh', 'journald'), ('wazuh', 'syscollector')]):
+            item = record(index, zeek=origin == 'zeek')
+            item['log_type'] = log_type
+            db.execute('INSERT INTO events VALUES(?,?)', (item['id'], json.dumps(item)))
+            db.execute('INSERT INTO log_index VALUES(?,?,?,?,?,?)',
+                       (item['id'], origin, log_type, 'alert', item['received_at'], ''))
+    selected = store.list_logs(selected_only=True)
+    assert selected['total'] == selected['total_all'] == 2
+    assert set(selected['log_types']) == {'dns', 'journald'}
+    assert {item['log_type'] for item in selected['logs']} == {'dns', 'journald'}
+    assert store.list_logs(source='zeek', selected_only=True)['log_types'] == ['dns']
+    assert store.list_logs(log_type='capture_loss', selected_only=True)['total'] == 0
+    assert store.list_logs()['total'] == 5
+
+
 @pytest.fixture
 def populated(tmp_path):
     path = tmp_path/'runtime.sqlite3'

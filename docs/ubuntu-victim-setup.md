@@ -48,7 +48,7 @@ và Python 3.12. Nếu đã có `.venv`, bỏ lệnh tạo lại môi trường.
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts\configure_local.py
 docker compose --profile app up -d --build
-docker compose exec ollama ollama pull qwen3:8b
+docker compose exec ollama ollama pull hf.co/mradermacher/RedSage-Qwen3-8B-DPO-GGUF:Q4_K_M
 docker compose ps
 ipconfig
 ```
@@ -235,38 +235,27 @@ Zeek riêng. Wazuh Agent đã được enable ở bước 4.
 Zeek ở victim quan sát lưu lượng qua NIC đó, không tự quan sát mọi VM khác trên
 virtual switch. SSH/HTTPS mã hóa không cho Zeek đọc mật khẩu/nội dung ứng dụng.
 
-## 7. Ubuntu: cho Wazuh thu tất cả file log Zeek
+## 7. Ubuntu: cho Wazuh thu các file log Zeek được chọn
 
 Chọn **một** cách cấu hình: local trên VM hoặc centralized từ Manager.
 Người cài mới từ GitHub nên dùng cách local dưới đây. File mẫu
 `docker/wazuh/zeek-all-agent.conf` không tự được áp dụng chỉ vì clone repository;
-lab gốc đã áp dụng nó từ Manager cho tên chính xác `ubuntu-agent`.
-Nếu centralized wildcard đã có hiệu lực, bỏ qua thêm localfile lần nữa.
+lab gốc có thể đã áp dụng cấu hình từ Manager cho tên chính xác `ubuntu-agent`.
+Thay wildcard cũ ở chính nơi đang được áp dụng, không kết hợp hai cách.
 
 ```bash
 sudo nano /var/ossec/etc/ossec.conf
 ```
 
-Thêm block sau bên trong `<ossec_config>` đang có, ngoài client/syscheck.
-Nếu trước đó đã thêm localfile riêng cho notice.log thì thay block đó bằng wildcard;
-không giữ cả hai. Giữ nguyên cấu hình thu auth.log/journald và các nguồn khác.
-
-```xml
-<localfile>
-  <log_format>syslog</log_format>
-  <location>/opt/zeek/logs/current/*.log</location>
-  <exclude>/opt/zeek/logs/current/telemetry.log</exclude>
-  <only-future-events>no</only-future-events>
-</localfile>
-```
-
-syslog là chế độ đọc từng dòng, nhận cả JSON và text log vận hành. Cấu hình loại
-riêng `telemetry.log` để giảm tải; các log mạng vẫn được thu. Nếu Agent có block
-localfile Zeek cục bộ khác, thêm exclude vào block đó hoặc bỏ cấu hình thu trùng.
-Zeek JSON được
-Manager giải mã tự động. Đây là thu file log, không phải thu PCAP; wildcard này không
-đọc kho archive `.gz`. Việc đọc bù chịu checkpoint và giới hạn Wazuh, không bảo đảm
-nhập lại toàn bộ lịch sử. Không chmod 777; Agent cần đọc được file mới sau rotation.
+Thay các block Zeek cũ bằng nội dung `docker/wazuh/zeek-agent-localfile.xml`
+trong `<ossec_config>`; nếu dùng centralized thì thay cấu hình Agent tương ứng
+bằng `docker/wazuh/zeek-all-agent.conf`. Không giữ wildcard hay block trùng.
+Chỉ cấu hình dns, conn, http, ssh, ssl, notice, files, dhcp và weird.
+Trong mẫu hiện tại, `dns.log` dùng `log_format=json` và yêu cầu Zeek ghi
+JSON mỗi dòng; các nguồn Zeek khác giữ định dạng thu thập đã cấu hình.
+Việc sửa file mẫu trong repo không tự cập nhật Agent hoặc cấu hình đang chạy.
+`conn` tạm thời vẫn được thu đầy đủ; chưa có bộ IOC/cổng lạ và tổng hợp theo giờ.
+Đây là thu file log, không phải PCAP; không chmod 777.
 
 ```bash
 sudo systemctl restart wazuh-agent

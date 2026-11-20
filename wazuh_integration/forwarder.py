@@ -20,7 +20,9 @@ def deliver(spool, target, token, timeout=10):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             receipt = json.loads(response.read(65536))
-            if response.status not in (200, 201, 202) or receipt.get('durable') is not True:
+            acknowledged = receipt.get('durable') is True or (
+                receipt.get('filtered') is True and receipt.get('durable') is False)
+            if response.status not in (200, 201, 202) or not acknowledged:
                 raise ValueError('Missing durable receipt')
         spool.complete(row['id'])
     except urllib.error.HTTPError as exc:

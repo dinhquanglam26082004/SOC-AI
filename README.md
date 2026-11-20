@@ -25,7 +25,8 @@ Tiếp nhận **cảnh báo mới qua Wazuh**, bao gồm toàn bộ file log Zee
 Mục [Logs chung](docs/unified-logs.md) hiển thị Zeek và Wazuh trên một dòng thời gian,
 lọc theo nguồn và loại log; notice đồng thời xuất hiện trong Alerts. Máy Agent riêng tạo sự kiện; Manager Docker
 thu nhận và áp dụng rules; SOC-AI lưu bằng chứng rồi dùng Ollama + RAG để giải thích,
-phân biệt bằng chứng, suy luận, điều chưa xác minh và đề xuất. Response chưa thực thi (HTTP 501).
+phân biệt bằng chứng, suy luận, điều chưa xác minh và đề xuất. AI đề xuất kế hoạch phản ứng, analyst duyệt
+từng hành động, thực thi chỉ ở chế độ mô phỏng: xem [kế hoạch phản ứng](docs/response-planning.md).
 
 ```text
 Agent Windows/Linux, IP riêng, Wazuh Agent 4.14.5
@@ -34,7 +35,7 @@ Máy chính Windows 16 GB / Docker Desktop Linux containers
   Wazuh Manager 4.14.5 → custom integration → SQLite spool volume
   → forwarder → POST /wazuh + X-Webhook-Token
   → SQLite events + ai_jobs (commit trước HTTP 202)
-  → worker AI (1) → Ollama qwen3:8b + ChromaDB
+  → worker AI (1) → Ollama RedSage-Qwen3-8B-DPO + ChromaDB
   → dashboard: cảnh báo nguồn và suy luận AI tách biệt
 ```
 
@@ -55,7 +56,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe scripts\configure_local.py
 docker compose --profile app config --quiet
 docker compose --profile app up -d --build
-docker compose exec ollama ollama pull qwen3:8b
+docker compose exec ollama ollama pull hf.co/mradermacher/RedSage-Qwen3-8B-DPO-GGUF:Q4_K_M
 # Chỉ ingest lần đầu nếu collection rỗng, hoặc khi chủ động rebuild KB:
 docker compose exec soc-ai-app python -m rag.ingest
 docker compose ps
@@ -101,7 +102,8 @@ RUNTIME_DB_PATH=./data/soc_runtime.sqlite3
 ```powershell
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 docker compose up -d --build wazuh-manager wazuh-forwarder
-# Ollama native đã cài: chạy terminal riêng ollama serve; ollama pull qwen3:8b
+# Ollama native: chạy ollama serve, sau đó tải model.
+ollama pull hf.co/mradermacher/RedSage-Qwen3-8B-DPO-GGUF:Q4_K_M
 .\.venv\Scripts\python.exe main.py
 ```
 
@@ -137,7 +139,7 @@ alert cuối; không suy ra Agent online/offline từ im lặng. Xác minh Agent
 | WAZUH_SPOOL_MAX_BYTES | 268435456; 256 MiB cho file spool |
 | AI_CONTEXT_CHARS / AI_ALERT_CHARS | 6000 / 5000; raw_event vẫn lưu đầy đủ |
 | OLLAMA_NUM_CTX / OLLAMA_NUM_PREDICT | 4096 / 768 |
-| AGENT_MODEL | qwen3:8b; cấu hình tên model đã cài |
+| AGENT_MODEL | RedSage Q4_K_M; cấu hình tên model đã cài |
 
 Manager integration và log_alert_level cùng mặc định ≥3. Muốn chuyển mức thấp hơn phải
 sửa cả hai trong `docker/wazuh/ossec.conf`, cùng WAZUH_FORWARD_MIN_LEVEL. Không dùng ngưỡng
@@ -183,14 +185,14 @@ mount heartbeat thì dashboard ghi chưa biết; kiểm tra bằng docker exec.
 [Chính sách AI chỉ xử lý cảnh báo bảo mật](docs/alert-only-ai.md): log thường,
 thống kê Zeek, xoay vòng log, cài gói và SCA chỉ được lưu để tra cứu; không gọi AI.
 
-Mặc định dùng **Qwen3-8B**, xem [cấu hình, tài nguyên và chuyển model](docs/qwen3-8b.md).
+Mặc định dùng **RedSage-Qwen3-8B-DPO Q4_K_M**, xem [cấu hình model](docs/redsage.md).
 Model tải qua Ollama; trọng số không nằm trong repository.
 
 ## Ngân sách RAM
 
 Ước tính để lập kế hoạch, cần đo `docker stats` + Task Manager: Windows/app nền 4–6 GB;
 Docker VM overhead 1–2 GB; Manager 1–3 GB; backend + embedding/ChromaDB 1–3 GB; Ollama
-Qwen3-8B bản Q4_K_M tải khoảng 5.2 GB; RAM chạy còn gồm context và bộ nhớ xử lý.
+RedSage-Qwen3-8B-DPO bản Q4_K_M tải khoảng 5.03 GB; RAM chạy còn gồm context và bộ nhớ xử lý.
 Forwarder dưới 128 MB. Compose cap lần lượt 3 GB/3 GB/7 GB/128 MB; đây là giới hạn
 tối đa, không phải lượng RAM đặt trước. Docker VM cần đủ bộ nhớ cho tất cả dịch vụ.
 Ingest/model context lớn có thể OOM. Nếu Agent là VM trên cùng máy, cộng RAM VM đó;
@@ -211,7 +213,8 @@ Module nguồn cũ, endpoint nhận cũ, mapper, JSON replay và API/nút điề
 API giữ: GET /health; GET /api/logs (Zeek + Wazuh), /api/zeek/logs;
 GET /api/alerts, /api/alerts/timeseries, /api/alerts/{id};
 POST /api/alerts/{id}/investigate; GET/POST/PATCH cases; GET /api/sources/status,
-/api/system/status, /api/response/history; POST /api/response/execute (501).
+/api/system/status, /api/response/history; POST/GET /api/alerts/{id}/response/plan,
+POST /api/response/plans/{plan_id}/decision, POST /api/response/execute (chỉ mô phỏng).
 Nguồn mới duy nhất: POST /wazuh.
 
 ## Kiểm thử

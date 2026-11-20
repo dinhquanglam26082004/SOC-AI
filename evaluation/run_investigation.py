@@ -24,10 +24,10 @@ def run_case(case,mode):
                 return {'message':{'content':'','tool_calls':[{'function':{'name':case['expected_tool'],'arguments':{}}}]}}
             run=audit.current(events[0]['id']);refs=[e['evidence_id'] for e in audit.evidence(run['id'])]
             return {'message':{'content':json.dumps({'incident_type':'Evaluation only','verdict':case['expected_verdict'],
-                'reasoning':case['description'],'confidence':None,
-                'findings':[{'statement':'Collected records require review.','evidence_ids':refs}],
-                'hypotheses':[],'unknowns':['Authorization requires analyst verification.'],
-                'recommendations':['Review the evidence.']})}}
+                'reasoning':'Các bản ghi đã thu thập cần được chuyên viên xem xét.','confidence':None,
+                'findings':[{'statement':'Đã thu thập các bản ghi liên quan.','evidence_ids':refs}],
+                'hypotheses':[],'unknowns':['Chưa xác minh quyền truy cập.'],
+                'recommendations':['Kiểm tra bằng chứng.']})}}
         graph=InvestigationGraph(store,audit,model=AGENT_MODEL,client=mock if mode=='contract' else None,
             limits=Limits(rounds=1,model_calls=3,repair_calls=1,tool_calls=4,seconds=240))
         item={'case':case['id'],'expected_verdict':case['expected_verdict'],'mode':mode}

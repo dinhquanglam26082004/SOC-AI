@@ -46,6 +46,16 @@ def test_fim_mapping_and_no_attacker_inference(event):
     assert map_wazuh_alert(event)['file_path'].startswith('/tmp/')
 
 
+def test_wazuh_statistics_rule_without_description_is_retained_as_log(event):
+    event['rule']={'id':'11','level':4,'groups':['stats']}
+    event['location']='/opt/zeek/logs/current/conn.log'
+    event['full_log']='The average number of logs between 3:00 and 4:00 is 69. We reached 1320.'
+    record=map_wazuh_alert(event)
+    assert record['rule']['description']=='Wazuh log volume statistics'
+    assert 'description' not in record['raw_event']['rule']
+    assert record['event_kind']=='telemetry' and not ai_eligible(record)
+
+
 def test_windows_evidence_and_optional_fields(event):
     event.pop('syscheck')
     event['data'] = {'win': {'system': {'eventID': '4625'}, 'eventdata': {'targetUserName': 'soc-lab-user', 'ipAddress': '198.51.100.8'}}}
@@ -86,7 +96,8 @@ def test_webhook_auth_durable_async_and_restart_dedup(tmp_path, event):
         assert c.post('/wazuh', json=event, headers=headers).json()['duplicate']
         assert app.state.store.queue_stats() == {'queued': 1}
         assert c.get('/api/alerts').json()['metrics']['total'] == 1
-        assert c.post('/api/response/execute').status_code == 501
+        # Execution requires an analyst-approved plan; an unknown plan executes nothing.
+        assert c.post('/api/response/execute', json={'plan_id': 'RP-missing'}).status_code == 404
         for old in ('/zeek', '/webhook', '/api/demo/stream-5min/start'):
             assert c.post(old, json=event).status_code == 404
     with TestClient(create_app(path, workers=False)) as c:

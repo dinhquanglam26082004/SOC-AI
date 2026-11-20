@@ -101,7 +101,23 @@ def _retrieve_playbooks(query: str, top_k: int):
     return retrieve(query, top_k=top_k, doc_type="playbooks")
 
 
-def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) -> dict:
+def playbook_compatible(alert: dict, playbook: dict) -> bool:
+    """Basic topic check, not a semantic validation of individual actions."""
+    from agents.investigation_profiles import classify
+    patterns = {
+        'dns_tunneling': r'dns\s*tunnel|dns\s*c2|t1071\.004|t1572',
+        'authentication': r'\bssh\b|\bsshd\b|brute\s*force|authentication|t1110',
+        'network_scan_dos': r'\bdos\b|\bddos\b|denial.of.service|network.scan',
+        'rootkit': r'rootkit|rootcheck|t1014',
+    }
+    pattern = patterns.get(classify(alert))
+    if not pattern:
+        return True
+    text = ' '.join(str(playbook.get(k) or '') for k in ('playbook_id','playbook_name','playbook_source','playbook_text'))
+    return bool(re.search(pattern, text[:3500], re.I))
+
+
+def propose_playbook(report: dict, on_progress=None, alert: dict | None = None, allow_inconclusive: bool = False) -> dict:
     """Return a verbatim existing playbook; never generate response actions."""
     if on_progress:
         on_progress("retrieving_playbook", 4)
@@ -115,7 +131,7 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
     verdict = report.get("verdict")
     dos_context = _is_dos_report(report) or _is_dos_alert(alert or {})
     ssh_context = _is_ssh_context(report, alert or {})
-    if verdict == "benign" or (verdict == "inconclusive" and not dos_context and not ssh_context):
+    if verdict == "benign" or (verdict == "inconclusive" and not dos_context and not ssh_context and not allow_inconclusive):
         return _skipped(
             report,
             "not_applicable",
@@ -149,6 +165,24 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
                     "not_found",
                     "The DoS playbook is not indexed. Rebuild the knowledge base before retrying.",
                 )
+        elif allow_inconclusive:
+            selected = None
+            for match in matches:
+                metadata = match.get('metadata') or {}
+                if metadata.get('type') != 'playbooks':
+                    continue
+                try:
+                    text = _read_playbook(metadata.get('source'))
+                except (ValueError, RuntimeError):
+                    continue
+                usable = (re.search(r'^PLAYBOOK ID:\s*\S+', text, re.M)
+                          and re.search(r'^NAME:\s*\n\s*\S', text, re.M)
+                          and re.search(r'^RESPONSE:\s*\n\s*\S', text, re.M))
+                if usable and playbook_compatible(alert or {}, {'playbook_source':metadata.get('source'),'playbook_text':text}):
+                    selected = match
+                    break
+            if not selected:
+                return _skipped(report, 'not_found', 'No compatible indexed playbook was found for this alert.')
         else:
             selected = matches[0]
     metadata = selected.get("metadata") or {}
@@ -169,11 +203,13 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None) 
             "Existing SSH response playbook selected for review; a successful login after failures alone "
             "does not establish compromise. No actions were generated or executed."
         )
-    elif verdict == "inconclusive":
+    elif verdict == "inconclusive" and dos_context:
         notes = (
             "Existing playbook retrieved from the knowledge base; the DoS assessment remains inconclusive "
             "until service impact is corroborated. No actions were generated or executed."
         )
+    elif verdict == "inconclusive":
+        notes = "Existing playbook retrieved for review; the investigation remains inconclusive. No actions were generated or executed."
     else:
         notes = "Existing playbook retrieved from the knowledge base; no actions were generated or executed."
     return {

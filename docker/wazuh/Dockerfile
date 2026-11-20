@@ -5,6 +5,7 @@ COPY wazuh_integration /opt/soc-ai/wazuh_integration
 COPY docker/wazuh/custom-soc-ai /var/ossec/integrations/custom-soc-ai
 COPY docker/wazuh/healthcheck.py /opt/healthcheck.py
 COPY docker/wazuh/zeek-notice-rules.xml /opt/soc-ai/zeek-notice-rules.xml
+COPY docker/wazuh/soc-local-rules.xml /opt/soc-ai/soc-local-rules.xml
 COPY docker/wazuh/0-local-prepare /etc/cont-init.d/0-local-prepare
 COPY docker/wazuh/1-soc-lab /etc/cont-init.d/1-soc-lab
 RUN chmod 750 /etc/cont-init.d/0-local-prepare /etc/cont-init.d/1-soc-lab

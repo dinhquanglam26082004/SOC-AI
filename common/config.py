@@ -12,6 +12,18 @@ OLLAMA_HOST = os.getenv("OLLAMA_HOST", "http://localhost:11434")
 
 # ─── Registry cac model duoc ho tro ────────────────────────────────────────
 AVAILABLE_MODELS: dict[str, dict] = {
+    "redsage_8b_dpo": {
+        "name": "hf.co/mradermacher/RedSage-Qwen3-8B-DPO-GGUF:Q4_K_M",
+        "label": "RedSage-Qwen3-8B-DPO",
+        "size": "8B · Q4_K_M · approximately 5.03 GB",
+        "desc": "Local cybersecurity model; tool calling requires validation.",
+    },
+    "foundation_sec_1_1_8b": {
+        "name": "foundation-sec:8b",
+        "label": "Foundation-Sec-1.1-8B-Instruct",
+        "size": "8B · Q4_K_M · approximately 4.92 GB",
+        "desc": "Local cybersecurity model; tool support depends on the Ollama model template.",
+    },
     "qwen3_8b": {
         "name": "qwen3:8b",
         "label": "Qwen3-8B (Investigation)",
@@ -26,8 +38,8 @@ AVAILABLE_MODELS: dict[str, dict] = {
     },
 }
 
-AGENT_MODEL = os.getenv("AGENT_MODEL", "qwen3:8b")
-DEFAULT_MODEL_ALIAS = "qwen3_8b"
+AGENT_MODEL = os.getenv("AGENT_MODEL", "hf.co/mradermacher/RedSage-Qwen3-8B-DPO-GGUF:Q4_K_M")
+DEFAULT_MODEL_ALIAS = "redsage_8b_dpo"
 
 
 def resolve_model(alias: str) -> str:

@@ -3,17 +3,92 @@ import json
 import base64
 import sqlite3
 import time
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from contextlib import contextmanager
 from pathlib import Path
 from common.runtime_store import RuntimeStore
 from common.investigation_index import migrate as migrate_investigation_index, write_index as write_investigation_index
 from common.log_index import backup_before_migration, migrate_index, upsert_index, utc_stamp
 from wazuh_integration.mapper import is_security_alert, fim_manual_only
+from wazuh_integration.collection_policy import WAZUH_LOG_TYPES, ZEEK_LOG_TYPES
 
 
 class QueueFull(Exception):
     pass
+
+
+def _similar_alert_key(record):
+    """Return a conservative incident scope, or None when it is not identifiable."""
+    if record.get('event_kind') != 'alert':
+        return None
+    agent = str((record.get('agent') or {}).get('id') or '').strip()
+    manager = str((record.get('manager') or {}).get('name') or '').strip()
+    rule = record.get('rule') or {}
+    rule_id = str(rule.get('id') or '').strip()
+    level = rule.get('level')
+    if not agent or not manager or not rule_id or level is None:
+        return None
+    source = str(record.get('source_product') or record.get('source') or '').strip()
+    if not source:
+        return None
+    base = (manager, agent, source, rule_id, str(level))
+    src = str(record.get('src_ip') or '').strip()
+    dst = str(record.get('dst_ip') or '').strip()
+    port = str(record.get('dst_port') or '').strip()
+    user = str(record.get('username') or '').strip()
+    process = str(record.get('process') or '').strip()
+    path = str(record.get('file_path') or '').strip()
+    data = record.get('zeek_data') or {}
+    if not isinstance(data, dict):
+        return None
+    if source == 'zeek' and record.get('log_type') == 'dns':
+        query = str(data.get('query') or '').strip().rstrip('.').lower()
+        labels = query.split('.')
+        qtype = str(data.get('qtype_name') or '').strip().upper()
+        if not src or not dst or not port.isdigit() or not qtype or len(labels) < 2 or not all(labels):
+            return None
+        # A tunnel rotates the first label. Keep the full remaining suffix so
+        # different target domains are never merged merely by IP and rule.
+        domain = '.'.join(labels[1:]) if len(labels) >= 3 else query
+        return base + ('dns', src, dst, str(int(port)), domain, qtype)
+    if source == 'zeek' and rule_id in {'100142', '100145'}:
+        if not dst or not port.isdigit() or (rule_id == '100142' and not src):
+            return None
+        return base + ('dos', src if rule_id == '100142' else '', dst, str(int(port)))
+    if path:
+        return base + ('file', path, str(record.get('file_event') or ''), user, process)
+    if src and dst:
+        return base + ('network', src, dst, port, user, process, str(data.get('proto') or ''))
+    if src and user:
+        return base + ('auth', src, user, dst, port, process)
+    return None
+
+
+def _time_seconds(value):
+    try:
+        if isinstance(value, (int, float)) and not isinstance(value, bool):
+            return float(value)
+        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+        return stamp.timestamp() if stamp.tzinfo is not None else None
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _same_active_investigation(representative, candidate):
+    key = _similar_alert_key(representative)
+    if key is None or key != _similar_alert_key(candidate):
+        return False
+    ref = _time_seconds(representative.get('timestamp'))
+    event = _time_seconds(candidate.get('timestamp'))
+    if ref is None or event is None or event < ref - 300:
+        return False
+    if abs(event - ref) <= 300:
+        return True
+    # Later arrivals may belong to a long-running incident. Do not merge an
+    # older backlog item solely because it happens to share an identity.
+    started = _time_seconds((representative.get('ai_progress') or {}).get('started_at'))
+    received = _time_seconds(candidate.get('received_at'))
+    return started is not None and received is not None and received >= started
 
 
 class EventStore:
@@ -98,6 +173,64 @@ class EventStore:
         params.append(utc_stamp(record['timestamp']))
         return db.execute(query,params).fetchone()
 
+    @staticmethod
+    def _mark_grouped(record, representative):
+        key = _similar_alert_key(record)
+        scope = key[5] if key else ''
+        details = {
+            'dns': 'Cùng manager, agent, rule, mức độ, IP nguồn, IP đích, cổng, domain cha và loại DNS.',
+            'dos': 'Cùng manager, agent, rule, mức độ, đích và phạm vi nguồn theo rule DoS.',
+            'file': 'Cùng manager, agent, rule, mức độ, đường dẫn, loại thay đổi và người/tác vụ nếu có.',
+            'network': 'Cùng manager, agent, rule, mức độ, IP nguồn, IP đích và các trường liên quan.',
+            'auth': 'Cùng manager, agent, rule, mức độ, IP nguồn, tài khoản và các trường liên quan.',
+        }
+        record['ai_status'] = 'skipped'
+        record['ai_skip_reason'] = 'Đã gộp với cảnh báo cùng phạm vi; không chạy AI riêng. AI có thể chưa đọc log này.'
+        record['ai_group'] = {'representative_alert_id': representative['id'],
+                              'representative_state': 'running',
+                              'policy': 'active_similarity', 'match': details.get(scope, '')}
+        record.pop('ai_progress', None)
+        return record
+
+    def _active_representative(self, db, candidate):
+        if _similar_alert_key(candidate) is None:
+            return None
+        rows = db.execute("""SELECT e.payload FROM ai_jobs j JOIN events e ON e.id=j.event_id
+                           WHERE j.state='running' ORDER BY j.updated""").fetchall()
+        for row in rows:
+            representative = json.loads(row['payload'])
+            if _same_active_investigation(representative, candidate):
+                return representative
+        return None
+
+    def _group_queued_for(self, db, representative):
+        if _similar_alert_key(representative) is None:
+            return 0
+        rows = db.execute("""SELECT j.event_id,e.payload FROM ai_jobs j JOIN events e ON e.id=j.event_id
+                           WHERE j.state='queued' AND j.event_id<>?""", (representative['id'],)).fetchall()
+        count = 0
+        for row in rows:
+            candidate = json.loads(row['payload'])
+            if candidate.get('ai_manual_request') or not _same_active_investigation(representative, candidate):
+                continue
+            self._mark_grouped(candidate, representative)
+            db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(candidate, ensure_ascii=False), row['event_id']))
+            db.execute("UPDATE ai_jobs SET state='skipped',error=NULL,updated=? WHERE event_id=? AND state='queued'",
+                       (time.time(), row['event_id']))
+            count += 1
+        return count
+
+    def _group_queued_with_running(self, db):
+        rows = db.execute("""SELECT e.payload FROM ai_jobs j JOIN events e ON e.id=j.event_id
+                           WHERE j.state='running' ORDER BY j.updated""").fetchall()
+        return sum(self._group_queued_for(db, json.loads(row['payload'])) for row in rows)
+
+    def group_queued_with_running(self):
+        """Coalesce already-queued matches without deleting alerts or interrupting AI."""
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            return self._group_queued_with_running(db)
+
     def accept(self, record, eligible):
         record['ai_allowed'] = is_security_alert(record)
         eligible = bool(eligible and record['ai_allowed'])
@@ -129,13 +262,18 @@ class EventStore:
                 # the same event without creating a second log or losing AI state.
                 record['received_at'] = previous.get('received_at', record['received_at'])
             if eligible:
-                representative=self._related_dos_job(db,record)
-                if representative:
+                active=self._active_representative(db, record)
+                if active:
                     eligible=False
-                    record['ai_group']={'representative_alert_id':representative['event_id'],
-                        'representative_state':representative['state'], 'window_seconds':300,
-                        'match':'same agent, rule, destination and port'+(', source' if str(record['rule']['id'])=='100142' else '')}
-                    record['ai_skip_reason']='Grouped with a related DoS alert within 5 minutes; manual investigation available'
+                    self._mark_grouped(record, active)
+                else:
+                    representative=self._related_dos_job(db,record)
+                    if representative:
+                        eligible=False
+                        record['ai_group']={'representative_alert_id':representative['event_id'],
+                            'representative_state':representative['state'], 'window_seconds':300,
+                            'match':'same agent, rule, destination and port'+(', source' if str(record['rule']['id'])=='100142' else '')}
+                        record['ai_skip_reason']='Grouped with a related DoS alert within 5 minutes; manual investigation available'
             if eligible and self._pending(db) >= self.max_jobs:
                 raise QueueFull('AI queue full; source must retry')
             record['ai_status'] = 'queued' if eligible else 'skipped'
@@ -149,6 +287,55 @@ class EventStore:
 
     def _pending(self, db):
         return db.execute("SELECT COUNT(*) FROM ai_jobs WHERE state IN ('queued','running')").fetchone()[0]
+
+    @staticmethod
+    def _generation(db):
+        row = db.execute("SELECT value FROM runtime_control WHERE key='reset_generation'").fetchone()
+        return int(row[0]) if row else 0
+
+    @classmethod
+    def _current_job(cls, db, record):
+        job = db.execute('SELECT state FROM ai_jobs WHERE event_id=?', (record['id'],)).fetchone()
+        return bool(job and job['state'] == 'running'
+                    and record.get('_job_generation') == cls._generation(db))
+
+    def clear_logs_and_alerts(self, request_id):
+        """Atomically clear the SOC event store and fence older deliveries and jobs.
+
+        The investigation audit database, cases and the source logs are separate
+        records and are intentionally left untouched.
+        """
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            previous = db.execute("SELECT value FROM runtime_control WHERE key='last_log_reset_id'").fetchone()
+            if previous and previous[0] == request_id:
+                result = db.execute("SELECT value FROM runtime_control WHERE key='last_log_reset_result'").fetchone()
+                return json.loads(result[0])
+            cutoff = datetime.now(timezone.utc).isoformat()
+            generation = self._generation(db) + 1
+            counts = {
+                'logs': db.execute('SELECT COUNT(*) FROM log_index').fetchone()[0],
+                'alerts': db.execute("SELECT COUNT(*) FROM events WHERE COALESCE(json_extract(payload,'$.event_kind'),'alert')!='telemetry'").fetchone()[0],
+                'queued_jobs': db.execute("SELECT COUNT(*) FROM ai_jobs WHERE state='queued'").fetchone()[0],
+                'running_jobs': db.execute("SELECT COUNT(*) FROM ai_jobs WHERE state='running'").fetchone()[0],
+            }
+            for table in ('ai_jobs', 'authentication_facts', 'investigation_event_index', 'log_index', 'zeek_logs', 'events'):
+                db.execute('DELETE FROM ' + table)
+            # Old snapshots can still contain an alerts copy. Preserve cases and
+            # other legacy runtime state, while removing event/log collections.
+            row = db.execute('SELECT payload FROM runtime_state WHERE id=1').fetchone()
+            if row:
+                legacy = json.loads(row[0])
+                if not isinstance(legacy, dict):
+                    raise ValueError('Invalid legacy runtime snapshot')
+                for key in ('alerts', 'logs', 'zeek_logs'):
+                    legacy.pop(key, None)
+                db.execute('UPDATE runtime_state SET payload=? WHERE id=1', (json.dumps(legacy, ensure_ascii=False),))
+            result = {'cleared_at': cutoff, 'deleted': counts}
+            for key, value in (('reset_before', cutoff), ('reset_generation', str(generation)),
+                               ('last_log_reset_id', request_id), ('last_log_reset_result', json.dumps(result))):
+                db.execute('INSERT INTO runtime_control VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value', (key, value))
+            return result
 
     def list_events(self, limit=100, before=None, severity=None, status=None, search=None):
         if not 1 <= limit <= 1000:
@@ -240,11 +427,19 @@ class EventStore:
             upsert_index(db, record)
 
     def list_logs(self, limit=100, before=None, source=None, log_type=None, kind=None,
-                  since=None, until=None, q=None):
+                  since=None, until=None, q=None, selected_only=False):
         source = source.strip().lower() if source and source.strip() else None
         if not 1 <= limit <= 500:
             raise ValueError('Log limit must be between 1 and 500')
         filters, params = [], []
+        selected_filter, selected_params = '', []
+        if selected_only:
+            zeek_types, wazuh_types = sorted(ZEEK_LOG_TYPES), sorted(WAZUH_LOG_TYPES)
+            selected_filter = ('((origin=? AND log_type IN (' + ','.join('?' for _ in zeek_types)
+                               + ')) OR (origin=? AND log_type IN (' + ','.join('?' for _ in wazuh_types) + ')))')
+            selected_params = ['zeek', *zeek_types, 'wazuh', *wazuh_types]
+            filters.append(selected_filter)
+            params.extend(selected_params)
         for column, value in (('origin', source), ('log_type', log_type), ('kind', kind)):
             if value:
                 filters.append(column + '=?')
@@ -292,14 +487,17 @@ class EventStore:
             cursor = base64.urlsafe_b64encode(json.dumps([page[-1]['received_at'], page[-1]['id']]).encode()).decode() if len(rows)>limit else None
             # Exact counts from compact metadata. No cache: atomic reads and no stale totals.
             total = db.execute('SELECT COUNT(*) FROM log_index'+where, params).fetchone()[0]
-            all_count = db.execute('SELECT COUNT(*) FROM log_index').fetchone()[0]
-            type_where, type_params = (' WHERE origin=?', [source]) if source else ('', [])
+            all_count = db.execute('SELECT COUNT(*) FROM log_index' + (' WHERE ' + selected_filter if selected_filter else ''), selected_params).fetchone()[0]
+            type_filters = ([selected_filter] if selected_filter else []) + (['origin=?'] if source else [])
+            type_where = ' WHERE ' + ' AND '.join(type_filters) if type_filters else ''
+            type_params = [*selected_params, *([source] if source else [])]
             types = [r[0] for r in db.execute('SELECT DISTINCT log_type FROM log_index'+type_where+' ORDER BY log_type', type_params)]
             return {'logs': records, 'next_cursor': cursor, 'total': total, 'total_all': all_count, 'log_types': types}
 
     def claim(self):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            self._group_queued_with_running(db)
             # Authentication and other operational alerts must not wait behind
             # an initial SCA inventory burst. Keep FIFO within equal priority.
             row = db.execute("""SELECT j.event_id FROM ai_jobs j
@@ -312,6 +510,7 @@ class EventStore:
             if not row:
                 return None
             record = json.loads(db.execute('SELECT payload FROM events WHERE id=?', (row[0],)).fetchone()[0])
+            record['_job_generation'] = self._generation(db)
             record['ai_status'] = 'running'
             record.pop('investigation_report', None)
             record.pop('playbook_proposal', None)
@@ -323,6 +522,7 @@ class EventStore:
                                      'restarted': queued.get('restarted', False)}
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), row[0]))
             db.execute("UPDATE ai_jobs SET state='running', attempts=attempts+1,updated=? WHERE event_id=?", (time.time(), row[0]))
+            self._group_queued_for(db, record)
             return record
 
     def progress(self, record, stage, step, model):
@@ -334,7 +534,11 @@ class EventStore:
             stage=stage, step=step, total_steps=6, stage_started_at=now,
             updated_at=now, model=model)
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not self._current_job(db, record):
+                return False
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), record['id']))
+        return True
 
     def finish(self, record, error=None):
         record['ai_status'] = 'failed' if error else 'completed'
@@ -350,14 +554,24 @@ class EventStore:
             progress['failed_stage'] = progress.get('stage')
         progress['stage'] = 'failed' if error else 'completed'
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not self._current_job(db, record):
+                return False
+            if error is None:
+                self._group_queued_for(db, record)
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), record['id']))
             db.execute('UPDATE ai_jobs SET state=?,error=?,updated=? WHERE event_id=?', (record['ai_status'], error, time.time(), record['id']))
+        return True
 
     def skip(self, record, reason):
         record.update(ai_status='skipped', ai_allowed=False, ai_skip_reason=reason)
         with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if not self._current_job(db, record):
+                return False
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), record['id']))
             db.execute("UPDATE ai_jobs SET state='skipped',error=NULL,updated=? WHERE event_id=?", (time.time(), record['id']))
+        return True
 
     def retry(self, event_id):
         with self.connect() as db:
@@ -376,6 +590,9 @@ class EventStore:
             if self._pending(db) >= self.max_jobs:
                 raise QueueFull()
             record['ai_status'], record['ai_error'] = 'queued', None
+            record['ai_skip_reason'] = None
+            record['ai_manual_request'] = True
+            record.pop('ai_group', None)
             record['ai_progress'] = {'stage': 'queued', 'queued_at': time.time()}
             record.pop('investigation_report', None)
             record.pop('playbook_proposal', None)

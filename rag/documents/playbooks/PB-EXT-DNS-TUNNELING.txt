@@ -1,0 +1,65 @@
+PLAYBOOK ID: PB-EXT-DNS-TUNNELING
+
+NAME:
+DNS tunneling, C2 and exfiltration over DNS
+
+Provenance: Curated summary of MITRE ATT&CK T1071.004 (Application Layer
+Protocol: DNS), T1048.003 (Exfiltration Over Alternative Protocol) and T1572
+(Protocol Tunneling), detection strategy DET0400, and mitigations M1037 and
+M1031, reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1071/004/ ,
+https://attack.mitre.org/techniques/T1048/003/ , https://attack.mitre.org/techniques/T1572/ ,
+https://attack.mitre.org/mitigations/M1037/ and https://attack.mitre.org/mitigations/M1031/ .
+Guidance, not incident evidence.
+
+TRIGGER:
+MITRE ATT&CK T1071.004 Application Layer Protocol: DNS is a Command and Control
+technique (TA0011) for Linux, Windows, macOS, Network Devices and ESXi. DNS
+tunneling encodes data or commands inside DNS queries and responses to conceal
+C2 and to move data past perimeter controls. It overlaps with T1048.003
+Exfiltration Over Alternative Protocol and T1572 Protocol Tunneling. A DNS query
+alone does not establish that data was stolen or that commands executed.
+
+INVESTIGATION:
+1. Behavioral detection (DET0400) relies on Network Traffic Content such as Zeek
+   dns.log, and the Linux analytic also uses process creation. Compare query
+   count, query length, number of unique subdomains, record types and response
+   codes against a suitably scoped baseline when one is available.
+2. Typical tunneling signals: many distinct, high-entropy subdomains under one
+   parent domain; atypical record types such as NULL, TXT, CNAME or MX; high
+   query rates; and long encoded labels. None of these alone proves malice.
+3. Identify the parent domain receiving the random subdomains, the source host,
+   the resolver or destination, and whether queries go to an internal resolver
+   or an unusual external authority. Internal-only destinations and lab domains
+   change the interpretation.
+4. Rule out benign explanations before concluding tunneling: content delivery
+   networks, privacy or security software, and misconfigured applications can
+   produce noisy DNS. Tune against the enterprise or host DNS baseline rather
+   than a universal threshold.
+5. Correlate DNS with the process that generated the queries, host identity,
+   timestamps, and any file-access evidence, only when those fields are actually
+   collected. Record the observation window, limits, missing fields and
+   truncation. Retained record counts are not complete capture and do not
+   measure the exact amount of data transferred.
+
+RESPONSE:
+1. M1037 Filter Network Traffic: filter untrusted DNS destinations and route
+   clients through controlled internal resolvers or DNS proxies, taking care not
+   to disrupt legitimate services. Blocking the abused parent domain is a scoped,
+   reversible first control.
+2. M1031 Network Intrusion Prevention: deploy and tune network detection and
+   prevention signatures for DNS tunneling where supported.
+3. If a tunneling client process is identified on the host, scope it before
+   acting: capture the process and its parent, then stop it under approval.
+   Treat a running tunnel as active C2 and consider host isolation.
+4. Specify target, duration, expected effect, service impact, monitoring and
+   rollback before any control. These measures do not by themselves prove that
+   exfiltration occurred.
+
+ESCALATION:
+Preserve event and source identifiers, timestamps, DNS samples, query scope,
+the parent domain, endpoint evidence and known lab ground truth. Escalate
+unresolved process ownership, DNS visibility gaps, or suspected data transfer to
+the analyst. Zeek DNS alone does not prove command execution, file access, or
+the content and amount of data exfiltrated. Human approval is required before
+blocking a domain or destination, isolating a host, or stopping a process. No
+response action is executed by this playbook.

@@ -40,7 +40,12 @@ def test_auth_aggregate_exact_beyond_returned_page(lab):
     group=result['authentication_summary']['groups'][0]
     assert result['status']=='truncated' and len(result['items'])==1
     assert group['failure_count']==11 and group['success_count']==1 and group['failure_before_success']
-    assert len(audit.evidence(run['id']))==1  # aggregate counts are not fabricated event evidence
+    evidence=audit.evidence(run['id'])
+    aggregate=next(e for e in evidence if e['evidence_id']==result['aggregate_evidence_id'])
+    assert aggregate['evidence_type']=='aggregate' and aggregate['data']['source']=='derived-soc-sqlite'
+    assert aggregate['data']['authentication_summary']['scope']['agent_id']==alert['agent']['id']
+    assert aggregate['data']['authentication_summary']['groups'][0]['failure_count']==11
+    assert len([e for e in evidence if e['evidence_type']!='aggregate'])==1
 
 
 @pytest.mark.parametrize('kwargs',[{'user':'other'},{'ip':'203.0.113.9'},{'minute':0}])
@@ -78,8 +83,8 @@ def make_client(audit,alert,verdict='benign',request_more=False):
         if kwargs.get('schema'):
             refs=[e['evidence_id'] for e in audit.evidence(run['id'])]
             return {'message':{'content':json.dumps({'incident_type':'Authentication','verdict':verdict,
-                'reasoning':'Source authorization has not been verified.','findings':[{'statement':'Authentication records exist.','evidence_ids':refs}],
-                'hypotheses':[],'unknowns':[],'recommendations':['Verify authorization.']})}}
+                'reasoning':'Chưa xác minh quyền truy cập của nguồn.','findings':[{'statement':'Đã ghi nhận các sự kiện xác thực.','evidence_ids':refs}],
+                'hypotheses':[],'unknowns':[],'recommendations':['Xác minh quyền truy cập.']})}}
         if request_more:
             return {'message':{'content':json.dumps({'hypotheses':[],'need_more':True,'question':'Confirm account authorization.'})}}
         return {'message':{'content':'','tool_calls':[{'function':{'name':'search_auth_events','arguments':{}}}]}}
@@ -89,9 +94,11 @@ def make_client(audit,alert,verdict='benign',request_more=False):
 def test_review_before_conclude_and_benign_requires_positive_authorization(lab):
     store,audit,alert,add=lab;add(2,kind='success',minute=1)
     report=InvestigationGraph(store,audit,client=make_client(audit,alert)).run_alert(alert)
-    assert report['verdict']=='inconclusive' and report['needs_analyst']
-    assert report['review_status']=='pending' and report['analyst_tasks']
-    assert report['hypotheses'][0]['id']=='H-001'
+    assert report['verdict']=='benign' and report['needs_analyst']
+    assert report['review_status']=='pending'
+    assert not report['analyst_tasks']
+    assert not report['hypotheses']
+    assert report['recommendations']==['Xác minh quyền truy cập.']
     with audit.connect() as db:
         stages=[r[0] for r in db.execute('SELECT node FROM workflow_steps WHERE incident_id=? ORDER BY id',(report['incident_id'],))]
     assert stages.index('reviewing')<stages.index('concluding')
@@ -115,14 +122,14 @@ def test_analyst_queue_and_review_do_not_replace_ai_report(lab):
     with TestClient(create_app(store.path,workers=False)) as client:
         assert len(client.get('/api/investigations').json()['items'])==1
         url='/api/investigations/'+report['incident_id']+'/review'
-        body={'decision':'benign','notes':'Asset owner confirmed scheduled maintenance and the authorized account.','evidence_ids':['wrong']}
+        body={'decision':'malicious','notes':'Analyst reviewed the observed activity and marked it malicious.','evidence_ids':['wrong']}
         assert client.post(url,json=body).status_code==409
         body['evidence_ids']=[eid]
         assert client.post(url,json=body).status_code==201
         assert client.get('/api/investigations').json()['items']==[]
         detail=client.get('/api/investigations/'+report['incident_id']).json()
-        assert detail['summary']['analyst_review']['decision']=='benign'
-        assert detail['report']['verdict']=='inconclusive'
+        assert detail['summary']['analyst_review']['decision']=='malicious'
+        assert detail['report']['verdict']=='benign'
         assert detail['summary']['review_status']=='reviewed'
 
 

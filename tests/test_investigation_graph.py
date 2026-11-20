@@ -7,13 +7,31 @@ from unittest.mock import Mock, patch
 
 import pytest
 from fastapi.testclient import TestClient
-from agents.investigation_graph import InvestigationGraph
+from agents.investigation_graph import InvestigationGraph, report_language_errors
 from agents.investigation_schema import Limits, WorkflowError
 from agents.investigation_store import InvestigationStore
 from agents.investigation_tools import LocalTools, MODELS
 from api.app import create_app, analyze
 from common.event_store import EventStore
 from wazuh_integration.mapper import map_wazuh_alert
+
+
+def test_activity_includes_only_compact_cited_evidence_for_that_investigation(tmp_path):
+    audit = InvestigationStore(tmp_path / 'audit.sqlite3')
+    run = audit.create('alert-1', {})['id']
+    other = audit.create('alert-2', {})['id']
+    payload = {'event_time': '2026-11-17T01:00:00Z', 'src_ip': '192.0.2.1',
+               'dns': {'query': 'example.test'}, 'full_log': 'do-not-copy-full-log'}
+    ref = audit.add_evidence(run, 'event-1', 'observed', payload, 'search_zeek_dns', {})
+    ignored = audit.add_evidence(run, 'event-2', 'observed', payload, 'search_zeek_dns', {})
+    foreign = audit.add_evidence(other, 'event-3', 'observed', payload, 'search_zeek_dns', {})
+    audit.update(run, {}, status='completed', report={'findings': [
+        {'statement': 'DNS observation', 'evidence_ids': [ref, foreign]}]})
+    result = audit.detail(run, 'activity', limit=1)
+    assert [item['evidence_id'] for item in result['finding_evidence']] == [ref]
+    assert result['finding_evidence'][0]['data']['dns']['query'] == 'example.test'
+    assert 'full_log' not in result['finding_evidence'][0]['data']
+    assert ignored not in json.dumps(result['finding_evidence'])
 
 
 @pytest.fixture
@@ -41,10 +59,10 @@ def lab(tmp_path,monkeypatch):
 def report(audit,incident,verdict='inconclusive',bad=False):
     refs=[e['evidence_id'] for e in audit.evidence(incident)]
     return {'incident_type':'Authentication anomaly','verdict':verdict,'confidence':.5,
-        'reasoning':'Observed authentication events require analyst validation.',
-        'findings':[{'statement':'An authentication event was observed.','evidence_ids':['EV-fabricated'] if bad else refs}],
-        'hypotheses':[],'unknowns':['Authorization and intent are not established.'],
-        'recommendations':['Verify source access with the asset owner.']}
+        'reasoning':'Sự kiện xác thực cần được chuyên viên xác minh.',
+        'findings':[{'statement':'Đã ghi nhận một sự kiện xác thực.','evidence_ids':['EV-fabricated'] if bad else refs}],
+        'hypotheses':[],'unknowns':['Chưa xác minh quyền truy cập và mục đích.'],
+        'recommendations':['Xác minh quyền truy cập với người quản lý tài sản.']}
 
 
 def client_for(audit,trigger,tools=True,verdict='inconclusive'):
@@ -71,7 +89,11 @@ def test_tools_scope_success_failure_empty_and_limit(lab):
     assert tools.execute('get_alert',{'alert_id':'other'})['status']=='error'
     assert tools.execute('search_zeek_connections',{})['status']=='empty'
     assert tools.execute('search_auth_events',{'limit':1})['status']=='truncated'
-    assert len(audit.evidence(incident))==2  # deduplicated across repeated searches
+    evidence=audit.evidence(incident)
+    assert len([e for e in evidence if e['evidence_type']!='aggregate'])==2
+    aggregates=[e for e in evidence if e['evidence_type']=='aggregate' and 'authentication_summary' in e['data']]
+    assert len(aggregates)==1  # A different page limit does not create a second aggregate.
+    assert aggregates[0]['data']['authentication_summary']['scope']['agent_id']==trigger['agent']['id']
 
 
 def test_runbook_is_guidance_unavailable_and_timeout(lab):
@@ -96,19 +118,21 @@ def test_graph_bounded_persisted_and_cached(lab):
     run=audit.current(trigger['id'])
     assert result['workflow']=='langgraph' and result['verdict']=='inconclusive'
     assert audit.counts(run['id'])=={'model':3,'tool':2}
-    assert len(audit.evidence(run['id']))==2
+    assert len(audit.evidence(run['id']))==3  # Two source records and one derived aggregate.
     assert run['status']=='completed'
     assert all(call.kwargs['timeout']<=900 for call in client.call_args_list)
     assert any(m['role']=='tool' for m in client.call_args_list[1].args[0])
     before=client.call_count
     assert graph.run_alert(trigger)==result and client.call_count==before
     detail=audit.detail(run['id'],limit=1)
-    assert len(detail['items'])==1 and detail['next_offset']==1 and detail['total']==2
+    assert len(detail['items'])==1 and detail['next_offset']==1 and detail['total']==3
     with sqlite3.connect(graph.checkpoint_path) as db:
         assert db.execute('SELECT COUNT(*) FROM checkpoints').fetchone()[0]>0
 
 
-def test_model_selects_tools_without_static_recommendations(lab):
+def test_model_selects_tools_without_static_recommendations(lab, monkeypatch):
+    # Mechanics test for the unrouted tool set; routing is covered in test_investigation_profiles.py.
+    monkeypatch.setenv("AI_TOOL_ROUTING", "false")
     store,audit,trigger,_=lab
     trigger['source_product']='zeek'
     trigger['rule']['groups']=['zeek_detection']
@@ -132,11 +156,139 @@ def test_model_selects_tools_without_static_recommendations(lab):
     assert selected and selected[0]['result'].get('error') != 'tool_not_allowed'
 
 
+def test_tool_plan_executes_batch_before_model_reviews_results(lab):
+    store,audit,trigger,_=lab
+    planner_messages=[]
+
+    def client(messages,**kwargs):
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,audit.current(trigger['id'])['id']))}}
+        planner_messages.append(deepcopy(messages))
+        if len(planner_messages)==1:
+            return {'message':{'content':'','tool_calls':[
+                {'function':{'name':'search_auth_events','arguments':{}}},
+                {'function':{'name':'not_a_tool','arguments':{}}},
+                {'function':{'name':'search_related_alerts','arguments':{}}},
+            ]}}
+        return {'message':{'content':'No further tools are needed.'}}
+
+    result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
+    assert result['workflow']=='langgraph'
+    assert len(planner_messages)==2
+    returned=[m for m in planner_messages[1] if m['role']=='tool']
+    assert [m['tool_name'] for m in returned]==['search_auth_events','not_a_tool','search_related_alerts']
+    assert json.loads(returned[1]['content'])['status']=='error'
+    assert json.loads(returned[2]['content'])['status'] in {'ok','empty','truncated'}
+
+
+def test_tool_is_used_once_per_investigation_even_with_new_arguments(lab, monkeypatch):
+    # Mechanics test for the unrouted tool set; routing is covered in test_investigation_profiles.py.
+    monkeypatch.setenv("AI_TOOL_ROUTING", "false")
+    store,audit,trigger,event=lab
+    plans=[]
+
+    def client(messages,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        plans.append((deepcopy(messages),{tool['function']['name'] for tool in kwargs['tools']}))
+        if len(plans)==1:
+            calls=[('search_auth_events',{'limit':1}),('search_auth_events',{'limit':2}),
+                   ('search_related_alerts',{})]
+        elif len(plans)==2:
+            calls=[('search_auth_events',{'limit':10}),('search_zeek_dns',{})]
+        else:
+            calls=[]
+        return {'message':{'content':'','tool_calls':[{'function':{'name':name,'arguments':args}} for name,args in calls]}}
+
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    calls=audit.detail(result['incident_id'],'tools',limit=100)['items']
+    assert [c['name'] for c in calls].count('search_auth_events')==1
+    assert [c['name'] for c in calls].count('search_related_alerts')==1
+    assert [c['name'] for c in calls].count('search_zeek_dns')==1
+    assert 'search_auth_events' in plans[0][1]
+    assert 'search_auth_events' not in plans[1][1]
+    assert 'search_related_alerts' not in plans[1][1]
+    assert 'search_zeek_dns' in plans[1][1]
+    skipped=[o for o in result['tool_outcomes'] if o.get('error')=='tool_already_used']
+    assert len(skipped)==2 and all(o['status']=='skipped' for o in skipped)
+    first_results=[json.loads(m['content']) for m in plans[1][0] if m['role']=='tool']
+    assert any(item['status']=='skipped' and item['error']=='tool_already_used' for item in first_results)
+
+    other=event(5)
+    result2=InvestigationGraph(store,audit,client=client_for(audit,other),
+                               limits=Limits(rounds=1,model_calls=3)).run_alert(other)
+    other_calls=audit.detail(result2['incident_id'],'tools',limit=20)['items']
+    assert [c['name'] for c in other_calls].count('search_auth_events')==1
+
+
+def test_failed_tool_attempt_is_not_run_again_in_same_investigation(lab):
+    store,audit,trigger,_=lab
+    available=[]
+    def client(messages,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        available.append({tool['function']['name'] for tool in kwargs['tools']})
+        args={'agent_id':'wrong-agent'} if len(available)==1 else {}
+        return {'message':{'content':'','tool_calls':[{'function':{'name':'search_auth_events','arguments':args}}]}}
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
+    auth=[c for c in calls if c['name']=='search_auth_events']
+    assert len(auth)==1 and auth[0]['result']['error']=='invalid_scope_or_arguments'
+    assert 'search_auth_events' in available[0] and 'search_auth_events' not in available[1]
+    assert any(o.get('error')=='tool_already_used' for o in result['tool_outcomes'])
+
+
+def test_system_called_dos_tool_is_not_offered_or_executed_again(lab):
+    store,audit,trigger,_=lab
+    trigger=deepcopy(trigger)
+    trigger['rule']={'id':'100142','level':10,'description':'DoS traffic','groups':['zeek_detection']}
+    trigger.update(source_product='zeek',event_kind='alert',src_ip='198.51.100.8',
+                   dst_ip='192.0.2.7',dst_port='80')
+    available=[]
+    def client(messages,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        available.append({tool['function']['name'] for tool in kwargs['tools']})
+        calls=[{'function':{'name':'summarize_zeek_flows','arguments':{}}}] if len(available)==1 else []
+        return {'message':{'content':'','tool_calls':calls}}
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
+    assert [c['name'] for c in calls].count('summarize_zeek_flows')==1
+    assert 'summarize_zeek_flows' not in available[0]
+    assert any(o['tool']=='summarize_zeek_flows' and o.get('error')=='tool_already_used'
+               for o in result['tool_outcomes'])
+
+
+def test_model_tool_explanation_is_recorded_but_not_sent_to_tool(lab):
+    store,audit,trigger,_=lab
+    requests=[]
+    def client(messages,**kwargs):
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,audit.current(trigger['id'])['id']))}}
+        requests.append(messages)
+        if len(requests)==1:
+            return {'message':{'content':'','tool_calls':[{'function':{'name':'search_auth_events',
+                'arguments':{'limit':10,'_verification_question':'Có đăng nhập thất bại không?',
+                             '_selection_reason':'Cảnh báo liên quan xác thực.'}}}]}}
+        return {'message':{'content':'No further tools.'}}
+    result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
+    activity=audit.detail(result['incident_id'],'activity',limit=100)['items']
+    tool=next(item for item in activity if item['kind']=='tool' and item['name']=='search_auth_events')
+    assert tool['query']=={'limit':10}
+    assert tool['outcome']=='ok'
+    assert tool['model_explanation']=={'question':'Có đăng nhập thất bại không?', 'reason':'Cảnh báo liên quan xác thực.'}
+    assert 'evidence_ids' in tool
+
+
 @pytest.mark.parametrize('verdict',['malicious','benign'])
-def test_trigger_alone_cannot_support_definitive_verdict(lab,verdict):
+def test_trigger_alone_preserves_model_verdict_with_warning(lab,verdict):
     store,audit,trigger,_=lab
     result=InvestigationGraph(store,audit,client=client_for(audit,trigger,False,verdict)).run_alert(trigger)
-    assert result['verdict']=='inconclusive' and result['confidence'] is None
+    assert result['verdict']==verdict and result['confidence']==0.5
+    assert result['policy_adjustments'] and result['needs_analyst']
 
 
 def test_schema_repair_and_bad_ids_fail_with_diagnostics(lab):
@@ -168,6 +320,63 @@ def test_single_repair_can_succeed(lab):
         return {'message':{'content':'invalid' if count==1 else json.dumps(report(audit,audit.current(trigger['id'])['id']))}}
     assert InvestigationGraph(store,audit,client=client).run_alert(trigger)['verdict']=='inconclusive'
     assert count==2
+
+
+def test_english_report_is_retried_without_changing_verdict_or_evidence(lab):
+    store,audit,trigger,_=lab
+    calls=[]
+    def client(messages,**kwargs):
+        if not kwargs.get('schema'):
+            return {'message':{'content':'No tools.'}}
+        calls.append(messages)
+        result=report(audit,audit.current(trigger['id'])['id'],'malicious')
+        if len(calls)==1:
+            result['reasoning']='The alert indicates a suspected attack from multiple sources.'
+        return {'message':{'content':json.dumps(result,ensure_ascii=False)}}
+    result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
+    assert len(calls)==2 and 'tiếng Việt' in calls[1][-1]['content']
+    assert 'mỗi mục trình bày một phát hiện' in calls[0][0]['content']
+    assert 'không điền số liệu hoặc kết luận khi dữ liệu không có' in calls[0][0]['content']
+    assert result['verdict']=='malicious'
+    assert result['reasoning']=='Sự kiện xác thực cần được chuyên viên xác minh.'
+    assert result['findings'][0]['evidence_ids']
+
+
+def test_report_language_validation_allows_technical_names_but_flags_english():
+    item={'reasoning':'Nghi ngờ DNS tunneling từ 192.0.2.1.',
+          'findings':[{'statement':'Đã ghi nhận SSH brute force.', 'evidence_ids':[]}],
+          'hypotheses':[], 'unknowns':[], 'recommendations':['Kiểm tra DNS.']}
+    assert report_language_errors(item)==[]
+    item['recommendations']=['Investigate the source and verify the account.']
+    assert report_language_errors(item)==['recommendations[0]']
+
+
+def test_repeated_english_report_fails_instead_of_silently_displaying(lab):
+    store,audit,trigger,_=lab
+    def client(messages,**kwargs):
+        if not kwargs.get('schema'):
+            return {'message':{'content':'No tools.'}}
+        result=report(audit,audit.current(trigger['id'])['id'])
+        result['reasoning']='The alert indicates a suspected attack from multiple sources.'
+        return {'message':{'content':json.dumps(result,ensure_ascii=False)}}
+    with pytest.raises(WorkflowError,match='tiếng Anh'):
+        InvestigationGraph(store,audit,client=client).run_alert(trigger)
+
+
+def test_language_retry_rejects_changed_verdict(lab):
+    store,audit,trigger,_=lab
+    count=0
+    def client(messages,**kwargs):
+        nonlocal count
+        if not kwargs.get('schema'):
+            return {'message':{'content':'No tools.'}}
+        count+=1
+        result=report(audit,audit.current(trigger['id'])['id'], 'malicious' if count==1 else 'benign')
+        if count==1:
+            result['reasoning']='The alert indicates a suspected attack from multiple sources.'
+        return {'message':{'content':json.dumps(result,ensure_ascii=False)}}
+    with pytest.raises(WorkflowError,match='thay đổi verdict'):
+        InvestigationGraph(store,audit,client=client).run_alert(trigger)
 
 
 def test_time_and_tool_budget(lab):
@@ -204,7 +413,7 @@ def test_resume_after_process_death_uses_same_run_and_completed_call(lab):
     result=InvestigationGraph(store,audit,client=client_for(audit,trigger)).run_alert(trigger)
     assert result['incident_id']==before['id']
     assert audit.counts(before['id'])=={'model':3,'tool':2}
-    assert len(audit.evidence(before['id']))==2
+    assert len(audit.evidence(before['id']))==3  # Resume must not duplicate the derived aggregate.
 
 
 def test_interrupted_model_requires_explicit_new_run(lab):
@@ -248,6 +457,45 @@ def test_playbook_failure_keeps_completed_investigation(lab,monkeypatch):
     expected['tool_outcomes']=[{k:v for k,v in item.items() if k!='authentication_summary'} for item in expected.get('tool_outcomes',[])]
     assert result==expected and proposal['status']=='failed'
     assert audit.current(trigger['id'])['status']=='completed'
+    assert trigger['grounded_response']['status']=='no_source'
+
+
+def test_analyze_creates_audited_source_backed_response_preview(lab,monkeypatch):
+    store,audit,trigger,_=lab
+    monkeypatch.setenv('AI_PLAYBOOK_ENABLED','true')
+    original=InvestigationGraph(store,audit,client=client_for(audit,trigger)).run_alert(trigger)
+    source={'status':'matched','playbook_id':'PB-SSH','playbook_name':'SSH authentication',
+        'playbook_source':'ssh.txt','playbook_text':'SSH brute force\nRESPONSE:\n1. Preserve authentication evidence.\n'}
+    model_response={'message':{'content':json.dumps({'summary':'Bảo toàn chứng cứ.', 'actions':[
+        {'action':'collect_forensics','target':'007','reason':'Giữ log xác thực.',
+         'evidence_ids':[],'guidance_ids':['G1']}]})},'done_reason':'stop'}
+    progress=[]
+    with patch('agents.playbook_agent.propose_playbook',return_value=source) as retrieve, \
+         patch('common.ollama_client.chat_messages',return_value=model_response) as model:
+        result,proposal=analyze(trigger,on_progress=lambda stage,step:progress.append(stage),store=store,audit=audit)
+    preview=trigger['grounded_response']
+    assert result['recommendations']==original['recommendations']  # The original model report is preserved.
+    assert preview['status']=='available' and preview['incident_id']==original['incident_id']
+    assert preview['knowledge_guidance']['playbook_id']=='PB-SSH'
+    assert preview['actions'][0]['guidance_ids']==['G1'] and preview['actions'][0]['status']=='proposed'
+    assert retrieve.call_args.kwargs['allow_inconclusive'] is True
+    assert 'grounding_response' in progress and model.call_count==1
+    assert trigger['investigation']['response_model_calls']==1
+    activity=audit.detail(original['incident_id'],'activity',limit=100)
+    assert any(i['kind']=='model' and i['name']=='response_recommendation' for i in activity['items'])
+
+
+def test_invalid_source_backed_preview_does_not_reuse_unverified_suggestions(lab,monkeypatch):
+    store,audit,trigger,_=lab
+    monkeypatch.setenv('AI_PLAYBOOK_ENABLED','true')
+    InvestigationGraph(store,audit,client=client_for(audit,trigger)).run_alert(trigger)
+    source={'status':'matched','playbook_id':'PB-SSH','playbook_name':'SSH authentication',
+        'playbook_source':'ssh.txt','playbook_text':'SSH brute force\nRESPONSE:\n1. Preserve authentication evidence.\n'}
+    with patch('agents.playbook_agent.propose_playbook',return_value=source), \
+         patch('common.ollama_client.chat_messages',side_effect=RuntimeError('model offline')):
+        result,_=analyze(trigger,store=store,audit=audit)
+    assert result['recommendations']  # Kept in the audit record, not shown as sourced suggestions.
+    assert trigger['grounded_response']['status']=='error'
 
 
 def test_metadata_backfill_idempotent_and_backup(lab):
@@ -287,18 +535,18 @@ def test_transport_schema_avoids_ollama_repetition_limit():
     assert 'additionalProperties' in transport and '$defs' in transport and 'inconclusive' in transport
 
 
-def test_tool_error_blocks_benign_and_lease_blocks_parallel_run(lab):
+def test_tool_error_warns_without_changing_verdict_and_lease_blocks_parallel_run(lab):
     store,audit,trigger,_=lab
     def client(messages,**kwargs):
         if kwargs.get('schema'):
             return {'message':{'content':json.dumps(report(audit,audit.current(trigger['id'])['id'],'benign'))}}
         return {'message':{'content':'Check scope.','tool_calls':[
             {'function':{'name':'search_auth_events','arguments':{}}},
-            {'function':{'name':'search_auth_events','arguments':{'agent_id':'other'}}}]}}
+            {'function':{'name':'search_zeek_dns','arguments':{'agent_id':'other'}}}]}}
     with audit.lease(trigger['id'],30),pytest.raises(WorkflowError,match='investigation_busy'):
         InvestigationGraph(store,audit,client=client).run_alert(trigger)
     result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
-    assert result['verdict']=='inconclusive'
+    assert result['verdict']=='benign' and result['needs_analyst']
     assert any(o['status']=='error' for o in result['tool_outcomes'])
 
 
@@ -306,8 +554,8 @@ def test_dos_failed_flows_not_proven_impact(lab):
     store,audit,trigger,_=lab
     trigger['rule']['description']='Zeek suspected DoS: failed TCP flows; service impact unconfirmed'
     result=InvestigationGraph(store,audit,client=client_for(audit,trigger,True,'malicious')).run_alert(trigger)
-    assert result['verdict']=='inconclusive'
-    assert any('Service impact' in u for u in result['unknowns'])
+    assert result['verdict']=='malicious' and result['needs_analyst']
+    assert any('Service impact' in u for u in result['policy_adjustments'])
 
 
 def test_runtime_rag_missing_database_is_read_only(tmp_path,monkeypatch):

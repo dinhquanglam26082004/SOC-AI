@@ -1,0 +1,76 @@
+PLAYBOOK ID: PB-ROOTKIT-001
+
+NAME:
+Rootkit and Stealth Persistence Investigation
+
+Provenance: Curated summary of MITRE ATT&CK T1014 (Rootkit), detection strategy
+DET0377 / AN1062, and related persistence techniques T1543.002, T1547.006 and
+T1574.006, reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1014/ ,
+https://attack.mitre.org/techniques/T1543/002/ , https://attack.mitre.org/techniques/T1547/006/
+and https://attack.mitre.org/techniques/T1574/006/ . Tooling references: rkhunter,
+chkrootkit, AIDE, auditd and Volatility3 Linux plugins. Guidance, not incident evidence.
+
+TRIGGER:
+A Wazuh rootcheck alert (for example rule 521), a report of hidden processes,
+files, kernel modules, services or network connections, or integrity changes to
+system binaries, kernel modules, or startup/persistence locations. MITRE ATT&CK
+T1014 Rootkit is a Defense Evasion technique for Linux, Windows and macOS: a
+rootkit hides the presence of programs, files, services, drivers and connections.
+A rootcheck or integrity alert is a signal to investigate, not proof that a
+rootkit is present. Repeated identical rootcheck alerts are not independent
+corroboration.
+
+INVESTIGATION:
+1. Record the agent, time window, the specific artifact the alert names (path,
+   PID, module, service), and the rule that fired. Note that once a kernel
+   rootkit is active, collection that depends on the compromised host can be
+   unreliable; treat host-sourced evidence as potentially tampered.
+2. The reliable signal is the install event, not the running rootkit. Look for
+   the moment a kernel module, driver, kernel extension, or preload library was
+   added: module load records (auditd kmod / linux syslog), LD_PRELOAD or
+   /etc/ld.so.preload changes, and writes to /dev or /proc.
+3. Correlate with persistence techniques commonly paired with stealth implants:
+   T1543.002 systemd service (new or modified unit under /etc/systemd/system/
+   or /lib/systemd/system/), T1547.006 kernel modules and extensions, and
+   T1574.006 LD_PRELOAD hijacking. A newly created or modified systemd unit near
+   the alert window is a strong pivot.
+4. Look for visibility discrepancies: a process, file, port or module that one
+   view shows and another hides (for example a PID that responds to signals but
+   is absent from the process listing). A stable discrepancy across rechecks is
+   more significant than a single transient one.
+5. Review file-integrity evidence (FIM/AIDE) for changes to system binaries
+   (ls, ps, netstat, ss, find, lsof), loader configuration, and module paths.
+   RPM/dpkg verification mismatches on these binaries are a strong indicator.
+6. Preserve volatile evidence before changing the host. Rebooting or killing
+   processes can destroy in-memory rootkit state. Where available, capture
+   memory for offline analysis rather than trusting live host tools.
+7. Record collection gaps explicitly. Absence of a finding on a possibly
+   compromised host does not prove the host is clean.
+
+RESPONSE:
+MITRE maps no preventive mitigation to T1014 because it abuses legitimate system
+features; detection and response focus on the install event and on trustworthy,
+off-host verification.
+1. If evidence is limited to repeated rootcheck alerts without an independent
+   positive snapshot confirming a hidden component, keep the case for analyst
+   review rather than concluding compromise.
+2. If a hidden component is corroborated, follow host containment: isolate the
+   host from the network to stop command-and-control and lateral movement,
+   preserving evidence first.
+3. Prefer verification from outside the suspect OS: offline/forensic review of a
+   memory image or disk, and comparison against a known-good kernel and binary
+   baseline. Dedicated scanners (rkhunter, chkrootkit) and host-based tools can
+   produce false positives and can themselves be subverted by a userland rootkit;
+   corroborate with auditd records and offline analysis.
+4. Remove persistence only after scoping: capture the systemd unit, module, or
+   preload entry, back it up, then disable or remove it. Removing one artifact
+   does not prove full eradication of a kernel implant.
+5. Plan rebuild-from-known-good as the reliable recovery for a confirmed kernel
+   rootkit; cleaning in place is often unreliable.
+
+ESCALATION:
+Escalate to the SOC lead and host owner when a hidden kernel component, a
+stealthy persistence mechanism, or tampering with system binaries is corroborated,
+or when host-sourced visibility cannot be trusted. Human approval is required
+before isolating the host, removing a service or module, resetting credentials,
+or rebuilding the system. No response action is executed by this playbook.

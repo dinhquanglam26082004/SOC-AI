@@ -58,6 +58,55 @@ def test_dns_keeps_answers_and_exact_filters(sources):
     assert tools.execute('search_zeek_dns',{'query':'*.test'})['status']=='empty'
 
 
+def test_dns_aggregate_and_baseline_use_boundary_safe_suffix(sources):
+    _,audit,incident,tools,add,_=sources
+    add('dns',{'query':'A.LAB.TEST.','qtype_name':'TXT','rcode_name':'NOERROR'})
+    add('dns',{'query':'lab.test','qtype_name':'A'})
+    add('dns',{'query':'notlab.test','qtype_name':'A'})
+    args={'domain':'lab.test','since':'2026-11-02T07:59:00Z','until':'2026-11-02T08:01:00Z'}
+    result=tools.execute('summarize_dns_activity',args)
+    assert result['status']=='ok',result
+    assert result['summary']['matched_records']==2 and result['summary']['unique_subdomains']==1
+    assert result['summary']['query_types']=={'TXT':1,'A':1}
+    assert result['aggregate_evidence_id'] in {e['evidence_id'] for e in audit.evidence(incident)}
+    result=tools.execute('compare_dns_baseline',{**args,'baseline_since':'2026-11-02T07:57:00Z','baseline_until':'2026-11-02T07:59:00Z'})
+    assert result['status']=='ok' and result['summary']['baseline']['matched_records']==0
+    assert result['summary']['incident']['matched_records']==2
+    assert tools.execute('compare_dns_baseline',{**args,'baseline_since':'2026-11-02T07:58:00Z','baseline_until':'2026-11-02T07:59:00Z'})['status']=='error'
+    assert tools.execute('summarize_dns_activity',{**args,'since':'2026-11-01T00:00:00Z'})['status']=='error'
+
+
+def test_dns_aggregate_selects_diverse_traceable_examples(sources):
+    _,audit,incident,tools,add,_=sources
+    queries=['first.lab.test','a.lab.test','b.lab.test','c.lab.test',
+             'longest-label-in-this-set.lab.test','last.lab.test']
+    codes=['','NOERROR','NXDOMAIN','','','']
+    records=[]
+    for n,(query,code) in enumerate(zip(queries,codes)):
+        records.append(add('dns',{'query':query,'rcode_name':code},timestamp=f'2026-11-02T08:00:0{n}Z'))
+    result=tools.execute('summarize_dns_activity',{'domain':'lab.test',
+        'since':'2026-11-02T07:59:00Z','until':'2026-11-02T08:01:00Z'})
+    assert result['status']=='ok' and result['summary']['matched_records']==6
+    sample_queries={x['dns']['query'] for x in result['items']}
+    assert sample_queries=={queries[0],queries[1],queries[2],queries[4],queries[5]}
+    assert len(result['items'])==5 and 'Not a representative sample' in result['summary']['sample_selection']
+    saved={e['source_record_id'] for e in audit.evidence(incident)}
+    assert {r['id'] for r in records if r['zeek_data']['query'] in sample_queries} <= saved
+
+
+def test_audit_endpoint_tools_only_return_matching_audit_records(sources):
+    _,_,_,tools,add,_=sources
+    add(data={'audit':{'exe':'/usr/bin/iodine','command':'iodine'}},rule={'id':'80792','level':3,'description':'Audit command','groups':['audit','audit_command']})
+    add(data={'audit':{'file':{'name':'/tmp/demo.txt'},'exe':'/usr/bin/cat'}},rule={'id':'80784','level':3,'description':'Read access','groups':['audit','audit_watch_read']})
+    add(syscheck={'path':'/tmp/demo.txt','event':'modified'})
+    proc=tools.execute('search_process_events',{})
+    assert proc['total_matched']==1 and proc['items'][0]['audit']['exe']=='/usr/bin/iodine'
+    read=tools.execute('search_file_access',{'file_path':'/tmp/demo.txt'})
+    assert read['total_matched']==1 and read['items'][0]['audit']['exe']=='/usr/bin/cat'
+    assert tools.execute('search_file_access',{'file_path':'/tmp/other.txt'})['status']=='empty'
+    assert 'absence is not proof' in read['coverage']
+
+
 def test_fim_preserves_actor_without_inventing_missing_attribution(sources):
     _,_,_,tools,add,_=sources
     add(syscheck={'path':'/etc/other.conf','event':'modified','sha256_before':'old','sha256_after':'new',

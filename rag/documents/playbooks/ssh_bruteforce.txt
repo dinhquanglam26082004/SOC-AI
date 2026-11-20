@@ -3,11 +3,22 @@ PLAYBOOK ID: PB-SSH-001
 NAME:
 SSH Brute Force Response
 
+Provenance: Curated summary of MITRE ATT&CK T1110 (Brute Force, sub-techniques
+Password Guessing T1110.001, Password Spraying T1110.003 and Credential Stuffing
+T1110.004) and mitigations M1032 (Multi-factor Authentication), M1027 (Password
+Policies) and account-lockout policy, with SSH hardening references (CIS Benchmark,
+fail2ban), reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1110/ ,
+https://attack.mitre.org/mitigations/M1032/ and https://attack.mitre.org/mitigations/M1027/ .
+Guidance, not incident evidence.
+
 TRIGGER:
 Repeated failed SSH authentication attempts, a Wazuh SSH brute-force alert,
 or failures followed by a successful SSH login. More than 20 failures from
 the same source IP against the same account within 5 minutes is a HIGH-severity
 criterion, not a prerequisite for investigating a subsequent successful login.
+MITRE maps this to T1110 Brute Force (Credential Access, TA0006); SSH (22/TCP)
+is a commonly targeted management service. A successful login after failures
+from the same source is the pattern that most warrants investigation.
 
 INVESTIGATION:
 1. Review the original authentication records and correlate PAM and sshd entries
@@ -19,15 +30,29 @@ INVESTIGATION:
 4. If a login succeeded, review available session, command, sudo/su, account,
    SSH-key, and persistence records after that login. Record collection gaps.
 5. Check whether the source targeted other accounts or hosts, and review the
-   source IP using approved local threat-intelligence sources.
+   source IP using approved local threat-intelligence sources. Distinguish
+   password guessing (one account, many passwords) from password spraying
+   (one password, many accounts) and credential stuffing (reused credentials).
 
 RESPONSE:
 1. Preserve the relevant authentication and post-login records.
 2. If unauthorized access is confirmed, follow the incident containment
    procedure for the host and account, and rotate affected credentials.
 3. Apply approved source-IP blocking and increase monitoring as appropriate.
+   Automated intrusion prevention such as fail2ban can rate-limit or ban
+   repeat offenders at the host.
 4. If authorization or session activity cannot be verified, escalate for
    analyst review rather than treating a successful login alone as compromise.
+5. Preventive hardening (plan with the system owner, not executed here):
+   M1032 enforce multi-factor authentication; disable password authentication
+   in favour of key-based login; M1027 apply password policies; set account
+   lockout after repeated failures; and restrict SSH exposure (allowed users,
+   source restrictions, non-default exposure) following CIS Benchmark guidance.
 
-Human approval is required before blocking an IP, disabling an account,
-isolating a host, resetting credentials, or changing firewall rules.
+ESCALATION:
+Escalate to the SOC lead and host owner when a successful login after brute
+force cannot be confirmed as authorized, when post-login activity suggests
+lateral movement or persistence, or when multiple hosts or accounts are
+targeted. Human approval is required before blocking an IP, disabling an
+account, isolating a host, resetting credentials, or changing firewall rules.
+No response action is executed by this playbook.

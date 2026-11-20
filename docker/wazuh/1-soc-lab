@@ -6,6 +6,7 @@ chown root:wazuh /var/ossec/etc/authd.pass
 chmod 640 /var/ossec/etc/authd.pass
 # Install only this managed rule file; preserve all other local rules and keys.
 install -o root -g wazuh -m 640 /opt/soc-ai/zeek-notice-rules.xml /var/ossec/etc/rules/soc-ai-zeek-notice.xml
+install -o root -g wazuh -m 640 /opt/soc-ai/soc-local-rules.xml /var/ossec/etc/rules/soc-ai-local.xml
 chown root:wazuh /spool
 chmod 2770 /spool
 for file in /spool/queue.sqlite3*; do

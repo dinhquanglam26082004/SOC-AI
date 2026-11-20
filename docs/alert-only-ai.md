@@ -1,6 +1,6 @@
 # AI chỉ điều tra cảnh báo bảo mật
 
-AI dùng Qwen3-8B. Ba lớp chặn được áp dụng ở ingestion, thao tác điều tra thủ công
+AI mặc định dùng RedSage-Qwen3-8B-DPO. Ba lớp chặn được áp dụng ở ingestion, thao tác điều tra thủ công
 và worker. Trạng thái ai_allowed được xác định từ quy tắc nguồn, không do mô hình
 tự đánh giá trước khi chạy.
 
@@ -53,8 +53,25 @@ five minutes of an existing queued, running or completed investigation. Rule
 Each alert and its log is retained; grouped alerts show the representative
 investigation and can be queued manually. Failed representative jobs do not
 suppress the next alert. Missing required fields prevent grouping. Grouping is
-anchored to an investigated alert, not a sliding attack-duration detector;
-a long incident can therefore generate another investigation after five minutes.
+anchored to an investigated alert, not a sliding attack-duration detector.
 This is a noise-control policy, not a determination that alerts are the same
-attack. Historical alerts and existing queued jobs are not changed.
+attack. The active-investigation grouping below can also handle queued jobs.
+
+## Gộp cảnh báo khi AI đang điều tra
+
+- Khi bắt đầu một lượt AI, hệ thống tìm các job đang chờ có cùng phạm vi và
+  thời gian sự kiện trong khoảng 5 phút; job trùng được chuyển sang `skipped`.
+  Cảnh báo mới đến trong lúc lượt AI còn chạy cũng được đối chiếu với lượt đó.
+- Các trường nhận diện phải đầy đủ và trùng nhau: Manager, Agent, nguồn, rule,
+  level và các đối tượng liên quan. Với Zeek DNS, dùng IP nguồn, IP đích, cổng,
+  loại query và phần domain sau label đầu tiên. Ví dụ `a.tunnel.lab.local` và
+  `b.tunnel.lab.local` có cùng phần domain `tunnel.lab.local`; domain khác hoặc
+  thiếu trường nhận diện sẽ không tự gộp. Rule DDoS 100145 bỏ qua IP nguồn như
+  chính sách DoS phía trên.
+- Chỉ job AI bị bỏ qua; từng cảnh báo và log vẫn được lưu. Giao diện hiển thị
+  **Đã gộp** và liên kết tới cảnh báo đại diện. AI không nhất thiết đã đọc mọi
+  log trong nhóm, nên chuyên viên vẫn cần kiểm tra bằng chứng nếu cần.
+- Có thể yêu cầu điều tra thủ công một cảnh báo đã gộp. Nếu lượt đại diện thất
+  bại, các cảnh báo đã gộp không tự được xếp hàng lại; chúng vẫn có thể xem và
+  được chuyên viên yêu cầu điều tra thủ công.
 

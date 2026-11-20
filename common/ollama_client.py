@@ -1,14 +1,34 @@
-"""
-Client goi Qwen3-8B qua Ollama local (API /api/chat).
-Ca 2 agent (Investigation, Playbook) deu goi qua module nay -
-chi khac nhau o system_prompt, khong can chay 2 model.
-"""
+"""Ollama client for the configured local investigation model."""
 import json
 import os
 import re
 import requests
 
 from common.config import OLLAMA_HOST, OLLAMA_MODEL, OLLAMA_TIMEOUT
+
+
+def _normalize_tool_call(message, tools):
+    """Accept a strict Llama-style JSON tool call when Ollama leaves it as text."""
+    if not tools or message.get('tool_calls') or not message.get('content'):
+        return message
+    content = message['content'].strip()
+    if content.startswith('Response:'):
+        content = content[len('Response:'):].strip()
+    fenced = re.fullmatch(r'```(?:json)?\s*\n(.*?)\n```', content, flags=re.DOTALL | re.IGNORECASE)
+    if fenced:
+        content = fenced.group(1).strip()
+    try:
+        call = json.loads(content)
+    except (ValueError, TypeError):
+        return message
+    if not isinstance(call, dict) or set(call) != {'name', 'parameters'}:
+        return message
+    allowed = {item.get('function', {}).get('name') for item in tools}
+    if not isinstance(call['name'], str) or call['name'] not in allowed or not isinstance(call['parameters'], dict):
+        return message
+    return {**message, 'content': '', 'tool_calls': [
+        {'function': {'name': call['name'], 'arguments': call['parameters']}}
+    ]}
 
 
 def chat_messages(messages, *, tools=None, schema=None, timeout=None, model=None):
@@ -41,6 +61,7 @@ def chat_messages(messages, *, tools=None, schema=None, timeout=None, model=None
     message=body.get('message')
     if not isinstance(message,dict) or not isinstance(message.get('content',''),str):
         raise WorkflowError('invalid_model_response','Ollama returned an invalid message')
+    message=_normalize_tool_call(message, tools)
     return {'message':message,'done_reason':body.get('done_reason'),
             'eval_count':body.get('eval_count'),'eval_duration':body.get('eval_duration')}
 

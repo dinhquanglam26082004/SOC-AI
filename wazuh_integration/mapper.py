@@ -62,6 +62,11 @@ def map_wazuh_alert(raw):
     rule, agent, manager = (raw.get(k) for k in ('rule', 'agent', 'manager'))
     if not all(isinstance(v, dict) for v in (rule, agent, manager)):
         raise ValueError('rule, agent and manager must be objects')
+    # Wazuh statistics rule 11 can omit description in generated alerts.
+    # Normalize only this recognized operational event; preserve raw_event.
+    if (str(rule.get('id')) == '11' and 'stats' in (rule.get('groups') or [])
+            and not rule.get('description')):
+        rule = {**rule, 'description': 'Wazuh log volume statistics'}
     for obj, keys in ((raw, ('id', 'timestamp')), (rule, ('id', 'description')), (agent, ('id', 'name')), (manager, ('name',))):
         if any(not isinstance(obj.get(k), str) or not obj[k].strip() for k in keys):
             raise ValueError('Missing required source identifiers or description')

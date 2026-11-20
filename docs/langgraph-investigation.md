@@ -140,6 +140,25 @@ within the same budget and never offers guidance IDs as factual citations.
 This reduces unsupported citations; it cannot verify the semantic truth of a
 model claim. Invalid reports still fail visibly after the bounded repair.
 
+### Tổng hợp và mẫu bằng chứng cho model local
+
+`summarize_dns_activity` đếm các bản ghi DNS đã lưu theo agent, domain và cửa sổ
+thời gian đã chọn. Tool lấy tối đa năm mẫu khác nhau, ưu tiên bản ghi đầu,
+cuối, query dài nhất, phản hồi lỗi và NOERROR khi có; các mẫu này không đại diện
+thống kê cho toàn bộ lưu lượng. Mỗi mẫu và bản tổng hợp giữ ID bằng chứng.
+
+`search_auth_events` lưu thêm bằng chứng tổng hợp theo agent, khoảng thời gian,
+IP nguồn và tài khoản được lọc. Số đếm theo nhóm tính trên bản ghi đã lưu, không
+khẳng định số lần thử duy nhất hay việc thu thập đầy đủ. Các trang hiển thị chi
+tiết khác nhau của cùng phạm vi không tạo thêm một bản tổng hợp mới.
+
+Context ưu tiên cảnh báo gốc, tổng hợp và sau đó là các mẫu từ các tool. Tổng
+hợp DNS, TCP và xác thực giữ phạm vi, đơn vị, các trường thiếu và giới hạn khi
+được rút gọn. `context_coverage` đếm số mục bằng chứng trong hồ sơ đã đưa vào
+context, không phải tổng số log nguồn; `context_truncated` báo khi mục hoặc chi
+tiết bị lược bớt. Nếu tổng hợp không vừa context thì không coi số liệu bị thiếu
+là bằng không. Kết luận của AI vẫn cần đối chiếu nguồn và đúng phạm vi thời gian.
+
 No process-tree tool is advertised: reliable process collection and indexed
 queries must be implemented before such a tool can provide useful evidence.
 No service restart or re-analysis of historical alerts is implied by editing
@@ -299,3 +318,20 @@ local-model and rollout results.
 
 For the version 2 evaluation suite and its limits, see
 [high-priority improvements](investigation-priorities.md).
+
+## Định tuyến tool theo loại cảnh báo (AI_TOOL_ROUTING)
+
+Mặc định `AI_TOOL_ROUTING=true`. `agents/investigation_profiles.py` phân loại cảnh báo
+(DNS tunneling, xác thực, web, quét/DoS, FIM, rootkit, leo thang đặc quyền) và chỉ đưa cho
+model các tool thuộc nhóm đó cộng `search_related_alerts`, `get_event_details`, `search_runbook`.
+Cảnh báo không nhận diện được vẫn nhận đủ mọi tool.
+
+Với DNS tunneling (rule 100151–100157, 100181, 100183, nhóm `zeek_dns_anomaly`/`zeek_dns_tunneling`
+hoặc MITRE T1071.004), trước khi model lập kế hoạch hệ thống tự chạy:
+`summarize_dns_activity` trên domain cha của query kích hoạt, `search_zeek_dns` lọc theo
+`domain_suffix` và IP nguồn, và `compare_dns_baseline` (10 phút trước so với 10 phút quanh cảnh báo).
+Các bước này được đánh dấu `automatic` trong `tool_outcomes`.
+
+Lý do: với `OLLAMA_NUM_CTX=4096`, schema của toàn bộ 15 tool vượt quá context nên phần bằng chứng bị
+ép về 800 ký tự; model chỉ thấy các query PTR/NTP cũ tới gateway và bỏ sót query tunnel.
+Khi prompt quá chật, báo cáo ghi `policy_adjustments` đề nghị tăng `OLLAMA_NUM_CTX`.

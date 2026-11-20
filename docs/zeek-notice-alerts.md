@@ -1,5 +1,10 @@
 # Thu toàn bộ log Zeek qua Wazuh
 
+> Cấu hình thu thập hiện hành đã thay thế ví dụ wildcard lịch sử bên dưới.
+> Chỉ dùng các file trong [chính sách thu thập](chinh-sach-thu-thap-log.md);
+> mẫu hiện tại dùng `json` cho `dns.log` và không thêm block wildcard song song.
+> Các bước kiểm tra DNS xem [kiểm tra rule DNS](kiem-tra-dns-wazuh.md).
+
 Giao diện hiện gộp Zeek và Wazuh tại **Logs · Zeek + Wazuh**; hướng dẫn API và
 lọc dữ liệu xem [Logs chung](unified-logs.md). Các mô tả Zeek Logs phía dưới nói
 về nguồn dữ liệu Zeek, không còn là một màn hình riêng.

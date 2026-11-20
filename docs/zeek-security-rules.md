@@ -26,6 +26,14 @@ Do not edit default Wazuh rules. IDs in this managed range must remain unique.
 | 100141 | Frequency 12 / 60 seconds; same origin and destination, different destination ports, rule 100140 | 8 | Possible port scan / Medium |
 | 100150 | DNS NXDOMAIN response | 3 | Correlation evidence, Telemetry |
 | 100151 | Frequency 20 / 60 seconds; same origin, rule 100150 | 7 | DNS failure burst / Medium |
+| 100152 | DNS label at least 32 characters, with domain exclusions | 5 | Candidate / telemetry |
+| 100154 | Long label and TXT, NULL, CNAME or MX query type | 7 | Candidate / telemetry |
+| 100155 | Long label resembling base32 or hex | 7 | Candidate / telemetry |
+| 100153 | 2 distinct long-label queries from same source in 120 seconds | 8 | Suspected DNS tunneling / Medium |
+| 100156 | 5 distinct long-label TXT/NULL/CNAME/MX queries from same source in 120 seconds | 12 | Suspected DNS tunneling / High |
+| 100157 | 2 distinct encoded-looking long-label queries from same source in 120 seconds | 8 | Suspected DNS tunneling / Medium |
+| 100183 | A DNS query type NULL, PRIVATE or KEY | 4 | Individual observation / telemetry |
+| 100181 | At least 3 matching observations in 120 seconds, from the same agent and source to the same destination/port, with the same rare query type and a differing query | 7 | Unusual DNS activity / Medium |
 | 100142 | Failed TCP flow burst to the same destination port | 8 | Suspected DoS / Medium |
 | 100160 | Unclassified live DoS summary | 3 | Telemetry |
 | 100161–100164 | Live TCP/HTTP/UDP-flow/ICMP-flow threshold summaries | 8 | Suspected DoS / Medium |
@@ -34,11 +42,46 @@ See [DoS detection](zeek-dos.md) for thresholds, live sensor installation,
 evidence fields, and limitations. Packet flood coverage is incomplete; findings
 must not be described as confirmed DoS or DDoS.
 
-Correlation rules suppress repeated firing for 60 seconds. Counters are scoped
+Correlation rule ignore intervals vary (100153 uses 300 seconds). Counters are scoped
 to the collecting Wazuh agent and reset with the Manager/session. Sensor overlap
 and duplicated input can affect thresholds. Tune for actual traffic before
 using findings for response decisions. A DNS failure burst may be a configuration
 problem; URI signatures describe attempts and do not prove successful exploitation.
+
+## DNS tunneling limitations
+
+Rules 100152–100157 are heuristics for repeated long DNS names, not proof of DNS
+tunneling, C2, exfiltration or service impact. Rule 100153 groups by origin and
+agent, not by domain; long queries to unrelated domains can contribute. Short or
+infrequent tunnel queries and encrypted DNS may be missed. The two-query threshold
+is tuned for the lab and may produce false positives; raise it after measuring
+normal traffic. Wazuh candidate rule 100152 has level 5 and can create Manager
+alerts even though the SOC mapper classifies
+its `zeek_telemetry` events as log-only; monitor event volume and tune in a lab.
+The `.local` suffix is not excluded so that `tunnel.lab.local` remains observable.
+Rule 100181 requires `qtype_name`, `query`, `id.orig_h`, `id.resp_h`, and
+`id.resp_p` in collected Zeek JSON. Its counter is per agent, source, destination,
+port, and query type, but **not** per domain. Wazuh's `different_field` is not a
+distinct-name counter: repeated values can contribute, so do not describe the
+result as three distinct queries. Events may be repeated observations and rare
+DNS types alone do not prove tunneling. Rule 100183 is telemetry in SOC; Wazuh
+itself may still write its level-4 match to `alerts.json`. Long-label matches can
+take the 100152/100154/100155 branch and reach its correlation rules instead of
+100181; 100181 therefore does not count every rare-type query. No `ignore` is
+configured on 100181: another group of matching events can generate a new alert,
+while SOC's active-investigation grouping can avoid a concurrent duplicate AI job.
+Tune the threshold after measuring ordinary traffic.
+The excluded suffix list is a local policy, not proof the domains are benign; review
+it for your environment. Rule 100157 covers 100155 because a more specific child
+can prevent the 100152 correlation rule from matching in logtest.
+Validate agent log collection and forwarding separately from rule matching.
+
+On the Manager, `wazuh-logtest -l /opt/zeek/logs/current/dns.log` can evaluate
+Zeek JSON examples. Use a single logtest session for frequency rules and include
+`id.orig_h`, `query`, and distinct UIDs. Verify ordinary short names do not
+trigger the long-name rule and repeated long names from different origins do not
+accidentally satisfy a same-origin test. Logtest sessions are isolated tests;
+they do not validate the live agent-to-SOC pipeline.
 
 `zeek_detection` identifies security detections. SOC requires this group and
 level ≥ 7, excludes operational sensor notices, and keeps all other Zeek events

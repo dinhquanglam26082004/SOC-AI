@@ -24,8 +24,6 @@ def hypotheses(items,evidence,previous=()):
         if any(old['id']==h['id'] for old in result):raise ValueError('Duplicate hypothesis ID')
         known[h['id']]=h
         h['evidence_ids']=sorted(refs)
-        if h['status'] in {'open','inconclusive'} and not h['question']:
-            h['question']='Verify authorization and obtain corroborating observations for this hypothesis.'
         result.append(h)
     for old in previous:
         if old.get('id') and not any(h['id']==old['id'] for h in result):
@@ -39,7 +37,9 @@ def assess_verdict(report,evidence,outcomes,context_omitted=False,suspected_dos=
     observed={e['evidence_id'] for e in evidence if e['evidence_type']=='observed'}
     cited={ref for finding in report['findings'] for ref in finding['evidence_ids']}
     reasons=[]
-    gaps=context_omitted or any(o['status'] in {'empty','error','unavailable','truncated'} for o in outcomes if o['tool']!='search_runbook')
+    gaps=context_omitted or any(
+        o['status'] in {'empty','error','unavailable','truncated'} or o.get('error')=='tool_already_used'
+        for o in outcomes if o['tool']!='search_runbook')
     is_rootkit_case = any(
         item.get('evidence_type') == 'trigger'
         and str(((item.get('data') or {}).get('rule') or {}).get('id')) == '521'
@@ -98,11 +98,9 @@ def assess_verdict(report,evidence,outcomes,context_omitted=False,suspected_dos=
             e['data'].get('auth_outcome') in {'failure','success'} for e in cited_observations):
         reasons.append('Authentication outcomes alone do not establish attacker identity, authorization or successful compromise.')
     if gaps and report['verdict']=='benign':reasons.append('Incomplete sources prevent a benign conclusion.')
-    if reasons:
-        report['verdict']='inconclusive';report['confidence']=None
-        report['unknowns']=list(dict.fromkeys(report['unknowns']+reasons))
     report['policy_adjustments']=list(dict.fromkeys(report.get('policy_adjustments',[])+reasons))
     review=[]
+    if reasons:review.append('The model conclusion has evidence limitations and requires analyst review.')
     if report['verdict']=='inconclusive':review.append('The investigation did not establish a definitive conclusion.')
     if gaps:review.append('Some relevant source results are missing, unavailable or incomplete.')
     if any(h['status'] in {'open','inconclusive'} for h in report['hypotheses']):review.append('One or more hypotheses remain unresolved.')

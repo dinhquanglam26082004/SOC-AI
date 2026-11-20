@@ -210,3 +210,16 @@ def test_trusted_dos_alert_selects_dos_playbook_for_generic_inconclusive_report(
     assert result["playbook_id"] == "PB-DOS-001"
     assert "suspected DoS" in queries[0]
     assert "remains inconclusive" in result["notes"]
+
+
+def test_response_lookup_skips_unrelated_and_unusable_playbooks(tmp_path, monkeypatch):
+    docs={'ssh.txt':'PLAYBOOK ID: PB-SSH\nNAME:\nSSH brute force\nRESPONSE:\n1. Block IP.\n',
+          'dns-no-response.txt':'PLAYBOOK ID: PB-DNS-OLD\nNAME:\nDNS tunneling\nTRIGGER:\nDNS tunneling\n',
+          'dns.txt':'PLAYBOOK ID: PB-DNS\nNAME:\nDNS tunneling\nRESPONSE:\n1. Filter DNS domain.\n'}
+    for name,text in docs.items():(tmp_path/name).write_text(text,encoding='utf-8')
+    monkeypatch.setattr(playbook_agent,'PLAYBOOK_ROOT',tmp_path)
+    monkeypatch.setattr(playbook_agent,'_retrieve_playbooks',lambda *args,**kwargs:[
+        {'metadata':{'source':name,'type':'playbooks'}} for name in docs])
+    result=playbook_agent.propose_playbook({'verdict':'inconclusive','incident_type':'DNS tunneling'},
+        alert={'rule':{'id':'100181','groups':['zeek_dns_anomaly']}},allow_inconclusive=True)
+    assert result['status']=='matched' and result['playbook_source']=='dns.txt'
