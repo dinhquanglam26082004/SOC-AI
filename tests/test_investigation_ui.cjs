@@ -13,7 +13,7 @@ assert.match(html, /if\(name==='response'\)name='investigations'/);
 const source = html.slice(html.indexOf('    const aiStages='),html.indexOf('    function renderProgress(){'));
 const scope = {
   icon:()=>'',esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),
-  date:String,state:s=>String(s),duration:s=>String(s),reviewReason:s=>s
+  date:String,localTime:String,state:s=>String(s),duration:s=>String(s),reviewReason:s=>s
 };
 scope.sev=()=> 'medium';scope.severityName=()=> 'Trung bình';scope.logSource=()=> 'Zeek';
 const statusSource=html.slice(html.indexOf('    function badge('),html.indexOf('    function backend('));
@@ -126,6 +126,47 @@ assert.match(responseCard,/chỉ thực thi mô phỏng/);
 assert.equal(scope.responsePanel({status:'running'},{}),'');
 assert.doesNotMatch(scope.responsePanel({status:'failed',report:{}},scope.alerts[0]),/data-plan-create/);
 console.log('Integrated playbook and response UI rendering checks passed.');
+const evidenceSource=html.slice(html.indexOf('    function localizeSyslogLog('),html.indexOf('    function investigate('));
+scope.date=value=>`LOCAL(${value})`;
+scope.localTime=value=>`LOCAL(${value})`;
+const eventTime='2026-11-20T08:00:00Z',collectedAt='2026-11-20T08:01:00Z';
+const rawLog='Nov 20 08:00:00 victim sshd[4752]: pam_unix(sshd:auth): authentication failure';
+const originalTimezone=process.env.TZ;
+process.env.TZ='Asia/Saigon';
+try{
+  vm.runInNewContext(evidenceSource+'\nthis.renderEvidence=evidenceHTML;',scope);
+  const evidence=scope.renderEvidence({event_time:eventTime,collected_at:collectedAt,evidence_id:'EV-time',
+    source_record_id:'source-1',source:'wazuh',evidence_type:'observed',
+    data:{event_time:eventTime,full_log:rawLog,rule:{description:'Failed login'}}});
+  assert.match(evidence,/LOCAL\(2026-11-20T08:00:00Z\)/);
+  assert.match(evidence,/LOCAL\(2026-11-20T08:01:00Z\)/);
+  assert.match(evidence,/Nov 20 15:00:00 victim sshd/);
+  assert.match(evidence,/Log nguồn nguyên bản \(UTC\)/);
+  assert.match(evidence,/Nov 20 08:00:00 victim sshd/);
+  assert.match(evidence,/"event_time": "2026-11-20T08:00:00Z"/);
+  assert.match(evidence,/"full_log": "Nov 20 08:00:00 victim/);
+  const unmatched=scope.renderEvidence({event_time:'2026-11-20T08:10:00Z',evidence_id:'EV-unmatched',
+    data:{full_log:rawLog,rule:{description:'Failed login'}}});
+  assert.match(unmatched,/Nov 20 08:00:00 victim sshd/);
+  assert.doesNotMatch(unmatched,/Log nguồn nguyên bản \(UTC\)/);
+}finally{
+  if(originalTimezone===undefined)delete process.env.TZ;else process.env.TZ=originalTimezone;
+}
+const lookupSource=html.slice(html.indexOf('    function chatLookupLabel('),html.indexOf('    function renderChat('));
+vm.runInNewContext(lookupSource+'\nthis.lookupLabel=chatLookupLabel;',scope);
+assert.match(scope.lookupLabel({ok:true,name:'search_alerts',scope:{since:eventTime,until:collectedAt}}),/từ LOCAL\(2026-11-20T08:00:00Z\)/);
+const overviewSource=html.slice(html.indexOf('    function recordedEvidence('),html.indexOf('    function groundedSuggestions('));
+vm.runInNewContext(overviewSource+'\nthis.recordedEvidence=recordedEvidence;',scope);
+const overview=scope.recordedEvidence([{tool:'summarize_dns_activity',status:'ok',
+  dns_summary:{scope:{since:eventTime,until:collectedAt},matched_records:1}}],{zeek_data:{}});
+assert.match(overview,/LOCAL\(2026-11-20T08:00:00Z\).*LOCAL\(2026-11-20T08:01:00Z\)/);
+const activitySource=html.slice(html.indexOf('    function activityHTML('),html.indexOf('    function evidenceHTML('));
+scope.state=value=>value;scope.duration=value=>String(value);scope.toolPurposes={};
+vm.runInNewContext(activitySource+'\nthis.activity=activityHTML;',scope);
+const activity=scope.activity({kind:'tool',name:'search_auth_events',state:'completed',
+  started:1,finished:2,query:{since:eventTime,until:collectedAt}},0);
+assert.match(activity,/From LOCAL\(2026-11-20T08:00:00Z\).*To LOCAL\(2026-11-20T08:01:00Z\)/);
+console.log('Investigation timestamps use local display; stored evidence JSON remains UTC.');
 scope.responsePlans['alert-1']={id:'RP-1',status:'proposed',verdict:'malicious',verdict_source:'model_report',summary:'Plan <b>x</b>',note:'n',
   knowledge_guidance:{playbook_id:'PB-DNS',title:'DNS response',source:'dns.txt',sha256:'abc',passages:[{id:'G1',section:'RESPONSE',text:'Filter the domain <script>x</script>'}]},
   actions:[{id:'A1',action:'block_domain',target:'tunnel.lab.local',reason:'r',evidence_ids:['EV-1'],guidance_ids:['G1'],phase:'containment',impact:'low',reversible:true,mitigation:'M1037',command:'c',rollback:'rb',status:'proposed',policy_reasons:[]},

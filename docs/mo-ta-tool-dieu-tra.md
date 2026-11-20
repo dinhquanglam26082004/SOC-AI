@@ -30,6 +30,13 @@ hệ thống còn thử gọi `summarize_zeek_flows` ngay ở bước đầu khi
 | `search_runbook` | Cần tài liệu điều tra hoặc gợi ý phản ứng phù hợp với sự cố. | Tra cứu playbook trong kho tri thức cục bộ. Hướng dẫn không phải bằng chứng sự kiện và công cụ không thực thi phản ứng. |
 | `search_rootkit_evidence` | Rule Wazuh `521`, hoặc cảnh báo nhóm `rootcheck` có mô tả chứa `rootkit`/`hidden`. | Tìm cảnh báo liên quan và snapshot endpoint **đã lưu** cho agent trong cửa sổ. Nếu truyền PID, PID phải khớp cảnh báo gốc; không quét trực tiếp và cảnh báo lặp lại không phải bằng chứng độc lập. |
 
+Trong cấu hình lab, rule Wazuh `40111` tương quan 9 sự kiện thuộc nhóm
+`authentication_failed` từ cùng IP trong 160 giây; `40112` giữ nguyên cửa sổ
+240 giây để phát hiện đăng nhập thành công sau chuỗi thất bại. Rule `2502`
+được giữ ở level 5 như tín hiệu phụ. Ngưỡng đếm sự kiện log khớp rule, không
+đảm bảo tương ứng chính xác với số lần người dùng nhập mật khẩu; hãy xác minh
+bằng log thực tế và `wazuh-logtest`.
+
 ## Phạm vi chung
 
 - Các công cụ tra log đọc SQLite SOC ở chế độ chỉ đọc, chỉ đối chiếu agent của

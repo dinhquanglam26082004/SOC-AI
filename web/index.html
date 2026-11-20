@@ -311,7 +311,7 @@
   <div id="toast" class="toast"></div>
   <script>
     const $=id=>document.getElementById(id); const views=['dashboard','alerts','logs','investigations','analyst-chat','intel']; const labels={dashboard:'Tổng quan',alerts:'Cảnh báo',logs:'Nhật ký',investigations:'Điều tra & phản ứng','analyst-chat':'Trợ lý SOC',intel:'Kho tri thức'}; let alerts=[],cases=[],timer,progressTimer,logsRefreshTimer,toastTimer,refreshing=false,selectedInvestigation=null,openedAlert=null,unifiedLogs=[],selectedLog=null;
-    const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); const date=v=>{if(!v)return'—';const d=new Date(typeof v==='number'?v*1000:v);return Number.isNaN(d.getTime())?esc(v):d.toLocaleString('vi-VN')}; const sev=v=>['critical','high','medium','low'].includes(String(v||'').toLowerCase())?String(v).toLowerCase():'low';
+    const esc=v=>String(v??'—').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); const localTime=v=>{if(!v)return'—';const d=new Date(typeof v==='number'?v*1000:v);return Number.isNaN(d.getTime())?String(v):d.toLocaleString('vi-VN')}; const date=v=>esc(localTime(v)); const sev=v=>['critical','high','medium','low'].includes(String(v||'').toLowerCase())?String(v).toLowerCase():'low';
     async function api(path,options={}){const r=await fetch(path,{...options,headers:{'Content-Type':'application/json',...options.headers}});if(!r.ok){const b=await r.json().catch(()=>({}));const error=Error(b.detail||`API error ${r.status}`);error.status=r.status;throw error}return r.json()}
     function toast(message,error=false){const e=$('toast');e.textContent=message;e.classList.toggle('error',error);e.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>e.classList.remove('show'),3400)}
     let clearLogsRequestId=null;
@@ -335,7 +335,7 @@
       if(!item.ok)return'Tra cứu cảnh báo không thành công'+(item.error?`: ${item.error}`:'.');
       if(item.name==='get_alert_details')return item.context_limited?'Đã tìm cảnh báo; chi tiết chưa được gửi cho mô hình.':(item.found?'Đã tra cứu chi tiết một cảnh báo.':'Không tìm thấy cảnh báo theo ID.');
       if(item.name!=='search_alerts')return'Tra cứu dữ liệu SOC.';
-      const s=item.scope||{},filters=[s.rule_id&&`rule ${s.rule_id}`,s.agent&&`agent ${s.agent}`,s.ip&&`IP ${s.ip}`,s.severity&&`mức ${s.severity}`,s.keyword&&`từ khóa ${s.keyword}`,s.since&&`từ ${s.since}`,s.until&&`đến ${s.until}`].filter(Boolean);
+      const s=item.scope||{},filters=[s.rule_id&&`rule ${s.rule_id}`,s.agent&&`agent ${s.agent}`,s.ip&&`IP ${s.ip}`,s.severity&&`mức ${s.severity}`,s.keyword&&`từ khóa ${s.keyword}`,s.since&&`từ ${localTime(s.since)}`,s.until&&`đến ${localTime(s.until)}`].filter(Boolean);
       const sent=item.context_limited?'chi tiết chưa được gửi cho mô hình':`${Number(item.returned||0)} bản ghi gửi cho mô hình`;
       return `Tra cứu: ${Number(item.total||0)} cảnh báo khớp · ${sent} · trang ${Number(s.page||1)}${item.has_more?` · còn dữ liệu, hỏi trang ${item.next_page}`:''}${filters.length?' · '+filters.join(', '):' · toàn bộ cảnh báo đã lưu'}`;
     }
@@ -534,7 +534,7 @@
     function recordedEvidence(outcomes,a,canViewEvidence=true){
       const cards=[],number=v=>typeof v==='number'&&Number.isFinite(v),scopeText=s=>{
         if(!s?.since||!s?.until)return 'Phạm vi thời gian chưa được ghi';
-        return `Phạm vi truy vấn: ${s.since} → ${s.until}`;
+        return `Phạm vi truy vấn: ${localTime(s.since)} → ${localTime(s.until)}`;
       };
       const dns=outcomes.find(o=>o.tool==='summarize_dns_activity'&&o.status==='ok'&&o.dns_summary?.scope&&number(o.dns_summary.matched_records));
       if(dns){const s=dns.dns_summary,scope=s.scope,types=s.query_types&&typeof s.query_types==='object'?s.query_types:{},trigger=String(a.zeek_data?.qtype_name||'').toUpperCase();
@@ -613,20 +613,37 @@
       const state=item.state==='error'||['error','unavailable'].includes(item.outcome)?'error':item.state;
       const title=item.kind==='stage'?(aiStages[item.name]||item.name):item.kind==='tool'?item.name:item.name==='report'?'Tạo kết luận có cấu trúc':item.name==='response_recommendation'?'Đối chiếu playbook và gợi ý phản ứng':'Chọn công cụ điều tra';
       const query=item.query||{},result=item.kind==='tool'?(item.state==='running'?'Đang chờ kết quả công cụ':`${item.outcome||item.state} · ${item.result_count||0} bản ghi trả về`):'';
-      const scope=[query.agent_id?'Agent '+query.agent_id:'',query.ip?'IP '+query.ip:'',query.since?'From '+query.since:'',query.until?'To '+query.until:'',query.limit?'Limit '+query.limit:''].filter(Boolean).join(' · ');
+      const scope=[query.agent_id?'Agent '+query.agent_id:'',query.ip?'IP '+query.ip:'',query.since?'From '+localTime(query.since):'',query.until?'To '+localTime(query.until):'',query.limit?'Limit '+query.limit:''].filter(Boolean).join(' · ');
       const timing=item.finished?esc(duration(item.finished-item.started)):item.state==='running'?`<span data-activity-started="${esc(item.started)}">${esc(duration(Date.now()/1000-item.started))}</span>`:'Chưa ghi thời gian hoàn thành';
       const choices=item.selected_tools?.length?`<p>Mô hình yêu cầu: ${item.selected_tools.map(t=>esc(t.name)).join(', ')}</p>`:'';
       const why=item.model_explanation||{};
       return `<details class="ai-action ${esc(state)}" data-activity-id="${esc(item.kind+':'+item.id)}"><summary><b>${index+1}. ${esc(title)}</b> <span class="status">${esc(state)}</span><br><small>${esc(date(item.started))} · ${timing}</small></summary>${item.kind==='tool'?`<p><b>Mục đích tool:</b> ${esc(toolPurposes[item.name]||'Công cụ được yêu cầu; xem kết quả đã ghi nhận.')}</p><p><b>Câu hỏi AI muốn xác minh:</b> ${esc(why.question||'Không được model cung cấp hoặc đây là tool hệ thống tự gọi.')}</p><p><b>Lý do AI chọn:</b> ${esc(why.reason||'Không được model cung cấp hoặc đây là tool hệ thống tự gọi.')}</p><small>Đây là giải thích do model tự báo cáo; cần đối chiếu với bằng chứng.</small><p>${esc(scope)}</p><p><b>Kết quả:</b> ${esc(result)}</p>${authenticationPanel(item.authentication_summary)}${item.evidence_ids?.length?`<p>Evidence: ${item.evidence_ids.map(esc).join(', ')}</p>`:''}<details><summary>Tham số dự kiến và đã gửi</summary><pre class="detail">${esc(JSON.stringify(query,null,2))}</pre></details>`:item.kind==='model'?choices+'<p>Mục này thể hiện hoạt động của mô hình; kết quả được lưu trong báo cáo.</p>':'<p>Bước xử lý đã ghi nhận.</p>'}${item.error?`<p>${esc(item.error)}</p>`:''}</details>`;
     }
+    function localizeSyslogLog(fullLog,eventTime){
+      const log=String(fullLog||''),match=/^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2})\s+(\d{2}):(\d{2}):(\d{2})(?=\s)/.exec(log);
+      if(!match||!eventTime)return{value:log,converted:false};
+      const eventDate=new Date(typeof eventTime==='number'?eventTime*1000:eventTime),months={Jan:0,Feb:1,Mar:2,Apr:3,May:4,Jun:5,Jul:6,Aug:7,Sep:8,Oct:9,Nov:10,Dec:11};
+      if(Number.isNaN(eventDate.getTime()))return{value:log,converted:false};
+      const [,month,day,hour,minute,second]=match,year=eventDate.getUTCFullYear();
+      const candidates=[year-1,year,year+1].map(y=>new Date(Date.UTC(y,months[month],Number(day),Number(hour),Number(minute),Number(second))));
+      const utcDate=candidates.reduce((nearest,candidate)=>Math.abs(candidate-eventDate)<Math.abs(nearest-eventDate)?candidate:nearest);
+      // Only relabel the prefix when it agrees with Wazuh's normalized UTC event time.
+      if(Math.abs(utcDate-eventDate)>5*60*1000)return{value:log,converted:false};
+      const pad=value=>String(value).padStart(2,'0'),localDate=new Date(utcDate);
+      const prefix=`${month} ${localDate.getDate()} ${pad(localDate.getHours())}:${pad(localDate.getMinutes())}:${pad(localDate.getSeconds())}`;
+      return{value:prefix+log.slice(match[0].length),converted:true};
+    }
     function evidenceHTML(item){
       const d=item.data&&typeof item.data==='object'?item.data:{}, agent=d.agent||{}, rule=d.rule||{}, dns=d.dns||{}, http=d.http||{}, conn=d.zeek_connection||{};
       const present=v=>v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length);
       const show=v=>Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v);
+      const fieldValue=(key,value)=>key==='Thời gian sự kiện'||key==='Thời gian thu thập'?date(value):esc(show(value));
+      const logged=localizeSyslogLog(d.full_log,item.event_time||d.event_time);
       const fields=[['Thời gian sự kiện',item.event_time||d.event_time],['Agent',[agent.name,agent.ip].filter(present).join(' · ')],['Rule',rule.id?`${rule.id}${present(rule.level)?' · level '+rule.level:''}`:null],['Người dùng',d.username],['Xác thực',d.auth_outcome&&d.auth_outcome!=='unknown'?d.auth_outcome:null],['IP nguồn',d.src_ip],['Cổng nguồn',d.src_port],['IP đích',d.dst_ip],['Cổng đích',d.dst_port],['Truy vấn DNS',dns.query],['Loại DNS',dns.qtype_name],['Phản hồi DNS',dns.rcode_name],['Kết quả DNS',dns.answers],['Phương thức HTTP',http.method],['Máy chủ HTTP',http.host],['Đường dẫn HTTP',http.uri],['Trạng thái HTTP',http.status_code],['Giao thức',conn.proto],['Trạng thái kết nối',conn.conn_state],['Tệp',d.file_path],['Công cụ',item.tool]].filter(([,v])=>present(v));
       const title=rule.description||d.title||(item.evidence_type==='guidance'?'Reference material':'Sự kiện quan sát được');
       const kind=item.evidence_type==='guidance'?'Hướng dẫn · không phải bằng chứng sự cố':item.evidence_type==='trigger'?'Cảnh báo khởi tạo':'Sự kiện quan sát được';
-      return `<article class="evidence-card"><div class="evidence-card-head"><strong>${esc(title)}</strong><span class="evidence-kind">${esc(kind)}</span></div><dl class="evidence-grid">${fields.map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${esc(show(v))}</dd></div>`).join('')}</dl>${d.full_log?`<div class="evidence-field"><dt>Log đã ghi</dt></div><div class="evidence-log">${esc(d.full_log)}</div>`:''}${d.summary_truncated?'<p class="muted">Bản tóm tắt bằng chứng đã bị cắt; hãy xem chi tiết đã lưu.</p>':''}<details><summary>Nguồn và ID bằng chứng</summary><dl class="evidence-grid">${[['Evidence ID',item.evidence_id],['Nguồn',item.source],['ID bản ghi nguồn',item.source_record_id],['Thời gian thu thập',item.collected_at]].filter(([,v])=>present(v)).map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${esc(show(v))}</dd></div>`).join('')}</dl></details><details><summary>Xem dữ liệu đã ghi (JSON)</summary><pre class="detail">${esc(JSON.stringify(item.data,null,2))}</pre></details></article>`;
+      const logHTML=d.full_log?`<div class="evidence-field"><dt>Log đã ghi${logged.converted?' (giờ địa phương)':''}</dt></div><div class="evidence-log">${esc(logged.value)}</div>${logged.converted?`<details><summary>Log nguồn nguyên bản (UTC)</summary><div class="evidence-log">${esc(d.full_log)}</div></details>`:''}`:'';
+      return `<article class="evidence-card"><div class="evidence-card-head"><strong>${esc(title)}</strong><span class="evidence-kind">${esc(kind)}</span></div><dl class="evidence-grid">${fields.map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${fieldValue(k,v)}</dd></div>`).join('')}</dl>${logHTML}${d.summary_truncated?'<p class="muted">Bản tóm tắt bằng chứng đã bị cắt; hãy xem chi tiết đã lưu.</p>':''}<details><summary>Nguồn và ID bằng chứng</summary><dl class="evidence-grid">${[['Evidence ID',item.evidence_id],['Nguồn',item.source],['ID bản ghi nguồn',item.source_record_id],['Thời gian thu thập',item.collected_at]].filter(([,v])=>present(v)).map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${fieldValue(k,v)}</dd></div>`).join('')}</dl></details><details><summary>Xem dữ liệu đã ghi (JSON)</summary><pre class="detail">${esc(JSON.stringify(item.data,null,2))}</pre></details></article>`;
     }
     function investigate(id){if(String(selectedInvestigation)!==String(id)){dossierSection='overview';dossierKey='';dossierSignature=''}selectedInvestigation=id;document.querySelectorAll('[data-investigation]').forEach(b=>b.setAttribute('aria-current',String(b.dataset.investigation===String(id))));const a=alerts.find(x=>String(x.id)===String(id));$('investigation-detail').textContent=a?investigationText(a):'Alert not found.';$('investigation-detail').hidden=true;if($('investigation-context'))$('investigation-context').innerHTML=a?`<h2>${esc(a.rule?.description||a.attack_type||'Cảnh báo bảo mật')}</h2><div class="log-chips"><span class="log-chip">${esc(a.agent?.name||'Không rõ agent')}</span><span class="severity ${esc(a.severity||'low')}">${esc(severityName(a.severity))}</span><span class="log-chip">Rule ${esc(a.rule?.id||'—')}</span>${a.timestamp?`<span class="log-chip">Sự kiện: ${esc(date(a.timestamp))}</span>`:''}${a.src_ip||a.dst_ip?`<span class="log-chip">${esc(a.src_ip||'?')} → ${esc(a.dst_ip||'?')}${a.dst_ip&&a.dst_port!=null?':'+esc(a.dst_port):''}</span>`:''}</div>`:'';$('investigation-progress').innerHTML=a?progressHTML(a):'';loadDossier(a)}
     async function loadDossier(a,more=false,force=false){
