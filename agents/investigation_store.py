@@ -165,6 +165,11 @@ class InvestigationStore:
         with self.connect() as db:
             return dict(db.execute('SELECT kind,COUNT(*) FROM calls WHERE incident_id=? GROUP BY kind',(incident_id,)).fetchall())
 
+    def completed_call(self, incident_id, call_id):
+        with self.connect() as db:
+            row=db.execute('SELECT state,result FROM calls WHERE incident_id=? AND id=?',(incident_id,call_id)).fetchone()
+            return json.loads(row['result']) if row and row['state']=='completed' and row['result'] else None
+
     def call(self, incident_id, call_id, kind, name, args, maximum, callback):
         """Reserve before dispatch. Completed calls replay; interrupted calls never silently rerun."""
         with self.connect() as db:

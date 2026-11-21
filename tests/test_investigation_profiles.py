@@ -134,6 +134,6 @@ def test_graph_collects_tunnel_evidence_before_model_plans(tunnel_lab):
     queries = [e['data'].get('dns', {}).get('query', '') for e in context['evidence']]
     assert queries and not any('in-addr.arpa' in q or 'ntp.ubuntu.com' in q for q in queries)
     assert any(e['kind'] == 'aggregate' for e in context['evidence'])
-    # Already collected tools are not offered again; irrelevant tools are never offered.
-    assert 'summarize_dns_activity' not in seen['tools'] and 'search_auth_events' not in seen['tools']
+    # Collected tools remain available for a narrower or different scoped query.
+    assert 'summarize_dns_activity' in seen['tools'] and 'search_auth_events' not in seen['tools']
     assert 'search_process_events' in seen['tools']

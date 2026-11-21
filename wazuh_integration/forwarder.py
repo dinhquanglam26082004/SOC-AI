@@ -1,9 +1,11 @@
 """At-least-once HTTP delivery. Run a single instance per spool volume."""
 import argparse
+import http.client
 import json
 import logging
 import os
 from pathlib import Path
+import socket
 import time
 import urllib.error
 import urllib.request
@@ -20,16 +22,31 @@ def deliver(spool, target, token, timeout=10):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as response:
             receipt = json.loads(response.read(65536))
+            if not isinstance(receipt, dict):
+                raise ValueError('Receipt must be a JSON object')
             acknowledged = receipt.get('durable') is True or (
                 receipt.get('filtered') is True and receipt.get('durable') is False)
             if response.status not in (200, 201, 202) or not acknowledged:
-                raise ValueError('Missing durable receipt')
+                raise ValueError('Missing durable or explicit filtered receipt')
         spool.complete(row['id'])
     except urllib.error.HTTPError as exc:
         permanent = 400 <= exc.code < 500 and exc.code not in (408, 425, 429)
         spool.fail(row, permanent, 'http_' + str(exc.code))
-    except (OSError, ValueError):
-        spool.fail(row, False, 'transport_or_receipt_error')
+        logger.warning('Forwarder row %s: HTTP %s (%s)', row['id'], exc.code,
+                       'dead-letter' if permanent else 'retry')
+    except (ValueError, UnicodeError) as exc:
+        spool.fail(row, False, 'invalid_receipt')
+        logger.warning('Forwarder row %s: invalid receipt (%s); retry', row['id'], type(exc).__name__)
+    except urllib.error.URLError as exc:
+        reason = 'transport_timeout' if isinstance(exc.reason, (TimeoutError, socket.timeout)) else 'connection_error'
+        spool.fail(row, False, reason)
+        logger.warning('Forwarder row %s: %s (%s); retry', row['id'], reason, type(exc.reason).__name__)
+    except (TimeoutError, socket.timeout) as exc:
+        spool.fail(row, False, 'transport_timeout')
+        logger.warning('Forwarder row %s: transport_timeout (%s); retry', row['id'], type(exc).__name__)
+    except (OSError, http.client.HTTPException) as exc:
+        spool.fail(row, False, 'connection_error')
+        logger.warning('Forwarder row %s: connection_error (%s); retry', row['id'], type(exc).__name__)
     return True
 
 
@@ -93,8 +110,8 @@ def main():
                     break
                 write_status(spool, path, archives)
             write_status(spool, path, archives)
-        except Exception:
-            logger.error('Forwarder storage failure; check disk and spool permissions')
+        except Exception as exc:
+            logger.error('Forwarder loop failed (%s); check spool, status file and backend', type(exc).__name__)
             # heartbeat becomes stale if status cannot be persisted
         time.sleep(1)
 

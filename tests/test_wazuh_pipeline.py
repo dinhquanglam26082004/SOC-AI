@@ -1,10 +1,12 @@
 import asyncio
 from copy import deepcopy
 import json
+import socket
 import sqlite3
 import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from unittest.mock import patch
+import urllib.error
 
 import pytest
 from fastapi.testclient import TestClient
@@ -203,6 +205,64 @@ def test_spool_restart_http_retry_and_deadletter(tmp_path, event):
     finally:
         server.shutdown()
         server.server_close()
+
+
+def test_forwarder_receipts_timeout_and_recovery(tmp_path, event):
+    spool = Spool(tmp_path / 'queue.db')
+
+    class Reply:
+        status = 202
+        def __init__(self, body): self.body = body
+        def __enter__(self): return self
+        def __exit__(self, *_): return False
+        def read(self, _): return self.body
+
+    def send(reply):
+        spool.put(event)
+        with patch('wazuh_integration.forwarder.urllib.request.urlopen', return_value=Reply(reply)):
+            assert deliver(spool, 'http://test.invalid/wazuh', 'test')
+
+    send(b'{"durable":true}')
+    assert spool.stats()['sent'] == 1
+    # A deliberate filter is explicitly acknowledged but never mislabelled durable.
+    send(b'{"filtered":true,"durable":false}')
+    assert spool.stats()['sent'] == 2
+
+    spool.put(event)
+    for body in (b'{"durable":false}', b'[]', b'not-json'):
+        with patch('wazuh_integration.forwarder.urllib.request.urlopen', return_value=Reply(body)):
+            assert deliver(spool, 'http://test.invalid/wazuh', 'test')
+        with spool.connect() as db:
+            row = db.execute('SELECT error,attempts FROM queue').fetchone()
+            assert row['error'] == 'invalid_receipt'
+            db.execute('UPDATE queue SET next_try=0')
+    with patch('wazuh_integration.forwarder.urllib.request.urlopen', side_effect=socket.timeout()):
+        deliver(spool, 'http://test.invalid/wazuh', 'test')
+    with spool.connect() as db:
+        assert db.execute('SELECT error FROM queue').fetchone()[0] == 'transport_timeout'
+        db.execute('UPDATE queue SET next_try=0')
+    with patch('wazuh_integration.forwarder.urllib.request.urlopen',
+               side_effect=urllib.error.URLError(ConnectionRefusedError())):
+        deliver(spool, 'http://test.invalid/wazuh', 'test')
+    with spool.connect() as db:
+        assert db.execute('SELECT error FROM queue').fetchone()[0] == 'connection_error'
+        db.execute('UPDATE queue SET next_try=0')
+    with patch('wazuh_integration.forwarder.urllib.request.urlopen', return_value=Reply(b'{"durable":true}')):
+        deliver(spool, 'http://test.invalid/wazuh', 'test')
+    assert spool.stats()['pending'] == 0 and spool.stats()['sent'] == 3
+
+
+def test_integration_error_marker_is_independent_of_delivery(tmp_path):
+    spool = Spool(tmp_path / 'queue.db')
+    marker = tmp_path / 'integration-error'
+    marker.write_text('prior integration failure')
+    status = tmp_path / 'status.json'
+    write_status(spool, status)
+    assert json.loads(status.read_text())['integration_error'] is True
+    assert json.loads(status.read_text())['state'] == 'error'
+    marker.unlink()
+    write_status(spool, status)
+    assert json.loads(status.read_text())['state'] == 'running'
 
 
 def test_spool_capacity_and_integration_ack(tmp_path, event, monkeypatch):

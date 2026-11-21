@@ -1,5 +1,71 @@
 """Evidence reference checks and conservative verdict policy; independent of model prose."""
+import re
 from agents.investigation_schema import Hypothesis
+
+
+_ATTACK_CLAIM = re.compile(r'\b(?:attack|malicious|compromise|exploit|intrusion|dos|ddos|reconnaissance|rootkit)\b|tấn công|xâm nhập|trái phép',re.I)
+_ATTACK_SIGNAL = re.compile(r'\b(?:attack|malware|exploit|intrusion|brute.force|port.scan|ddos|dos|rootkit)\b|tấn công|xâm nhập',re.I)
+_ATTACK_GROUPS = {'attack','web_attack','malware','intrusion','exploit','zeek_scan','zeek_dos',
+                  'dhcp_attack','dhcp_spoofing','dhcp_starvation','privilege_escalation','rootkit'}
+
+
+def listener_attack_signal(evidence, cited=None):
+    """Require an independent, explicit endpoint attack signal; proximity is insufficient."""
+    for item in evidence:
+        if item.get('evidence_type')!='observed' or (cited is not None and item.get('evidence_id') not in cited):
+            continue
+        data=item.get('data') or {}
+        if data.get('source_product')=='zeek':
+            continue
+        rule=data.get('rule') or {}
+        groups={str(group).lower() for group in rule.get('groups') or []}
+        if groups & _ATTACK_GROUPS or _ATTACK_SIGNAL.search(str(rule.get('description') or '')):
+            return True
+    return False
+
+
+def unsupported_attack_label(statement, evidence):
+    """Reject named attack categories without a matching source signal.
+
+    This is a narrow category guard, not proof that a matching detection is true.
+    """
+    label=str(statement or '').lower()
+    categories=[]
+    if re.search(r'\b(?:ddos|dos|denial.of.service)\b',label): categories.append('dos')
+    if re.search(r'\b(?:reconnaissance|recon|scann?ing|port.scan)\b',label): categories.append('scan')
+    if re.search(r'(?:dhcp.{0,24}(?:attack|spoof|starvation|rogue|tấn công)|(?:attack|tấn công).{0,24}dhcp)',label):
+        categories.append('dhcp_attack')
+    if 'rootkit' in label: categories.append('rootkit')
+    if re.search(r'\b(?:privilege.escalation|leo thang đặc quyền)\b',label): categories.append('privilege')
+    if not categories: return False
+    signals=set()
+    for item in evidence:
+        if item.get('evidence_type') not in {'trigger','observed','aggregate'}: continue
+        data=item.get('data') or {}
+        rule=data.get('rule') or {}
+        groups={str(g).lower() for g in rule.get('groups') or []}
+        description=str(rule.get('description') or '').lower()
+        if 'zeek_dos' in groups or 'suspected_dos' in groups or re.search(r'\b(?:ddos|dos|denial.of.service)\b',description): signals.add('dos')
+        if groups & {'zeek_scan','recon','network_scan'} or re.search(r'\b(?:reconnaissance|port.scan)\b',description): signals.add('scan')
+        if groups & {'dhcp_attack','dhcp_spoofing','dhcp_starvation'} or re.search(
+                r'(?:dhcp.{0,24}(?:attack|spoof|starvation|rogue|tấn công)|(?:attack|tấn công).{0,24}dhcp)',description):
+            signals.add('dhcp_attack')
+        if groups & {'rootcheck','rootkit'} or data.get('rootkit_snapshot'): signals.add('rootkit')
+        if groups & {'sudo','su','privilege_escalation'} or data.get('privilege'): signals.add('privilege')
+    return any(category not in signals for category in categories)
+
+
+def ground_hypotheses(items, evidence):
+    listener_trigger=any(item.get('evidence_type')=='trigger' and
+        (item.get('data') or {}).get('listener_changes') for item in evidence)
+    listener_signal=listener_attack_signal(evidence) if listener_trigger else False
+    for item in items:
+        if (unsupported_attack_label(item.get('statement'), evidence) or
+                (listener_trigger and not listener_signal and _ATTACK_CLAIM.search(item.get('statement') or ''))):
+            item.update(statement='Chưa rõ nguyên nhân của hoạt động được cảnh báo.', status='open',
+                        supporting=[], refuting=[], evidence_ids=[],
+                        question='Cần bằng chứng endpoint hoặc xác nhận thay đổi cấu hình để xác định nguyên nhân.')
+    return items
 
 
 def hypotheses(items,evidence,previous=()):

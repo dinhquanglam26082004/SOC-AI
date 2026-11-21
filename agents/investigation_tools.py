@@ -3,6 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 from collections import Counter
 from datetime import datetime, timedelta, timezone
 import json
+import ipaddress
+import re
 import sqlite3
 import time
 from pathlib import Path
@@ -241,6 +243,52 @@ def bounded(value, budget=6000):
     return result,truncated[0]
 
 
+_LISTENER_LINE = re.compile(r'^\s*(tcp6?|udp6?)\s+(.+)$', re.I)
+_LOCAL_ENDPOINT = re.compile(r'^(\[[^\]]+\]|[^:\s]+):(\d{1,5})$')
+_PROCESS_OWNER = re.compile(r'(?<!\S)(\d+)/([^\s]+)')
+
+
+def _listener_rows(value):
+    """Parse local socket rows only; leave unrecognized source text unclaimed."""
+    rows={}
+    for line in value.splitlines():
+        match=_LISTENER_LINE.match(line)
+        if not match:
+            continue
+        protocol=match.group(1).lower()
+        tokens=match.group(2).split()
+        endpoint=next((m for token in tokens if (m:=_LOCAL_ENDPOINT.fullmatch(token))
+                       and 0<int(m.group(2))<=65535),None)
+        if not endpoint:
+            continue
+        address=endpoint.group(1).strip('[]')
+        port=int(endpoint.group(2))
+        owner=_PROCESS_OWNER.search(match.group(2))
+        row={'protocol':protocol,'address':address,'port':port}
+        if owner:
+            row.update(pid=int(owner.group(1)),process=owner.group(2))
+        rows[(protocol,address,port)]=row
+    return rows
+
+
+def compare_listener_snapshots(full_log,previous_output):
+    """Derive snapshot differences from retained alert fields, never from model text."""
+    current=_listener_rows(full_log)
+    previous=_listener_rows(previous_output)
+    if not current and not previous:
+        return None
+    comparable=bool(full_log.strip() and previous_output.strip() and current and previous)
+    added=[current[key] for key in sorted(current.keys()-previous.keys())] if comparable else []
+    removed=[previous[key] for key in sorted(previous.keys()-current.keys())] if comparable else []
+    return {'source_fields':['raw_event.full_log','raw_event.previous_output'],
+            'comparison_complete':comparable,
+            'current_listeners':len(current),'previous_listeners':len(previous),
+            'added':added[:30],'removed':removed[:30],
+            'added_total':len(added),'removed_total':len(removed),
+            'changes_omitted':len(added)>30 or len(removed)>30,
+            'interpretation':'Snapshot difference only; process intent, authorization and cause are unknown.'}
+
+
 def observation(record):
     """Keep evidence small without reinterpreting packet direction or inventing fields."""
     raw=record.get('raw_event') or {}
@@ -271,13 +319,19 @@ def observation(record):
             if k in rootkit_snapshot
         },
     })
+    full_log=str(raw.get('full_log') or '')
+    previous_output=str(raw.get('previous_output') or data.get('previous_output') or '')
+    listener_changes=compare_listener_snapshots(full_log,previous_output)
     return {**{k:record.get(k) for k in ('id','timestamp','received_at','source_product','log_type',
              'agent','rule','src_ip','dst_ip','src_port','dst_port','username','event_id','process','file_path','title')},
             'event_time':utc_stamp(record['timestamp']) if record.get('timestamp') else None, 'source':'soc-ai-sqlite',
             'auth_outcome':auth_outcome(record),
-            'full_log':str(raw.get('full_log') or '')[:2000],
+            'full_log':full_log[:2000],
+            'previous_output':previous_output[:3000],
+            **({'listener_changes':listener_changes} if listener_changes else {}),
             'data':json.dumps(raw.get('data') or {},ensure_ascii=False)[:2500],
-            **structured,'summary_truncated':cut or len(str(raw.get('full_log') or ''))>2000
+            **structured,'summary_truncated':cut or len(full_log)>2000
+                or len(previous_output)>3000
                 or len(json.dumps(data,ensure_ascii=False))>2500}
 
 
@@ -360,6 +414,49 @@ class LocalTools:
         self.until=utc_stamp((anchor+timedelta(minutes=15)).isoformat())
         self.ips={str(x) for x in (alert.get('src_ip'),alert.get('dst_ip'),(alert.get('agent') or {}).get('ip')) if x}
 
+    def normalized_args(self, name, arguments):
+        """Canonical query identity, including defaults and the effective incident scope."""
+        args = MODELS[name].model_validate(arguments).model_dump()
+        if name in {'get_alert', 'get_event_details', 'search_runbook'}:
+            return args
+        for key in ('since', 'until', 'baseline_since', 'baseline_until'):
+            if key in args and args[key] is not None:
+                args[key] = utc_stamp(args[key])
+        if 'agent_id' in args:
+            # Preserve an invalid requested agent so scope validation still rejects it.
+            args['agent_id'] = self.agent if args['agent_id'] is None else args['agent_id']
+            if args['agent_id'] == str((self.alert.get('agent') or {}).get('ip') or ''):
+                # The alert gives an unambiguous mapping from its agent IP to agent ID.
+                args['agent_id'] = self.agent
+            args['since'] = args['since'] or self.since
+            args['until'] = args['until'] or self.until
+        for key in ('host', 'query', 'method', 'rcode_name', 'qtype_name', 'domain_suffix', 'domain'):
+            if args.get(key) is not None:
+                args[key] = args[key].lower().rstrip('.') if key in {'domain', 'domain_suffix'} else args[key].lower()
+        return args
+
+    def scoped_ips(self):
+        """IPs observed for this agent and incident; never infer them from prose."""
+        ips=set(self.ips)
+        for item in self.audit.evidence(self.incident_id):
+            if item.get('evidence_type') not in {'trigger','observed'}:
+                continue
+            data=item.get('data') or {}
+            agent=data.get('agent') or {}
+            if str(agent.get('id') or '')!=self.agent:
+                continue
+            stamp=item.get('event_time')
+            if not stamp or not self.since<=stamp<=self.until:
+                continue
+            conn=data.get('zeek_connection') or {}
+            endpoints=conn.get('id') or {}
+            for value in (data.get('src_ip'),data.get('dst_ip'),conn.get('id.orig_h'),
+                          conn.get('id.resp_h'),endpoints.get('orig_h'),endpoints.get('resp_h')):
+                if isinstance(value,str):
+                    try: ips.add(str(ipaddress.ip_address(value)))
+                    except ValueError: pass
+        return ips
+
     def envelope(self, status, **kwargs):
         return {'status':status,'items':[], 'scope':{'agent_id':self.agent,'since':self.since,'until':self.until},
                 'coverage':'Only events actually retained in SOC SQLite; absence is not proof of safety. Empty results cannot establish whether collection is configured.', **kwargs}
@@ -383,8 +480,10 @@ class LocalTools:
                 return self.summarize_flows(args,min(timeout or self.seconds,self.seconds))
             if name=='get_event_details':
                 return self.event_details(args,min(timeout or self.seconds,self.seconds))
-            if args['agent_id'] not in (None,self.agent) or args['ip'] is not None and args['ip'] not in self.ips:
-                raise ValueError('host/IP outside incident scope')
+            if args['agent_id'] not in (None,self.agent):
+                raise ValueError('agent_id outside incident scope')
+            if args['ip'] is not None and args['ip'] not in self.scoped_ips():
+                raise ValueError('IP not present in alert or collected incident evidence')
             since=utc_stamp(args['since']) if args['since'] else self.since
             until=utc_stamp(args['until']) if args['until'] else self.until
             if since<self.since or until>self.until or since>until:
@@ -488,6 +587,13 @@ class LocalTools:
                     {'source':'derived-soc-sqlite','event_time':until,'authentication_summary':auth_summary},name,args)
             result.update(total_matched=total,returned_count=len(result['items']),
                 count_unit='Retained records matching this query; not unique sessions or proof of collection completeness.')
+            if name=='search_process_events':
+                result['coverage']=('Only retained Wazuh events with rule.groups containing audit_command '
+                    'for this agent and time window. This is not live process enumeration or a general '
+                    'process-creation feed; collection and forwarding completeness are unknown.')
+                if total==0:
+                    result['detail']=('No retained audit_command event matched this query. '
+                        'This does not establish that the process did not run or that its activity was malicious.')
             return result
         except (ValueError,TypeError) as exc:
             return self.envelope('error',error='invalid_scope_or_arguments',detail=str(exc)[:500])
@@ -564,10 +670,23 @@ class LocalTools:
         return self.envelope('ok',items=samples['items'],summary=result['summary'],aggregate_evidence_id=eid,query=args)
 
     def event_details(self,args,timeout):
-        evidence=next((e for e in self.audit.evidence(self.incident_id)
+        dossier=self.audit.evidence(self.incident_id)
+        evidence=next((e for e in dossier
                        if e['evidence_id']==args['evidence_id'] and e['evidence_type']!='guidance'),None)
         if evidence is None:
             raise ValueError('evidence ID is not a collected event in this investigation')
+        trigger=next((e for e in dossier if e['evidence_type']=='trigger'),None)
+        change=((trigger or {}).get('data') or {}).get('listener_changes') or {}
+        if (evidence['data'].get('source_product')=='zeek' and change.get('comparison_complete')
+                and not change.get('changes_omitted')):
+            changed_ports={row['port'] for row in change.get('added',[])+change.get('removed',[])}
+            network=evidence['data'].get('zeek_connection') or {}
+            ports=(evidence['data'].get('src_port'),evidence['data'].get('dst_port'),
+                   network.get('id.orig_p'),network.get('id.resp_p'))
+            related_ports={int(port) for port in ports if str(port).isdigit()}
+            if changed_ports and not changed_ports.intersection(related_ports):
+                return self.envelope('error',error='irrelevant_to_source_change',
+                    detail='Zeek event has no port matching a changed listener; proximity alone does not justify expanding it.')
         deadline=time.monotonic()+timeout
         db=sqlite3.connect(Path(self.store.path).resolve().as_uri()+'?mode=ro',uri=True,timeout=.5)
         try:

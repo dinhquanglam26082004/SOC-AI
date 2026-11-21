@@ -16,6 +16,11 @@ DNS_RULES = {'100151', '100152', '100153', '100154', '100155', '100156', '100157
 DNS_GROUPS = {'zeek_dns_anomaly', 'zeek_dns_tunneling'}
 
 PROFILES = {
+    'endpoint_listener_change': {
+        'label': 'Thay đổi cổng lắng nghe trên endpoint',
+        'focus': 'Đối chiếu danh sách cổng trước/sau trong alert và log endpoint đã lưu; xác định tiến trình hoặc thay đổi cấu hình nếu nguồn có ghi. Lưu lượng Zeek không chứng minh nguyên nhân đổi listener.',
+        'tools': ('search_process_events',),
+    },
     'dns_tunneling': {
         'label': 'Nghi DNS tunneling / DNS C2 (MITRE T1071.004)',
         'focus': ('Xác định domain cha nhận nhiều subdomain ngẫu nhiên, loại query (NULL/TXT/CNAME/MX), '
@@ -68,6 +73,8 @@ def classify(alert):
     groups = {str(g).lower() for g in rule.get('groups') or []}
     mitre = {str(m) for m in ((rule.get('mitre') or {}).get('id') or [])}
     desc = str(rule.get('description') or '').lower()
+    if listener_change(alert):
+        return 'endpoint_listener_change'
     if rid in DNS_RULES or groups & DNS_GROUPS or 'T1071.004' in mitre or 'dns tunneling' in desc:
         return 'dns_tunneling'
     if rid == '521' or ('rootcheck' in groups and ('rootkit' in desc or 'hidden' in desc)):
@@ -84,6 +91,14 @@ def classify(alert):
             or (alert.get('detection') or {}).get('category') == 'suspected_dos':
         return 'network_scan_dos'
     return None
+
+
+def listener_change(alert):
+    """Recognize the source event, without relying on a Wazuh rule number."""
+    description = str((alert.get('rule') or {}).get('description') or '').lower()
+    location = str((alert.get('raw_event') or {}).get('location') or '').lower()
+    return ('listened ports status changed' in description or
+            'listening ports' in description or location == 'netstat listening ports')
 
 
 def tools_for(alert, all_tools):

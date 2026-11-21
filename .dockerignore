@@ -10,3 +10,9 @@ data/soc_runtime.sqlite3*
 data/backups/
 data/
 .git/
+.pytest_cache
+.pytest_cache/sudo ss -lntp | grep 18765
+**/.pytest_cache/
+__pycache__/
+*.pyc
+.venv/

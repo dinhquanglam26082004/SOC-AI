@@ -75,8 +75,14 @@ def evidence_summary(e):
     data = e['data']
     fields = ('agent', 'src_ip', 'dst_ip', 'username', 'auth_outcome', 'file_path',
               'process', 'log_type', 'http', 'dns', 'file_change', 'privilege',
-              'zeek_connection', 'flow_summary', 'dns_summary', 'authentication_summary', 'audit', 'summary_truncated', 'details_truncated')
+              'zeek_connection', 'flow_summary', 'dns_summary', 'authentication_summary', 'audit',
+              'listener_changes', 'summary_truncated', 'details_truncated')
     compact = {k: bounded(data[k]) for k in fields if data.get(k) not in (None, {}, '')}
+    if isinstance(data.get('listener_changes'), dict):
+        change=data['listener_changes']
+        compact['listener_changes']={k:bounded(change[k],text=160,width=12) for k in
+            ('source_fields','comparison_complete','current_listeners','previous_listeners',
+             'added','removed','added_total','removed_total','changes_omitted','interpretation') if k in change}
     if isinstance(data.get('dns_summary'), dict):
         compact['dns_summary'] = compact_dns_summary(data['dns_summary'])
     if isinstance(data.get('flow_summary'), dict):
@@ -87,6 +93,8 @@ def evidence_summary(e):
     compact['rule'] = {k: bounded(rule[k]) for k in ('id', 'description', 'level') if k in rule}
     if data.get('full_log'):
         compact['log_excerpt'] = bounded(data['full_log'], text=400)
+    if data.get('previous_output'):
+        compact['previous_output'] = bounded(data['previous_output'], text=700)
     if data.get('details_requested'):
         detail=data.get('event_details', data.get('raw_event', {}))
         # Put actual event fields before repeated envelope/compliance metadata.
@@ -133,6 +141,13 @@ def pack_evidence(evidence, allowance):
                               if k in {'rule','file_path','src_ip','dst_ip','privilege','http','dns','file_change'}},
                             'log_excerpt': bounded(e['data'].get('full_log', ''), text=180),
                             'summary_excerpted': True}
+            if isinstance(e['data'].get('listener_changes'),dict):
+                change=e['data']['listener_changes']
+                item['data']['listener_changes']={k:change[k] for k in
+                    ('comparison_complete','added_total','removed_total') if k in change}
+                for key in ('added','removed'):
+                    item['data']['listener_changes'][key]=change.get(key,[])[:3]
+                item['data']['listener_changes']['context_rows_limited']=True
             # Never replace a scoped aggregate with an empty log excerpt: if it
             # does not fit, omit it and report truncation rather than lose scope.
             if aggregate:

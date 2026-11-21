@@ -35,7 +35,7 @@ def test_progress_mode_continues_past_fixed_limits_and_stops_without_new_evidenc
     assert audit.counts(result['incident_id'])['tool']==7
 
 
-def test_progress_mode_finishes_when_all_tools_have_been_used(tmp_path, monkeypatch):
+def test_progress_mode_finishes_after_repeated_cached_queries_add_no_evidence(tmp_path, monkeypatch):
     # Mechanics test for the unrouted tool set; routing is covered in test_investigation_profiles.py.
     monkeypatch.setenv("AI_TOOL_ROUTING", "false")
     store=EventStore(tmp_path/'events.db');audit=InvestigationStore(tmp_path/'audit.db')
@@ -56,6 +56,7 @@ def test_progress_mode_finishes_when_all_tools_have_been_used(tmp_path, monkeypa
             {'function':{'name':tool['function']['name'],'arguments':{}}} for tool in kwargs['tools']]}}
     graph=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True))
     with patch.object(LocalTools,'execute',execute):result=graph.run_alert(alert)
-    assert len(planner_calls)==1
-    assert result['stop_reason']=='all_tools_used'
-    assert audit.counts(result['incident_id'])=={'model':2,'tool':16}
+    assert len(planner_calls)==3
+    assert result['stop_reason']=='no_new_evidence'
+    assert audit.counts(result['incident_id'])=={'model':4,'tool':16}
+    assert any(o.get('call_disposition')=='cached' for o in result['tool_outcomes'])

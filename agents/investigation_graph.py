@@ -13,11 +13,11 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langsmith import tracing_context
 from agents.investigation_schema import InvestigationReport, Limits, WorkflowError, ReviewDecision, ollama_report_schema
-from agents.investigation_policy import hypotheses as normalize_hypotheses, assess_verdict
+from agents.investigation_policy import hypotheses as normalize_hypotheses, assess_verdict, ground_hypotheses, unsupported_attack_label, listener_attack_signal
 from agents.investigation_store import encode
 from agents.investigation_tools import LocalTools, MODELS, definitions
 from agents.investigation_context import pack_evidence
-from agents.investigation_profiles import tools_for, context_hint, baseline_calls
+from agents.investigation_profiles import tools_for, context_hint, baseline_calls, listener_change
 from common.ollama_client import chat_messages
 
 
@@ -100,17 +100,9 @@ def report_translation_signature(report):
             len(report.get('unknowns', [])), len(report.get('recommendations', [])))
 
 
-def used_tool_names(state):
-    """Tool attempts in the checkpoint, excluding calls prevented before dispatch."""
-    not_dispatched = {'missing_scope_or_budget', 'tool_budget', 'time_budget'}
-    return {item['tool'] for item in state.get('observations', [])
-            if item.get('tool') and item.get('error') not in not_dispatched}
-
-
 def available_tool_names(state, allowed=None):
-    used = used_tool_names(state)
     names = allowed if allowed is not None else [name for name in MODELS if name != 'get_alert']
-    return [name for name in names if name != 'get_alert' and name not in used]
+    return [name for name in names if name != 'get_alert']
 
 
 class InvestigationGraph:
@@ -140,19 +132,33 @@ class InvestigationGraph:
             self.on_progress(node,step,summary)
 
     def tool(self,name,args,explanation=None):
-        key='tool-'+hashlib.sha256(encode([name,args]).encode()).hexdigest()[:32]
+        try:
+            canonical=self.tools.normalized_args(name,args) if name in MODELS else args
+        except (ValueError,TypeError):
+            canonical=args  # Invalid arguments retain their own auditable identity.
+        ip=canonical.get('ip') if isinstance(canonical,dict) else None
+        ip_authorized=(ip in self.tools.scoped_ips()) if ip is not None else None
+        key='tool-'+hashlib.sha256(encode([name,canonical,self.tools.agent,self.tools.since,self.tools.until,ip_authorized]).encode()).hexdigest()[:32]
+        cached=self.audit.completed_call(self.id,key)
+        if cached is not None:
+            return {**cached,'call_disposition':'cached' if cached['status'] in {'ok','empty','truncated'} else 'blocked',
+                    'call_reason':'equivalent_query' if cached['status'] in {'ok','empty','truncated'} else 'previous_failed_query'}
         if self.remaining()<=0:
-            return self.tools.envelope('unavailable',error='time_budget')
+            return self.tools.envelope('unavailable',error='time_budget',call_disposition='blocked',call_reason='time_budget')
         def dispatch():
             self.progress('triage' if name=='get_alert' else 'collecting',1 if name=='get_alert' else 3)
             remaining=self.remaining()
             if remaining<=0:
                 return self.tools.envelope('unavailable',error='time_budget')
-            result=self.tools.execute(name,args,timeout=min(remaining,self.limits.tool_seconds))
+            result=self.tools.execute(name,canonical,timeout=min(remaining,self.limits.tool_seconds))
             if explanation:
                 result={**result,'model_explanation':explanation}
-            return result
-        return self.audit.call(self.id,key,'tool',name,args,None if self.limits.progress_mode else self.limits.tool_calls,dispatch)
+            disposition=('executed' if result['status'] in {'ok','empty','truncated'} else
+                         'blocked' if result.get('error') in {'tool_not_allowed','invalid_scope_or_arguments',
+                                                             'irrelevant_to_source_change'} else 'failed')
+            return {**result,'call_disposition':disposition,
+                    'call_reason':result.get('error') or 'query_executed'}
+        return self.audit.call(self.id,key,'tool',name,canonical,None if self.limits.progress_mode else self.limits.tool_calls,dispatch)
 
     def model_call(self,key,messages,final=False,available_tools=None):
         if self.remaining()<=0:
@@ -177,17 +183,44 @@ class InvestigationGraph:
         fixed=len(SYSTEM)+len(encode(ollama_report_schema() if final else definitions(available_tool_names(state,self.allowed))))
         fixed+=len(encode(state.get('messages',[]))) if not final else 0
         raw_allowance=3*max(0,context_tokens-prediction_tokens-256)-fixed-1200
-        allowance=min(self.limits.context_chars,max(800,raw_allowance))
+        # Repeated tools remain advertised; keep enough room for the aggregate
+        # evidence that motivated those calls even with a small model context.
+        allowance=min(self.limits.context_chars,max(2000,raw_allowance))
         # Record when instructions + tool schemas leave too little room for evidence instead of silently starving it.
         self.context_starved=raw_allowance<2000
         packed=pack_evidence(self.audit.evidence(self.id),allowance)
         profile=context_hint(self.alert)
+        listener=listener_change(self.alert)
+        trigger=next((e for e in self.audit.evidence(self.id) if e['evidence_type']=='trigger'),None)
+        source_change=(trigger.get('data') or {}).get('listener_changes') if trigger else None
+        compared=bool(source_change and source_change.get('comparison_complete'))
+        source_facts=({'evidence_id':trigger['evidence_id'],
+            'added':source_change.get('added',[])[:5],
+            'removed':source_change.get('removed',[])[:5],
+            'added_total':source_change.get('added_total',0),
+            'removed_total':source_change.get('removed_total',0),
+            'source_fields':source_change.get('source_fields',[]),
+            'scope':'Observed difference between retained snapshots; no claim about intent or authorization.'}
+            if compared else None)
         return {'alert_id':self.alert['id'],'scope':self.tools.envelope('ok')['scope'],
                 **({'alert_profile':profile} if profile else {}),
+                'investigation_frame':{
+                    'known': (['Wazuh ghi nhận thay đổi trạng thái cổng lắng nghe trên endpoint.',
+                               'Đã đối chiếu các dòng listener trong full_log và previous_output; xem source_change.']
+                              if compared else ['Wazuh ghi nhận thay đổi trạng thái cổng lắng nghe trên endpoint.']) if listener else
+                             ['Wazuh ghi nhận sự kiện theo mô tả rule và thời điểm trong trigger.'],
+                    'unknown': (['Chưa xác định nguyên nhân, lệnh tạo tiến trình và tính hợp lệ của thay đổi listener.']
+                                if compared else ['Chưa đối chiếu được đầy đủ cổng trước/sau; cần kiểm tra nguồn gốc hoặc giới hạn snapshot.']) if listener else
+                               ['Chưa xác minh nguyên nhân, tác động và tính hợp lệ của sự kiện.'],
+                    'question': ('Có bản ghi endpoint độc lập nào xác minh tiến trình, lệnh chạy hoặc thay đổi cấu hình liên quan không?'
+                                 if compared else 'Dữ liệu endpoint đã lưu có cho biết cổng trước/sau và tiến trình liên quan không?') if listener else
+                                'Bằng chứng nào xác minh trực tiếp nội dung alert?',
+                    **({'source_change':source_facts} if source_facts else {}),
+                    'source_limit': 'Zeek chỉ ghi nhận lưu lượng, không xác định nguyên nhân thay đổi listener.' if listener else None},
                 'trigger_summary':{'description':self.alert.get('rule',{}).get('description','')[:200],
                     'username':self.alert.get('username'),'source_ip':self.alert.get('src_ip'),'event_time':self.alert['timestamp']},
                 **packed,
-                'tool_outcomes':[{k:v for k,v in o.items() if k in {'tool','status','error','count','total_matched','truncated','coverage','automatic'}}
+                'tool_outcomes':[{k:v for k,v in o.items() if k in {'tool','status','error','count','total_matched','truncated','coverage','automatic','call_disposition','call_reason','relevance','investigation_question','evidence_needed'}}
                     for o in state.get('observations',[])[-20:]],
                 'hypotheses':state.get('hypotheses',[])[:3],
                 'verification':state.get('review',{}),
@@ -236,7 +269,7 @@ class InvestigationGraph:
 
         return {'round':0,'messages':[], 'pending':[], 'hypotheses':[],
                 'review':{},'review_checks':[],'requested_questions':[], 'stagnant_rounds':0,
-                'observations':observations, 'stop_reason':'sufficient_evidence'}
+                'observations':observations, 'stop_reason':'no_further_tool_requested'}
 
     def investigate(self,state):
         self.progress('investigating',2)
@@ -262,7 +295,8 @@ class InvestigationGraph:
             try:
                 decision=ReviewDecision.model_validate_json(msg['content']).model_dump()
                 evidence={e['evidence_id']:e for e in self.audit.evidence(self.id)}
-                decision['hypotheses']=normalize_hypotheses(decision['hypotheses'],evidence,state.get('hypotheses',[]))
+                decision['hypotheses']=ground_hypotheses(
+                    normalize_hypotheses(decision['hypotheses'],evidence,state.get('hypotheses',[])),list(evidence.values()))
             except ValueError as exc:
                 decision={'need_more':False,'question':'Model review was invalid; analyst verification is required.',
                           'validation_error':str(exc)[:300]}
@@ -297,23 +331,35 @@ class InvestigationGraph:
         self.progress('collecting',3)
         before={e['evidence_id'] for e in self.audit.evidence(self.id)}
         observations=list(state.get('observations',[])); messages=list(state.get('messages',[]))
-        stop=state.get('stop_reason','sufficient_evidence')
-        used=used_tool_names(state)
+        stop=state.get('stop_reason','no_further_tool_requested')
         for pending in state['pending']:
-            if pending['name'] in used:
-                result=self.tools.envelope('skipped',error='tool_already_used',
-                                           detail='Tool đã chạy trong cuộc điều tra này.')
-            else:
-                try:
-                    result=self.tool(pending['name'],pending['args'],pending.get('explanation'))
-                except WorkflowError as exc:
-                    if exc.code!='tool_budget': raise
-                    stop='tool_budget'; result=self.tools.envelope('unavailable',error=stop)
-                if result.get('error') not in {'tool_budget','time_budget'}:
-                    used.add(pending['name'])
-            observations.append({'tool':pending['name'],'status':result['status'],
+            try:
+                query=self.tools.normalized_args(pending['name'],pending['args'])
+            except (KeyError,ValueError,TypeError):
+                query=pending['args']
+            try:
+                result=self.tool(pending['name'],pending['args'],pending.get('explanation'))
+            except WorkflowError as exc:
+                if exc.code!='tool_budget': raise
+                stop='tool_budget'; result=self.tools.envelope('unavailable',error=stop,
+                    call_disposition='blocked',call_reason=stop)
+            observations.append({'tool':pending['name'],'query':query,'status':result['status'],
                                  'error':result.get('error'),'count':len(result.get('items',[])),
-                                 'truncated':result.get('truncated',False)})
+                                 'truncated':result.get('truncated',False),
+                                 'call_disposition':result.get('call_disposition'),
+                                 'call_reason':result.get('call_reason')})
+            if result.get('coverage'):
+                observations[-1]['coverage']=result['coverage']
+            if listener_change(self.alert):
+                observations[-1]['investigation_question']='Nguồn này có xác minh cổng trước/sau hoặc nguyên nhân thay đổi listener không?'
+                observations[-1]['evidence_needed']='Danh sách cổng trước/sau, tiến trình sở hữu hoặc thay đổi cấu hình endpoint đã lưu.'
+                detail_is_network=(pending['name']=='get_event_details' and any(
+                    e['evidence_id']==query.get('evidence_id') and
+                    (e.get('data') or {}).get('source_product')=='zeek'
+                    for e in self.audit.evidence(self.id))) if isinstance(query,dict) else False
+                observations[-1]['relevance']=('not_resolved' if result['status'] not in {'ok','truncated'} else
+                    'network_context_only' if pending['name'].startswith('search_zeek_') or detail_is_network
+                    else 'candidate_endpoint_evidence')
             if 'total_matched' in result:
                 observations[-1]['total_matched']=result['total_matched']
             if result.get('summary') and pending['name']=='summarize_zeek_flows':
@@ -332,6 +378,7 @@ class InvestigationGraph:
                     'guidance_only':result.get('guidance_only',False),
                     'returned_count':len(result.get('items',[])),
                     'total_matched':result.get('total_matched'),
+                    'call_disposition':result.get('call_disposition'),'call_reason':result.get('call_reason'),
                     'evidence_ids':[e['evidence_id'] for e in result.get('items',[])]})})
         if not self.limits.progress_mode and state['round']>=self.limits.rounds:
             stop='round_budget'
@@ -353,7 +400,7 @@ class InvestigationGraph:
         """Review gate before conclusion; planner re-evaluation shares the existing call budget."""
         self.progress('reviewing',4)
         evidence={e['evidence_id']:e for e in self.audit.evidence(self.id)}
-        current=normalize_hypotheses(state.get('hypotheses',[]),evidence,state.get('hypotheses',[]))
+        current=ground_hypotheses(normalize_hypotheses(state.get('hypotheses',[]),evidence,state.get('hypotheses',[])),list(evidence.values()))
         decision=state.get('review',{})
         requested=list(state.get('requested_questions',[]))
         question=decision.get('question','')
@@ -361,8 +408,7 @@ class InvestigationGraph:
         # After tools, planner must get a chance to evaluate new observations.
         after_tools=bool(state.get('messages') and state['messages'][-1].get('role')=='tool')
         counts=self.audit.counts(self.id)
-        remaining_tools=bool(available_tool_names(state,self.allowed))
-        available=remaining_tools and (state.get('stagnant_rounds',0)<2 if self.limits.progress_mode else (state.get('round',0)<self.limits.rounds and self.remaining()>=1
+        available=(state.get('stagnant_rounds',0)<2 if self.limits.progress_mode else (state.get('round',0)<self.limits.rounds and self.remaining()>=1
                    and counts.get('model',0)<self.limits.model_calls-1-self.limits.repair_calls
                    and counts.get('tool',0)<self.limits.tool_calls))
         need_more=bool((more or after_tools) and available)
@@ -372,17 +418,18 @@ class InvestigationGraph:
                'hypotheses':current,'budget_available':available,
                'validation_error':decision.get('validation_error')}
         self.audit.update(self.id,{'hypotheses':current,'verification':check})
-        stop=state.get('stop_reason','sufficient_evidence')
-        if not available and stop=='sufficient_evidence':
-            stop='all_tools_used' if not remaining_tools else ('no_new_evidence' if self.limits.progress_mode else ('round_budget' if state.get('round',0)>=self.limits.rounds else 'model_budget'))
+        stop=state.get('stop_reason','no_further_tool_requested')
+        if not available and stop in {'no_further_tool_requested','sufficient_evidence'}:
+            stop='no_new_evidence' if self.limits.progress_mode else ('round_budget' if state.get('round',0)>=self.limits.rounds else 'model_budget')
         elif question and not need_more and question in state.get('requested_questions',[]):stop='no_new_question'
+        elif stop=='sufficient_evidence':stop='no_further_tool_requested'
         return {'hypotheses':current,'review':check,'review_checks':state.get('review_checks',[])+[check],
                 'requested_questions':requested,'stop_reason':stop}
 
     def validate(self,raw,previous=()):
         report=InvestigationReport.model_validate_json(raw).model_dump()
         evidence={e['evidence_id']:e for e in self.audit.evidence(self.id)}
-        report['hypotheses']=normalize_hypotheses(report['hypotheses'] or list(previous),evidence,previous)
+        report['hypotheses']=ground_hypotheses(normalize_hypotheses(report['hypotheses'] or list(previous),evidence,previous),list(evidence.values()))
         for finding in report['findings']:
             refs=finding['evidence_ids']
             if any(ref not in evidence for ref in refs):
@@ -438,11 +485,35 @@ class InvestigationGraph:
     def verify(self,state):
         self.progress('verifying',5)
         report=dict(state['report']); evidence=self.audit.evidence(self.id)
-        report['model_verdict']=None if report.get('generated_by')=='workflow_budget_stop' else report['verdict']
-        report['hypotheses']=normalize_hypotheses(report.get('hypotheses') or state.get('hypotheses',[]),
-            {e['evidence_id']:e for e in evidence},state.get('hypotheses',[]))
+        model_verdict=None if report.get('generated_by')=='workflow_budget_stop' else report['verdict']
+        if unsupported_attack_label(report.get('incident_type'), evidence):
+            report['model_incident_type']=report['incident_type']
+            report['incident_type']='Chưa xác định loại sự cố'
+            report.setdefault('unknowns',[]).append('Chưa có dấu hiệu nguồn phù hợp để xác nhận loại tấn công do mô hình đề xuất.')
+            if report['verdict']=='malicious':
+                report['verdict']='inconclusive';report['confidence']=None
+        report['model_verdict']=model_verdict
+        report['hypotheses']=ground_hypotheses(normalize_hypotheses(report.get('hypotheses') or state.get('hypotheses',[]),
+            {e['evidence_id']:e for e in evidence},state.get('hypotheses',[])),evidence)
         observed={e['evidence_id'] for e in evidence if e['evidence_type']=='observed'}
         cited={r for f in report['findings'] for r in f['evidence_ids']}
+        if listener_change(self.alert):
+            process_empty=any(o.get('tool')=='search_process_events' and o.get('status')=='empty'
+                              for o in state.get('observations',[]))
+            if process_empty:
+                report['unknowns']=list(dict.fromkeys(report.get('unknowns',[])+[
+                    'Không tìm thấy bản ghi audit_command khớp truy vấn; chưa biết nguồn này có được thu thập đầy đủ không.']))
+            endpoint_corroboration=any(e['evidence_id'] in cited and e['evidence_type']=='observed'
+                and e.get('tool') in {'search_process_events','search_file_changes','search_file_access','search_related_alerts'}
+                and (e.get('data') or {}).get('source_product')!='zeek' for e in evidence)
+            attack_signal=listener_attack_signal(evidence,cited)
+            if not endpoint_corroboration or not attack_signal:
+                report['unknowns']=list(dict.fromkeys(report.get('unknowns',[])+[
+                    'Chưa có bằng chứng endpoint độc lập và tín hiệu tấn công cụ thể liên hệ với thay đổi cổng.']))
+                if report['verdict']=='malicious':
+                    report['verdict']='inconclusive';report['confidence']=None
+                    report.setdefault('policy_adjustments',[]).append(
+                        'Một listener mới hoặc kết quả tìm audit_command rỗng không xác nhận ý đồ tấn công.')
         omitted=self.context(state,final=True)['context_truncated']
         gaps=omitted or any(o['status'] in {'error','unavailable','truncated'} or
                             o.get('error')=='tool_already_used' for o in state.get('observations',[]))
@@ -460,8 +531,12 @@ class InvestigationGraph:
                 or (self.alert.get('detection') or {}).get('category')=='suspected_dos'):
             reasons.append('Service impact and attack intent are not verified by these local data sources.')
         report['policy_adjustments']=list(dict.fromkeys(report.get('policy_adjustments',[])+reasons))
+        stop_reason=state.get('stop_reason','no_further_tool_requested')
+        if stop_reason=='sufficient_evidence':
+            # Older running checkpoints used this as a default before any verification.
+            stop_reason='no_further_tool_requested'
         report.update(workflow='langgraph',workflow_version='1',incident_id=self.id,
-            stop_reason=state.get('stop_reason','sufficient_evidence'),
+            stop_reason=stop_reason,
             severity=self.alert.get('severity'),confidence_note='Model estimate; not a calibrated probability.',
             _alert_id=self.alert['id'],_model=None if report.get('generated_by')=='workflow_budget_stop' else self.model,
             evidence=[f['statement']+' ['+', '.join(f['evidence_ids'])+']' for f in report['findings']],

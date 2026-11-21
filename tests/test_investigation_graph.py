@@ -181,7 +181,7 @@ def test_tool_plan_executes_batch_before_model_reviews_results(lab):
     assert json.loads(returned[2]['content'])['status'] in {'ok','empty','truncated'}
 
 
-def test_tool_is_used_once_per_investigation_even_with_new_arguments(lab, monkeypatch):
+def test_tool_can_run_again_with_new_arguments(lab, monkeypatch):
     # Mechanics test for the unrouted tool set; routing is covered in test_investigation_profiles.py.
     monkeypatch.setenv("AI_TOOL_ROUTING", "false")
     store,audit,trigger,event=lab
@@ -203,17 +203,17 @@ def test_tool_is_used_once_per_investigation_even_with_new_arguments(lab, monkey
 
     result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
     calls=audit.detail(result['incident_id'],'tools',limit=100)['items']
-    assert [c['name'] for c in calls].count('search_auth_events')==1
+    assert [c['name'] for c in calls].count('search_auth_events')==3
     assert [c['name'] for c in calls].count('search_related_alerts')==1
     assert [c['name'] for c in calls].count('search_zeek_dns')==1
     assert 'search_auth_events' in plans[0][1]
-    assert 'search_auth_events' not in plans[1][1]
-    assert 'search_related_alerts' not in plans[1][1]
+    assert 'search_auth_events' in plans[1][1]
+    assert 'search_related_alerts' in plans[1][1]
     assert 'search_zeek_dns' in plans[1][1]
-    skipped=[o for o in result['tool_outcomes'] if o.get('error')=='tool_already_used']
-    assert len(skipped)==2 and all(o['status']=='skipped' for o in skipped)
+    skipped=[o for o in result['tool_outcomes'] if o.get('call_disposition')=='blocked']
+    assert not skipped
     first_results=[json.loads(m['content']) for m in plans[1][0] if m['role']=='tool']
-    assert any(item['status']=='skipped' and item['error']=='tool_already_used' for item in first_results)
+    assert all(item['call_disposition']=='executed' for item in first_results)
 
     other=event(5)
     result2=InvestigationGraph(store,audit,client=client_for(audit,other),
@@ -222,7 +222,51 @@ def test_tool_is_used_once_per_investigation_even_with_new_arguments(lab, monkey
     assert [c['name'] for c in other_calls].count('search_auth_events')==1
 
 
-def test_failed_tool_attempt_is_not_run_again_in_same_investigation(lab):
+def test_equivalent_defaults_reuse_query_without_duplicate_evidence(lab):
+    store,audit,trigger,_=lab
+    plans=[]
+    def client(messages,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        plans.append(messages)
+        if len(plans)==1:
+            calls=[{}, {'limit':20,'agent_id':trigger['agent']['id'],
+                        'since':'2026-10-25T00:45:00+00:00','until':'2026-10-25T01:15:00Z'}]
+            return {'message':{'content':'','tool_calls':[{'function':{'name':'search_auth_events','arguments':a}} for a in calls]}}
+        return {'message':{'content':'{"hypotheses":[],"need_more":false,"question":""}'}}
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    calls=[c for c in audit.detail(result['incident_id'],'tools',limit=100)['items'] if c['name']=='search_auth_events']
+    assert len(calls)==1
+    outcomes=[o for o in result['tool_outcomes'] if o['tool']=='search_auth_events']
+    assert [o['call_disposition'] for o in outcomes]==['executed','cached']
+    assert outcomes[1]['call_reason']=='equivalent_query'
+    assert len([e for e in audit.evidence(result['incident_id']) if e['evidence_type']=='observed'])==1
+
+
+def test_event_details_accepts_multiple_evidence_ids(lab):
+    store,audit,trigger,event=lab
+    event(6,minute='01')
+    calls=[]
+    def client(messages,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        calls.append(1)
+        if len(calls)==1:
+            return {'message':{'content':'','tool_calls':[{'function':{'name':'search_auth_events','arguments':{}}}]}}
+        if len(calls)==2:
+            ids=[e['evidence_id'] for e in audit.evidence(incident) if e['evidence_type']=='observed']
+            return {'message':{'content':'','tool_calls':[{'function':{'name':'get_event_details','arguments':{'evidence_id':i}}} for i in ids]}}
+        return {'message':{'content':'{"hypotheses":[],"need_more":false,"question":""}'}}
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    details=[c for c in audit.detail(result['incident_id'],'tools',limit=100)['items'] if c['name']=='get_event_details']
+    assert len(details)==2
+    assert len({c['args']['evidence_id'] for c in details})==2
+    assert all(c['result']['call_disposition']=='executed' for c in details)
+
+
+def test_failed_tool_attempt_can_be_corrected(lab):
     store,audit,trigger,_=lab
     available=[]
     def client(messages,**kwargs):
@@ -235,12 +279,12 @@ def test_failed_tool_attempt_is_not_run_again_in_same_investigation(lab):
     result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
     calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
     auth=[c for c in calls if c['name']=='search_auth_events']
-    assert len(auth)==1 and auth[0]['result']['error']=='invalid_scope_or_arguments'
-    assert 'search_auth_events' in available[0] and 'search_auth_events' not in available[1]
-    assert any(o.get('error')=='tool_already_used' for o in result['tool_outcomes'])
+    assert len(auth)==2 and auth[0]['result']['error']=='invalid_scope_or_arguments'
+    assert 'search_auth_events' in available[0] and 'search_auth_events' in available[1]
+    assert any(o.get('call_disposition')=='executed' for o in result['tool_outcomes'] if o['tool']=='search_auth_events')
 
 
-def test_system_called_dos_tool_is_not_offered_or_executed_again(lab):
+def test_system_called_dos_tool_remains_available_for_a_new_scope(lab):
     store,audit,trigger,_=lab
     trigger=deepcopy(trigger)
     trigger['rule']={'id':'100142','level':10,'description':'DoS traffic','groups':['zeek_detection']}
@@ -256,9 +300,9 @@ def test_system_called_dos_tool_is_not_offered_or_executed_again(lab):
         return {'message':{'content':'','tool_calls':calls}}
     result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
     calls=audit.detail(result['incident_id'],'tools',limit=20)['items']
-    assert [c['name'] for c in calls].count('summarize_zeek_flows')==1
-    assert 'summarize_zeek_flows' not in available[0]
-    assert any(o['tool']=='summarize_zeek_flows' and o.get('error')=='tool_already_used'
+    assert [c['name'] for c in calls].count('summarize_zeek_flows')==2
+    assert 'summarize_zeek_flows' in available[0]
+    assert any(o['tool']=='summarize_zeek_flows' and o.get('error')=='invalid_scope_or_arguments'
                for o in result['tool_outcomes'])
 
 
@@ -277,7 +321,7 @@ def test_model_tool_explanation_is_recorded_but_not_sent_to_tool(lab):
     result=InvestigationGraph(store,audit,client=client).run_alert(trigger)
     activity=audit.detail(result['incident_id'],'activity',limit=100)['items']
     tool=next(item for item in activity if item['kind']=='tool' and item['name']=='search_auth_events')
-    assert tool['query']=={'limit':10}
+    assert tool['query']['limit']==10 and tool['query']['agent_id']==trigger['agent']['id']
     assert tool['outcome']=='ok'
     assert tool['model_explanation']=={'question':'Có đăng nhập thất bại không?', 'reason':'Cảnh báo liên quan xác thực.'}
     assert 'evidence_ids' in tool
