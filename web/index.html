@@ -304,7 +304,7 @@
   <dialog id="clear-logs-dialog" class="clear-dialog" aria-labelledby="clear-logs-title" aria-describedby="clear-logs-description">
     <div class="clear-dialog-body"><h2 id="clear-logs-title">Xóa log và cảnh báo?</h2>
       <p id="clear-logs-description">Toàn bộ log và cảnh báo đang lưu trong SOC-AI sẽ bị xóa ngay sau khi xác nhận. Log mới sẽ tiếp tục được nhận.</p>
-      <p class="clear-note">Log gốc trên Wazuh/Zeek, hồ sơ điều tra và bằng chứng đã lưu riêng vẫn được giữ. Các lượt AI đang chờ sẽ bị hủy; lượt đang chạy có thể tiếp tục ở nền.</p>
+      <p class="clear-note">Log gốc trên Wazuh/Zeek, hồ sơ điều tra và bằng chứng đã lưu riêng vẫn được giữ. Các yêu cầu đang chờ chuyên viên xem xét và lượt AI đang chờ sẽ bị xóa; lượt AI đang chạy có thể tiếp tục ở nền.</p>
       <p id="clear-logs-error" class="clear-error" role="alert"></p></div>
     <div class="clear-dialog-actions"><button id="clear-logs-cancel" class="btn" type="button" autofocus>Hủy</button><button id="clear-logs-confirm" class="btn danger" type="button">Xác nhận xóa</button></div>
   </dialog>
@@ -322,7 +322,7 @@
       try{await api('/api/logs/clear',{method:'POST',headers:{'X-SOC-Action':'clear-logs'},body:JSON.stringify({confirm:true,request_id:clearLogsRequestId})});
         try{sessionStorage.setItem('soc-logs-cleared','1')}catch{}const url=new URL(location.href);for(const key of ['selected','before','history'])url.searchParams.delete(key);history.replaceState(null,'',url);location.reload();
       }catch(error){$('clear-logs-error').textContent=error.message||'Không thể xóa dữ liệu.';confirm.disabled=cancel.disabled=false;confirm.textContent='Xác nhận xóa'}};
-    try{if(sessionStorage.getItem('soc-logs-cleared')==='1'){sessionStorage.removeItem('soc-logs-cleared');toast('Đã xóa log và cảnh báo trong SOC-AI.')}}catch{}
+    try{if(sessionStorage.getItem('soc-logs-cleared')==='1'){sessionStorage.removeItem('soc-logs-cleared');toast('Đã xóa log, cảnh báo và hàng chờ xem xét trong SOC-AI.')}}catch{}
     function icon(name){return `<svg class="ui-icon" aria-hidden="true"><use href="#icon-${name}"></use></svg>`}
     const severityName=value=>({critical:'Nghiêm trọng',high:'Cao',medium:'Trung bình',low:'Thấp'}[sev(value)]);
     const verdictName=value=>({inconclusive:'Chưa đủ kết luận',benign:'Lành tính',malicious:'Độc hại',pending:'Đang chờ'}[String(value||'').toLowerCase()]||value||'Đang chờ');

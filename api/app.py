@@ -348,7 +348,9 @@ def create_app(db_path=None, workers=True):
         if not payload.confirm:
             raise HTTPException(400, 'Chưa xác nhận xóa')
         try:
-            return await asyncio.to_thread(app.state.store.clear_logs_and_alerts, str(payload.request_id))
+            result = await asyncio.to_thread(app.state.store.clear_logs_and_alerts, str(payload.request_id))
+            await asyncio.to_thread(app.state.investigation_store.clear_pending_reviews, str(payload.request_id))
+            return result
         except Exception:
             logger.exception('Clearing SOC logs and alerts failed')
             raise HTTPException(503, 'Không thể xóa dữ liệu SOC; vui lòng thử lại')

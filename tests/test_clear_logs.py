@@ -104,6 +104,12 @@ def test_clear_api_requires_explicit_local_confirmation(tmp_path, monkeypatch):
     app = create_app(tmp_path / 'runtime.sqlite3', workers=False)
     with TestClient(app, base_url='http://localhost:8100') as client:
         app.state.store.accept(map_wazuh_alert(sample_alert()), True)
+        audit = app.state.investigation_store
+        investigation = audit.create('alert-1', {})
+        report = {'verdict': 'inconclusive', 'reasoning': 'Needs analyst review.'}
+        audit.update(investigation['id'], {'review_status': 'pending', 'needs_analyst': True},
+                     'completed', report)
+        assert len(audit.pending_reviews()['items']) == 1
         request_id = str(uuid4())
         headers = {'Origin': 'http://localhost:8100', 'X-SOC-Action': 'clear-logs'}
         body = {'confirm': True, 'request_id': request_id}
@@ -117,6 +123,16 @@ def test_clear_api_requires_explicit_local_confirmation(tmp_path, monkeypatch):
         assert response.status_code == 200
         assert response.json()['deleted']['alerts'] == 1
         assert client.get('/api/alerts').json()['metrics']['total'] == 0
+        assert audit.pending_reviews()['items'] == []
+        saved = audit.current('alert-1')
+        assert saved['summary']['review_status'] == 'cleared'
+        assert saved['report'] == report
+        later = audit.create('new-alert', {})
+        audit.update(later['id'], {'review_status': 'pending', 'needs_analyst': True},
+                     'completed', report)
+        retried = client.post('/api/logs/clear', json=body, headers=headers)
+        assert retried.status_code == 200
+        assert [item['alert_id'] for item in audit.pending_reviews()['items']] == ['new-alert']
 
 
 def test_cleared_running_job_does_not_send_a_telegram_notification(tmp_path):

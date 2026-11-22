@@ -52,6 +52,7 @@ class InvestigationStore:
                 CREATE INDEX IF NOT EXISTS analyst_reviews_incident ON analyst_reviews(incident_id,created);
                 CREATE INDEX IF NOT EXISTS investigations_review ON investigations(json_extract(summary,'$.review_status'),updated DESC);
                 CREATE TABLE IF NOT EXISTS audit_migrations(name TEXT PRIMARY KEY);
+                CREATE TABLE IF NOT EXISTS review_queue_resets(request_id TEXT PRIMARY KEY,created REAL NOT NULL);
             ''')
             db.execute('BEGIN IMMEDIATE')
             if not db.execute("SELECT 1 FROM audit_migrations WHERE name='analyst_handoff_v1'").fetchone():
@@ -141,6 +142,19 @@ class InvestigationStore:
                 ORDER BY updated DESC,id LIMIT ? OFFSET ?""",(limit+1,offset)).fetchall()
             return {'items':[{**dict(r),'summary':json.loads(r['summary'])} for r in rows[:limit]],
                     'next_offset':offset+limit if len(rows)>limit else None}
+
+    def clear_pending_reviews(self,request_id):
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            if db.execute('SELECT 1 FROM review_queue_resets WHERE request_id=?',(request_id,)).fetchone():
+                return
+            rows=db.execute("SELECT id,summary FROM investigations WHERE json_extract(summary,'$.review_status')='pending'").fetchall()
+            for row in rows:
+                summary=json.loads(row['summary'])
+                summary['review_status']='cleared'
+                db.execute('UPDATE investigations SET summary=? WHERE id=?',(encode(summary),row['id']))
+            db.execute('DELETE FROM review_queue_resets')
+            db.execute('INSERT INTO review_queue_resets VALUES(?,?)',(request_id,time.time()))
 
     def update(self, incident_id, values, status='running', report=None):
         with self.connect() as db:
