@@ -6,7 +6,9 @@ from pathlib import Path
 import re
 import sqlite3
 import time
+from datetime import datetime
 from typing import TypedDict
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -44,6 +46,7 @@ Khi chọn tool, hãy nêu câu hỏi cần xác minh và lý do chọn nếu c�
 Mỗi tool chỉ được chạy một lần trong cuộc điều tra, kể cả khi đổi tham số hoặc lần trước bị lỗi. Chọn phạm vi phù hợp ngay từ đầu.
 Các tool chỉ truy vấn trong phạm vi được cung cấp. agent_id là ID agent, không phải IP;
 thời gian dùng ISO 8601 có múi giờ (Z hoặc +hh:mm) trong scope. Nếu thiếu thông tin, hãy ghi nhận giới hạn đó.
+Timestamp nguồn có hậu tố Z là UTC. Khi diễn giải thời gian bằng câu chữ, chỉ dùng trường có hậu tố _local và ghi rõ múi giờ; không chép giờ từ tiền tố full_log nếu khác timestamp chuẩn hóa.
 Khi không yêu cầu thêm tool, trả JSON gồm hypotheses, need_more và question theo cấu trúc được cung cấp.
 Trích dẫn evidence_id chính xác để hệ thống có thể đối chiếu bằng chứng.'''
 
@@ -58,6 +61,7 @@ REPORT_STYLE = '''Trình bày dễ đọc và đi thẳng vào thông tin đã c
 - findings: mỗi mục trình bày một phát hiện và dẫn evidence_ids tương ứng; chỉ nêu số liệu thực sự có trong bằng chứng.
 - unknowns: mỗi mục nêu một thông tin còn thiếu; recommendations: mỗi mục nêu một bước cụ thể.
 - Dùng câu ngắn, hạn chế lặp ý và không chèn tiêu đề Markdown trong câu. Ghi ID vào trường evidence_ids thay vì viết ID dài trong reasoning.
+- Mọi thời gian nêu trong câu phải lấy từ trường có hậu tố _local và ghi rõ múi giờ; không trình bày giờ UTC như giờ địa phương.
 Tự đưa ra nhận định và đề xuất theo bằng chứng, không điền số liệu hoặc kết luận khi dữ liệu không có.'''
 
 
@@ -188,7 +192,22 @@ class InvestigationGraph:
         allowance=min(self.limits.context_chars,max(2000,raw_allowance))
         # Record when instructions + tool schemas leave too little room for evidence instead of silently starving it.
         self.context_starved=raw_allowance<2000
-        packed=pack_evidence(self.audit.evidence(self.id),allowance)
+        timezone_name=os.getenv('SOC_TIMEZONE','Asia/Ho_Chi_Minh')
+        try:
+            local_zone=ZoneInfo(timezone_name)
+        except ZoneInfoNotFoundError as exc:
+            raise WorkflowError('invalid_timezone',f'SOC_TIMEZONE is not a valid IANA timezone: {timezone_name}') from exc
+        packed=pack_evidence(self.audit.evidence(self.id),allowance,local_zone)
+        trigger_time=self.alert['timestamp']
+        try:
+            trigger_time_local=datetime.fromisoformat(trigger_time.replace('Z','+00:00')).astimezone(local_zone).isoformat()
+        except ValueError as exc:
+            raise WorkflowError('invalid_event_time','Trigger timestamp must be ISO 8601') from exc
+        scope=self.tools.envelope('ok')['scope']
+        for boundary in ('since','until'):
+            if scope.get(boundary):
+                scope[boundary+'_local']=datetime.fromisoformat(
+                    scope[boundary].replace('Z','+00:00')).astimezone(local_zone).isoformat()
         profile=context_hint(self.alert)
         listener=listener_change(self.alert)
         trigger=next((e for e in self.audit.evidence(self.id) if e['evidence_type']=='trigger'),None)
@@ -202,7 +221,8 @@ class InvestigationGraph:
             'source_fields':source_change.get('source_fields',[]),
             'scope':'Observed difference between retained snapshots; no claim about intent or authorization.'}
             if compared else None)
-        return {'alert_id':self.alert['id'],'scope':self.tools.envelope('ok')['scope'],
+        return {'alert_id':self.alert['id'],'scope':scope,
+                'display_timezone':timezone_name,
                 **({'alert_profile':profile} if profile else {}),
                 'investigation_frame':{
                     'known': (['Wazuh ghi nhận thay đổi trạng thái cổng lắng nghe trên endpoint.',
@@ -218,7 +238,8 @@ class InvestigationGraph:
                     **({'source_change':source_facts} if source_facts else {}),
                     'source_limit': 'Zeek chỉ ghi nhận lưu lượng, không xác định nguyên nhân thay đổi listener.' if listener else None},
                 'trigger_summary':{'description':self.alert.get('rule',{}).get('description','')[:200],
-                    'username':self.alert.get('username'),'source_ip':self.alert.get('src_ip'),'event_time':self.alert['timestamp']},
+                    'username':self.alert.get('username'),'source_ip':self.alert.get('src_ip'),
+                    'event_time':trigger_time,'event_time_local':trigger_time_local},
                 **packed,
                 'tool_outcomes':[{k:v for k,v in o.items() if k in {'tool','status','error','count','total_matched','truncated','coverage','automatic','call_disposition','call_reason','relevance','investigation_question','evidence_needed'}}
                     for o in state.get('observations',[])[-20:]],

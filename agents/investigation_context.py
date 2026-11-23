@@ -1,5 +1,6 @@
 """Compact, typed evidence for small local models; full records remain in audit."""
 import json
+from datetime import datetime
 from collections import deque
 
 
@@ -71,7 +72,7 @@ def compact_auth_summary(summary):
             'interpretation': summary.get('interpretation')}
 
 
-def evidence_summary(e):
+def evidence_summary(e, local_timezone=None):
     data = e['data']
     fields = ('agent', 'src_ip', 'dst_ip', 'username', 'auth_outcome', 'file_path',
               'process', 'log_type', 'http', 'dns', 'file_change', 'privilege',
@@ -102,11 +103,15 @@ def evidence_summary(e):
             detail={**{k:detail[k] for k in ('full_log','data','syscheck','decoder','predecoder') if k in detail},**detail}
         compact['event_details'] = bounded(detail, text=400)
         compact['details_excerpted'] = compact['event_details'] != detail
-    return {'evidence_id': e['evidence_id'], 'kind': e['evidence_type'],
-            'event_time': e.get('event_time'), 'source_record_id': e['source_record_id'], 'data': compact}
+    summary={'evidence_id': e['evidence_id'], 'kind': e['evidence_type'],
+             'event_time': e.get('event_time'), 'source_record_id': e['source_record_id'], 'data': compact}
+    if local_timezone is not None and e.get('event_time') and e.get('evidence_type') in {'trigger','observed'}:
+        stamp=datetime.fromisoformat(e['event_time'].replace('Z','+00:00'))
+        summary['event_time_local']=stamp.astimezone(local_timezone).isoformat()
+    return summary
 
 
-def pack_evidence(evidence, allowance):
+def pack_evidence(evidence, allowance, local_timezone=None):
     # Trigger first, then interleave tools so one large query cannot hide other sources.
     trigger = [e for e in evidence if e['evidence_type'] == 'trigger']
     groups = {}
@@ -131,7 +136,7 @@ def pack_evidence(evidence, allowance):
                     ordered.append(e)
     facts, guidance, used, details_omitted = [], [], 0, False
     for e in ordered:
-        item = evidence_summary(e)
+        item = evidence_summary(e, local_timezone)
         size = len(json.dumps(item, ensure_ascii=False))
         if used + size > allowance:
             # Keep a small observation when a large detail would displace all context.

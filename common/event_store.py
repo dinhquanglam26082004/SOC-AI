@@ -1,6 +1,7 @@
 """Transactional alerts/jobs; additive migration preserves the old snapshot table."""
 import json
 import base64
+import re
 import sqlite3
 import time
 from datetime import datetime, timedelta, timezone
@@ -41,6 +42,29 @@ def _similar_alert_key(record):
     data = record.get('zeek_data') or {}
     if not isinstance(data, dict):
         return None
+    raw_event = record.get('raw_event') or {}
+    raw_data = raw_event.get('data') if isinstance(raw_event, dict) else {}
+    raw_data = raw_data if isinstance(raw_data, dict) else {}
+    full_log = str(raw_event.get('full_log') or '') if isinstance(raw_event, dict) else ''
+    if rule_id in {'101200', '101201', '101202'}:
+        if rule_id == '101200':
+            match = re.search(r'\bnew user:\s*name=([^,\s]+)', full_log, re.I)
+            account = (match.group(1) if match else
+                       raw_data.get('username') or raw_data.get('user') or raw_data.get('targetUserName'))
+            return base + ('account_creation', account) if account else None
+        match = re.search(r"\badd\s+['\"]([^'\"]+)['\"]\s+to group\s+['\"]([^'\"]+)['\"]", full_log, re.I)
+        if match:
+            account, group = match.group(1), match.group(2)
+        else:
+            match = re.search(r'\buser\s+([^\s]+)\s+added by\s+([^\s]+)\s+to group\s+([^\s]+)', full_log, re.I)
+            account = (match.group(1) if match else
+                       raw_data.get('dstuser') or raw_data.get('target_user') or raw_data.get('targetUserName'))
+            group = match.group(3) if match else 'sudo'
+        if not account:
+            return None
+        # usermod and gpasswd are two ways to produce the same privilege change.
+        return (manager, agent, source, 'linux_sudo_membership', str(level),
+                'account_privilege', str(account).strip().lower(), str(group).strip().lower())
     if source == 'zeek' and record.get('log_type') == 'dns':
         query = str(data.get('query') or '').strip().rstrip('.').lower()
         labels = query.split('.')
@@ -112,6 +136,7 @@ class EventStore:
               received_at TEXT NOT NULL,payload TEXT NOT NULL);
             CREATE INDEX IF NOT EXISTS zeek_logs_type ON zeek_logs(log_type);
             CREATE INDEX IF NOT EXISTS zeek_logs_time ON zeek_logs(received_at DESC,id DESC);
+            CREATE INDEX IF NOT EXISTS ai_jobs_state_updated ON ai_jobs(state,updated);
             ''')
             if not db.execute("SELECT 1 FROM migrations WHERE name='legacy_snapshot'").fetchone():
                 for key, record in legacy.get('alerts', {}).items():
@@ -183,12 +208,54 @@ class EventStore:
             'file': 'Cùng manager, agent, rule, mức độ, đường dẫn, loại thay đổi và người/tác vụ nếu có.',
             'network': 'Cùng manager, agent, rule, mức độ, IP nguồn, IP đích và các trường liên quan.',
             'auth': 'Cùng manager, agent, rule, mức độ, IP nguồn, tài khoản và các trường liên quan.',
+            'account_creation': 'Cùng manager, agent, rule và tài khoản Linux được tạo.',
+            'account_privilege': 'Cùng manager, agent, tài khoản và nhóm sudo.',
         }
         record['ai_status'] = 'skipped'
         record['ai_skip_reason'] = 'Đã gộp với cảnh báo cùng phạm vi; không chạy AI riêng. AI có thể chưa đọc log này.'
         record['ai_group'] = {'representative_alert_id': representative['id'],
                               'representative_state': 'running',
                               'policy': 'active_similarity', 'match': details.get(scope, '')}
+        record.pop('ai_progress', None)
+        return record
+
+    @staticmethod
+    def _duplicate_source_representative(db, candidate):
+        raw = candidate.get('raw_event') or {}
+        if not isinstance(raw, dict):
+            return None
+        full_log = raw.get('full_log')
+        location = raw.get('location')
+        if not isinstance(full_log, str) or not full_log.strip() or not isinstance(location, str) or not location:
+            return None
+        rows = db.execute("""SELECT j.event_id,j.state,e.payload FROM ai_jobs j
+            JOIN events e ON e.id=j.event_id
+            WHERE j.state IN ('queued','running','completed')
+              AND j.updated>=?
+              AND json_extract(e.payload,'$.timestamp')=?
+              AND json_extract(e.payload,'$.manager.name')=?
+              AND json_extract(e.payload,'$.agent.id')=?
+              AND json_extract(e.payload,'$.raw_event.location')=?
+              AND json_extract(e.payload,'$.raw_event.full_log')=?
+            ORDER BY CASE j.state WHEN 'running' THEN 0 WHEN 'queued' THEN 1 ELSE 2 END,j.updated
+            LIMIT 10""", (time.time() - 300, candidate.get('timestamp'), (candidate.get('manager') or {}).get('name'),
+                          (candidate.get('agent') or {}).get('id'), location, full_log)).fetchall()
+        for row in rows:
+            representative = json.loads(row['payload'])
+            if representative.get('id') != candidate.get('id'):
+                return row, representative
+        return None
+
+    @staticmethod
+    def _mark_duplicate_source(record, representative, state):
+        record['ai_status'] = 'skipped'
+        record['ai_skip_reason'] = 'Đã gộp bản ghi trùng của cùng một sự kiện nguồn; không chạy AI lần hai.'
+        record['ai_group'] = {
+            'representative_alert_id': representative['id'],
+            'representative_state': state,
+            'policy': 'exact_source_event',
+            'match': 'Cùng Agent, thời điểm, nguồn log và nội dung log gốc.',
+        }
         record.pop('ai_progress', None)
         return record
 
@@ -262,8 +329,14 @@ class EventStore:
                 # the same event without creating a second log or losing AI state.
                 record['received_at'] = previous.get('received_at', record['received_at'])
             if eligible:
-                active=self._active_representative(db, record)
-                if active:
+                duplicate = (None if record.get('ai_manual_request')
+                             else self._duplicate_source_representative(db, record))
+                active = self._active_representative(db, record) if not duplicate else None
+                if duplicate:
+                    job, representative = duplicate
+                    eligible = False
+                    self._mark_duplicate_source(record, representative, job['state'])
+                elif active:
                     eligible=False
                     self._mark_grouped(record, active)
                 else:

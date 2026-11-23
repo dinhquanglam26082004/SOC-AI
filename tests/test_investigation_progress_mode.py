@@ -3,7 +3,7 @@ from unittest.mock import patch
 from agents.investigation_graph import InvestigationGraph
 from agents.investigation_schema import Limits
 from agents.investigation_store import InvestigationStore
-from agents.investigation_tools import LocalTools
+from agents.investigation_tools import LocalTools, MODELS
 from common.event_store import EventStore
 from evaluation.investigation_cases import raw
 from wazuh_integration.mapper import map_wazuh_alert
@@ -58,5 +58,5 @@ def test_progress_mode_finishes_after_repeated_cached_queries_add_no_evidence(tm
     with patch.object(LocalTools,'execute',execute):result=graph.run_alert(alert)
     assert len(planner_calls)==3
     assert result['stop_reason']=='no_new_evidence'
-    assert audit.counts(result['incident_id'])=={'model':4,'tool':16}
+    assert audit.counts(result['incident_id'])=={'model':4,'tool':len(MODELS)}
     assert any(o.get('call_disposition')=='cached' for o in result['tool_outcomes'])

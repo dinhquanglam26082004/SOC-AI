@@ -119,6 +119,22 @@ def test_fim_preserves_actor_without_inventing_missing_attribution(sources):
     assert 'audit' not in unknown['file_change']
 
 
+def test_account_event_tool_filters_linux_group_change_rules(sources):
+    _,_,_,tools,add,_=sources
+    expected=add(full_log='new group: name=wheel',rule={
+        'id':'5901','level':8,'description':'New group added to the system.','groups':['syslog']})
+    add(full_log='new user: name=other',rule={
+        'id':'101200','level':7,'description':'Linux account created','groups':['account_management']})
+    add(full_log='new group: name=wheel',rule={
+        'id':'550','level':7,'description':'File changed','groups':['syscheck']})
+
+    result=tools.execute('search_account_events',{'group':'WHEEL'})
+    assert result['status']=='ok'
+    assert result['total_matched']==1
+    assert result['items'][0]['id']==expected['id']
+    assert tools.execute('search_account_events',{'group':'missing'})['status']=='empty'
+
+
 def test_privilege_actor_target_and_pam_sudo_records(sources):
     _,_,_,tools,add,_=sources
     add(data={'srcuser':'operator','dstuser':'root','command':'/usr/bin/id'},

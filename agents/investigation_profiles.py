@@ -59,6 +59,11 @@ PROFILES = {
         'focus': 'Đọc sudo/su của actor và target, lệnh đã chạy và đăng nhập trước đó.',
         'tools': ('search_privilege_events', 'search_auth_events', 'search_process_events'),
     },
+    'account_management': {
+        'label': 'Tạo tài khoản / thay đổi nhóm Linux',
+        'focus': 'Xác minh người thực hiện, tài khoản hoặc nhóm được tạo/thay đổi, quyền sudo và phê duyệt thay đổi. Sự kiện đơn lẻ không chứng minh xâm nhập.',
+        'tools': ('search_account_events', 'search_privilege_events', 'search_file_changes'),
+    },
 }
 
 
@@ -85,7 +90,9 @@ def classify(alert):
         return 'web'
     if groups & {'authentication_failed', 'authentication_failures', 'sshd', 'invalid_login'} or rid in {'2502', '5710', '5712', '5716', '100172'}:
         return 'authentication'
-    if groups & {'sudo', 'su'}:
+    if rid in {'101200', '101201', '101202', '5901'} or 'account_management' in groups:
+        return 'account_management'
+    if groups & {'sudo', 'su', 'privilege_escalation'}:
         return 'privilege'
     if groups & {'zeek_scan', 'zeek_dos', 'recon'} or rid in {'100141', '100142', '100143', '100145'} \
             or (alert.get('detection') or {}).get('category') == 'suspected_dos':
@@ -143,7 +150,17 @@ def _stamp(value):
 
 def baseline_calls(alert, scope_since, scope_until):
     """Deterministic evidence collected before the model plans, as (tool, args) pairs."""
-    if not routing_enabled() or classify(alert) != 'dns_tunneling':
+    if not routing_enabled():
+        return []
+    category=classify(alert)
+    if category == 'account_management':
+        rule=alert.get('rule') or {}
+        return [('search_account_events',{
+            'account':alert.get('username'),
+            'group':'sudo' if str(rule.get('id')) in {'101201','101202'} else None,
+            'limit':50,
+        })]
+    if category != 'dns_tunneling':
         return []
     domain = parent_domain(_query(alert))
     if not domain:

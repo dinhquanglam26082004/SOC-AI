@@ -12,6 +12,7 @@ from common.event_store import EventStore
 from evaluation.investigation_cases import raw,cases
 from evaluation.run_investigation import run_case,summarize
 from api.app import create_app
+from agents.investigation_policy import assess_verdict
 from wazuh_integration.mapper import map_wazuh_alert
 
 
@@ -105,6 +106,40 @@ def test_review_before_conclude_and_benign_requires_positive_authorization(lab):
     assert report['verification_checks']
 
 
+def test_linux_account_change_always_requires_analyst_review():
+    evidence=[{'evidence_id':'EV-1','evidence_type':'trigger','data':{'rule':{
+        'id':'5901','description':'New group added to the system.','groups':['syslog']}}}]
+    report={'verdict':'malicious','reasoning':'Account change observed.',
+            'findings':[{'evidence_ids':['EV-1']}],'hypotheses':[],
+            'unknowns':[],'recommendations':[],'policy_adjustments':[]}
+    result=assess_verdict(report,evidence,[])
+    assert result['needs_analyst'] is True
+    assert result['review_status']=='pending'
+    assert any('authorization' in reason.lower() for reason in result['policy_adjustments'])
+
+
+def test_historical_linux_account_incident_is_migrated_to_pending(tmp_path):
+    audit=InvestigationStore(tmp_path/'soc_investigations.sqlite3')
+    run=audit.create('alert-5901',Limits().model_dump())
+    audit.add_evidence(run['id'],'source-5901','trigger',{
+        'event_time':'2026-11-23T08:54:51Z',
+        'rule':{'id':'5901','description':'New group added','groups':['syslog']}},
+        'get_alert',{})
+    report={'verdict':'malicious','reasoning':'Old report.',
+            'findings':[],'hypotheses':[],'unknowns':[],'recommendations':[]}
+    audit.update(run['id'],{'needs_analyst':False,'review_status':'not_required'},
+                'completed',report)
+    with audit.connect() as db:
+        db.execute("DELETE FROM audit_migrations WHERE name='linux_account_review_v2'")
+    reopened=InvestigationStore(audit.path)
+    summary=reopened.current('alert-5901')['summary']
+    saved_report=reopened.current('alert-5901')['report']
+    assert summary['needs_analyst'] is True
+    assert summary['review_status']=='pending'
+    assert saved_report['needs_analyst'] is True
+    assert saved_report['review_status']=='pending'
+
+
 def test_review_question_loops_within_original_budget(lab):
     store,audit,alert,_=lab
     client=Mock(side_effect=make_client(audit,alert,'inconclusive',True))
@@ -131,6 +166,23 @@ def test_analyst_queue_and_review_do_not_replace_ai_report(lab):
         assert detail['summary']['analyst_review']['decision']=='malicious'
         assert detail['report']['verdict']=='benign'
         assert detail['summary']['review_status']=='reviewed'
+
+
+def test_grouped_alert_investigation_endpoint_resolves_representative(lab):
+    store,audit,alert,_=lab
+    report=InvestigationGraph(store,audit,client=make_client(audit,alert)).run_alert(alert)
+    grouped={**store.get(alert['id']),
+             'id':'grouped-alert',
+             'ai_status':'skipped',
+             'ai_group':{'representative_alert_id':alert['id'],'policy':'active_similarity'}}
+    with store.connect() as db:
+        db.execute('INSERT INTO events VALUES(?,?)',
+                   (grouped['id'],json.dumps(grouped)))
+    with TestClient(create_app(store.path,workers=False)) as client:
+        response=client.get('/api/alerts/grouped-alert/investigation')
+        assert response.status_code==200
+        assert response.json()['id']==report['incident_id']
+        assert response.json()['summary']['alert_id']==alert['id']
 
 
 def test_contract_suite_does_not_claim_model_accuracy():

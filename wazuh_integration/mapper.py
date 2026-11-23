@@ -181,6 +181,7 @@ def is_security_alert(record):
     if str(rule.get('id')) in {'591', '5501', '5502', '5402'}:
         return False  # rotation, ordinary PAM sessions and successful sudo
     security_groups = {'syscheck', 'authentication_failed', 'invalid_login', 'rootcheck',
+                       'account_management',
                        'malware', 'web_attack', 'attack', 'intrusion_detection', 'virus',
                        'trojan', 'ransomware', 'exploit', 'yara', 'suricata', 'snort'}
     rules = {x.strip() for x in os.getenv('WAZUH_AI_RULE_ALLOWLIST', '').split(',') if x.strip()}

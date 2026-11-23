@@ -223,3 +223,27 @@ def test_response_lookup_skips_unrelated_and_unusable_playbooks(tmp_path, monkey
     result=playbook_agent.propose_playbook({'verdict':'inconclusive','incident_type':'DNS tunneling'},
         alert={'rule':{'id':'100181','groups':['zeek_dns_anomaly']}},allow_inconclusive=True)
     assert result['status']=='matched' and result['playbook_source']=='dns.txt'
+
+
+@pytest.mark.parametrize(('rule', 'source', 'playbook_id'), [
+    ({'id': '101201', 'level': 10, 'description': 'Linux account added to sudo group',
+      'groups': ['account_management', 'privilege_escalation']},
+     'PB-PRV-001_privilege_escalation.txt', 'PB-PRV-001'),
+    ({'id': '5901', 'level': 8, 'description': 'New group added to the system.',
+      'groups': ['syslog']},
+     'PB-ACC-001_account_management.txt', 'PB-ACC-001'),
+])
+def test_linux_account_alerts_select_a_deterministic_playbook(rule, source, playbook_id, monkeypatch):
+    def unexpected_retrieval(*args, **kwargs):
+        raise AssertionError('Linux account playbook selection must not depend on RAG ranking')
+
+    monkeypatch.setattr(playbook_agent, '_retrieve_playbooks', unexpected_retrieval)
+    result = playbook_agent.propose_playbook(
+        {'verdict': 'inconclusive', 'incident_type': 'Unknown security event'},
+        alert={'rule': rule},
+    )
+
+    assert result['status'] == 'matched'
+    assert result['playbook_id'] == playbook_id
+    assert result['playbook_source'] == source
+    assert playbook_agent.playbook_compatible({'rule': rule}, result)

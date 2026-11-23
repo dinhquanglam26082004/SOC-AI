@@ -247,6 +247,17 @@ Thay wildcard cũ ở chính nơi đang được áp dụng, không kết hợp 
 sudo nano /var/ossec/etc/ossec.conf
 ```
 
+Giữ localfile `journald` mặc định của Agent hoặc thêm block sau nếu chưa có; không
+khai báo trùng. Nguồn này cần thiết để nhận các log `useradd`, `usermod` và `gpasswd`
+trong kịch bản quản lý tài khoản:
+
+```xml
+<localfile>
+  <log_format>journald</log_format>
+  <location>journald</location>
+</localfile>
+```
+
 Thay các block Zeek cũ bằng nội dung `docker/wazuh/zeek-agent-localfile.xml`
 trong `<ossec_config>`; nếu dùng centralized thì thay cấu hình Agent tương ứng
 bằng `docker/wazuh/zeek-all-agent.conf`. Không giữ wildcard hay block trùng.

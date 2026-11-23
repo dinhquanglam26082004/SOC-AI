@@ -5,6 +5,8 @@ import re
 
 PLAYBOOK_ROOT = Path(__file__).resolve().parent.parent / "rag" / "documents" / "playbooks"
 SSH_PLAYBOOK_SOURCE = "ssh_bruteforce.txt"
+PRIVILEGE_PLAYBOOK_SOURCE = "PB-PRV-001_privilege_escalation.txt"
+ACCOUNT_PLAYBOOK_SOURCE = "PB-ACC-001_account_management.txt"
 
 
 def _build_query(report: dict, alert: dict | None = None) -> str:
@@ -109,6 +111,8 @@ def playbook_compatible(alert: dict, playbook: dict) -> bool:
         'authentication': r'\bssh\b|\bsshd\b|brute\s*force|authentication|t1110',
         'network_scan_dos': r'\bdos\b|\bddos\b|denial.of.service|network.scan',
         'rootkit': r'rootkit|rootcheck|t1014',
+        'privilege': r'privilege escalation|sudo|su\b|t1098|t1548',
+        'account_management': r'account management|account creation|new user|new group|t1136',
     }
     pattern = patterns.get(classify(alert))
     if not pattern:
@@ -131,7 +135,11 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None, 
     verdict = report.get("verdict")
     dos_context = _is_dos_report(report) or _is_dos_alert(alert or {})
     ssh_context = _is_ssh_context(report, alert or {})
-    if verdict == "benign" or (verdict == "inconclusive" and not dos_context and not ssh_context and not allow_inconclusive):
+    from agents.investigation_profiles import classify
+    alert_profile = classify(alert or {})
+    account_context = alert_profile in {'account_management', 'privilege'}
+    if verdict == "benign" or (verdict == "inconclusive" and not dos_context and not ssh_context
+                               and not account_context and not allow_inconclusive):
         return _skipped(
             report,
             "not_applicable",
@@ -142,6 +150,10 @@ def propose_playbook(report: dict, on_progress=None, alert: dict | None = None, 
 
     if ssh_context:
         selected = {"metadata": {"source": SSH_PLAYBOOK_SOURCE, "type": "playbooks"}}
+    elif alert_profile == 'privilege':
+        selected = {"metadata": {"source": PRIVILEGE_PLAYBOOK_SOURCE, "type": "playbooks"}}
+    elif alert_profile == 'account_management':
+        selected = {"metadata": {"source": ACCOUNT_PLAYBOOK_SOURCE, "type": "playbooks"}}
     else:
         matches = _retrieve_playbooks(_build_query(report, alert), top_k=16)
         if not matches:

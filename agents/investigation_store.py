@@ -64,6 +64,34 @@ class InvestigationStore:
                             review_reasons=['Historical investigation predates the current evidence-review policy; analyst review is required.'])
                         db.execute('UPDATE investigations SET summary=? WHERE id=?',(encode(summary),row['id']))
                 db.execute("INSERT INTO audit_migrations VALUES('analyst_handoff_v1')")
+            if not db.execute("SELECT 1 FROM audit_migrations WHERE name='linux_account_review_v2'").fetchone():
+                rows=db.execute("SELECT id,alert_id,summary,report FROM investigations WHERE status IN ('completed','failed')").fetchall()
+                for row in rows:
+                    trigger=db.execute(
+                        "SELECT payload FROM evidence WHERE incident_id=? AND kind='trigger' LIMIT 1",
+                        (row['id'],)).fetchone()
+                    rule_id=''
+                    if trigger:
+                        payload=json.loads(trigger['payload'])
+                        rule_id=str((((payload.get('data') or {}).get('rule') or {}).get('id') or ''))
+                    if rule_id not in {'5901','101200','101201','101202'}:
+                        continue
+                    summary=json.loads(row['summary'])
+                    summary.update(
+                        needs_analyst=True,
+                        review_status='pending',
+                        review_reasons=list(dict.fromkeys(
+                            (summary.get('review_reasons') or []) +
+                            ['Linux account or sudo-group changes require positive authorization verification by an analyst.'])))
+                    db.execute("UPDATE investigations SET summary=? WHERE id=?",(encode(summary),row['id']))
+                    if row['report']:
+                        report=json.loads(row['report'])
+                        report.update(needs_analyst=True,review_status='pending',
+                            review_reasons=list(dict.fromkeys(
+                                (report.get('review_reasons') or []) +
+                                ['Linux account or sudo-group changes require positive authorization verification by an analyst.'])))
+                        db.execute("UPDATE investigations SET report=? WHERE id=?",(encode(report),row['id']))
+                db.execute("INSERT INTO audit_migrations VALUES('linux_account_review_v2')")
 
     @contextmanager
     def connect(self):

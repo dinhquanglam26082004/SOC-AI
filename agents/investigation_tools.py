@@ -66,6 +66,12 @@ class PrivilegeArgs(ScopeArgs):
     actor_user: str | None = Field(default=None, min_length=1, max_length=256)
     target_user: str | None = Field(default=None, min_length=1, max_length=256)
 
+
+class AccountArgs(ScopeArgs):
+    account: str | None = Field(default=None, min_length=1, max_length=256)
+    group: str | None = Field(default=None, min_length=1, max_length=256)
+
+
 class RootkitArgs(ScopeArgs):
     pid: int | None = Field(
         default=None,
@@ -101,6 +107,7 @@ MODELS = {'get_alert': AlertArgs, 'search_auth_events': SearchArgs,
           'search_related_alerts': SearchArgs, 'search_zeek_connections': SearchArgs,
           'search_zeek_http': HttpArgs, 'search_zeek_dns': DnsArgs,
           'search_file_changes': FileArgs, 'search_privilege_events': PrivilegeArgs,
+          'search_account_events': AccountArgs,
           'summarize_zeek_flows': FlowSummaryArgs,
           'summarize_dns_activity': DnsSummaryArgs, 'compare_dns_baseline': DnsBaselineArgs,
           'search_process_events': ScopeArgs, 'search_file_access': FileArgs,
@@ -163,6 +170,10 @@ DESCRIPTIONS = {
         'For suspicious sudo/su or escalation around any alert, inspect retained sudo/su '
         'records. actor_user matches srcuser and target_user matches dstuser; they are '
         'different identities. A request or failure alone does not prove execution.'),
+    'search_account_events': (
+        'For Linux account or group changes, especially rules 5901/101200/101201/101202, '
+        'find retained account creation and group membership alerts for this agent and time window. '
+        'Filter by account/group text when known. This is historical alert evidence, not live account state.'),
     'get_event_details': (
         'When a collected event summary is insufficient, expand its evidence_id into a '
         'bounded original record. Only incident event evidence is accepted; guidance and '
@@ -519,6 +530,10 @@ class LocalTools:
                     where.extend(["i.category!='network'",'('+field('raw_event.decoder.name')+" IN ('sudo','su') OR "+
                         field('raw_event.predecoder.program_name')+" IN ('sudo','su') OR EXISTS (SELECT 1 FROM json_each("+
                         payload+", '$.rule.groups') WHERE value IN ('sudo','su')))"])
+                elif name=='search_account_events':
+                    where.extend(["l.kind='alert'",
+                        "(CAST("+field('rule.id')+" AS TEXT) IN ('5901','101200','101201','101202') OR EXISTS (SELECT 1 FROM json_each("+
+                        payload+", '$.rule.groups') WHERE value IN ('account_management','privilege_escalation')))"])
                 else:
                     where.append("l.kind='alert'")
                 if args['ip']:
@@ -528,6 +543,13 @@ class LocalTools:
                         where.append('(i.src_ip=? OR i.dst_ip=?)'); params.extend([args['ip'],args['ip']])
                 if args.get('username'):
                     where.append('i.username=?');params.append(args['username'])
+                if args.get('account'):
+                    where.append("(instr(LOWER(COALESCE("+field('raw_event.full_log')+",'')),?)>0 OR LOWER(COALESCE(i.username,''))=?)")
+                    account=args['account'].lower()
+                    params.extend([account,account])
+                if args.get('group'):
+                    where.append("instr(LOWER(COALESCE("+field('raw_event.full_log')+",'')),?)>0")
+                    params.append(args['group'].lower())
                 exact_fields={'uid':'zeek_data.uid','file_path':('raw_event.data.audit.file.name' if name=='search_file_access' else 'raw_event.syscheck.path'),
                     'actor_user':'raw_event.data.srcuser','target_user':'raw_event.data.dstuser'}
                 for arg,path in exact_fields.items():

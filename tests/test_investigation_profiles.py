@@ -75,6 +75,30 @@ def test_unknown_alert_keeps_full_tool_set():
     assert set(tools_for(alert, list(MODELS))) == set(MODELS) - {'get_alert'}
 
 
+@pytest.mark.parametrize(('rule', 'expected'), [
+    ({'id': '101200', 'level': 5, 'description': 'Linux account created',
+      'groups': ['account_management']}, 'account_management'),
+    ({'id': '5901', 'level': 8, 'description': 'New group added to the system.',
+      'groups': ['syslog']}, 'account_management'),
+    ({'id': '101201', 'level': 10, 'description': 'Linux account added to sudo group',
+      'groups': ['account_management', 'privilege_escalation']}, 'account_management'),
+])
+def test_linux_account_change_profiles_select_matching_tools(rule, expected):
+    alert = {'rule': rule}
+    assert classify(alert) == expected
+    assert 'search_privilege_events' in tools_for(alert, list(MODELS))
+    if expected == 'account_management':
+        assert 'search_account_events' in tools_for(alert, list(MODELS))
+        assert 'search_auth_events' not in tools_for(alert, list(MODELS))
+
+
+def test_linux_account_change_has_deterministic_account_event_baseline():
+    alert={'id':'alert-1','timestamp':'2026-11-20T08:00:00Z',
+           'rule':{'id':'5901','description':'New group added to the system.'}}
+    assert baseline_calls(alert,'2026-11-20T07:45:00Z','2026-11-20T08:15:00Z') == [
+        ('search_account_events',{'account':None,'group':None,'limit':50})]
+
+
 @pytest.mark.parametrize('query,expected', [
     ('vaaaakaswii.tunnel.lab.local', 'tunnel.lab.local'),
     ('abc.example.com.', 'example.com'),

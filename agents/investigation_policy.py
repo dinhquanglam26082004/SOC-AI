@@ -111,6 +111,19 @@ def assess_verdict(report,evidence,outcomes,context_omitted=False,suspected_dos=
         and str(((item.get('data') or {}).get('rule') or {}).get('id')) == '521'
         for item in evidence
     )
+    is_account_management_case = any(
+        item.get('evidence_type') == 'trigger'
+        and (
+            str(((item.get('data') or {}).get('rule') or {}).get('id')) in {'5901','101200','101201','101202'}
+            or 'account_management' in set(((item.get('data') or {}).get('rule') or {}).get('groups') or [])
+        )
+        for item in evidence
+    )
+    if is_account_management_case:
+        reasons.append(
+            'Linux account or sudo-group changes require positive authorization verification '
+            'by an analyst; the alert and system logs alone do not establish approval.'
+        )
     if report['verdict']!='inconclusive' and not observed&cited:
         reasons.append('No cited corroborating observation beyond the triggering alert.')
     if is_rootkit_case and report['verdict'] == 'malicious':

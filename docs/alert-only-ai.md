@@ -74,4 +74,8 @@ attack. The active-investigation grouping below can also handle queued jobs.
 - Có thể yêu cầu điều tra thủ công một cảnh báo đã gộp. Nếu lượt đại diện thất
   bại, các cảnh báo đã gộp không tự được xếp hàng lại; chúng vẫn có thể xem và
   được chuyên viên yêu cầu điều tra thủ công.
+- Với rule Linux 101201/101202, các thay đổi đang chạy cùng tài khoản và nhóm
+  `sudo` có thể gộp; không gộp hai tài khoản khác nhau. Bản ghi có cùng Agent,
+  timestamp, location và `full_log` nguồn được nhận diện là cùng một sự kiện và
+  chỉ chạy AI một lần, kể cả khi lượt đầu vừa hoàn tất. Mỗi alert vẫn được lưu.
 

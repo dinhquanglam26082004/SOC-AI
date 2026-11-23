@@ -73,6 +73,12 @@ model lỗi hoặc không có hành động đủ điều kiện, trạng thái 
 thay thế bằng gợi ý không nguồn. Lập kế hoạch phản ứng chi tiết vẫn do analyst
 khởi tạo và chỉ hỗ trợ mô phỏng.
 
+Với thay đổi tài khoản Linux, rule 101201/101202 dùng playbook leo thang đặc quyền;
+rule 101200 và Wazuh 5901 dùng playbook quản lý tài khoản. Chọn nguồn này là
+deterministic, không phụ thuộc thứ hạng RAG. `no_actions` có nghĩa không có hành động
+nào đồng thời đủ bằng chứng, trích dẫn và điều kiện chính sách; không có nghĩa là
+không tìm thấy alert hoặc playbook. Không tự tạo hành động chỉ để tránh kết quả rỗng.
+
 ## API
 
 | Endpoint | Mục đích |

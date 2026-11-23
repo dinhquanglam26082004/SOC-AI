@@ -236,7 +236,69 @@ Get-WinEvent -FilterHashtable @{LogName='Microsoft-Windows-PowerShell/Operationa
 Dọn rule lab riêng khỏi Manager, restore giá trị logging đã ghi lại; không tắt logging
 đang được chính sách tổ chức quản lý. Không dùng malware, khai thác hay tắt Defender.
 
-## 7. Troubleshooting / recovery
+## 7. Demo D — tạo tài khoản và cấp quyền sudo (Ubuntu)
+
+Chỉ chạy trên Ubuntu victim/VM lab được phép, không chạy trên máy production. Các rule
+local nhận log `useradd` (mức 5) và thao tác thêm vào nhóm `sudo` qua `usermod` hoặc
+`gpasswd` (mức 10). Tạo tài khoản là sự kiện cần xem xét, không tự chứng minh hành vi
+trái phép; thêm user vào `sudo` đủ điều kiện điều tra AI theo ngưỡng mặc định.
+
+Trên Ubuntu, kiểm tra Agent có localfile `journald` trong
+`/var/ossec/etc/ossec.conf`; chỉ thêm block nếu chưa có, tránh cấu hình trùng:
+
+```xml
+<localfile>
+  <log_format>journald</log_format>
+  <location>journald</location>
+</localfile>
+```
+
+Sau khi chỉnh config, restart Agent và xác nhận logcollector không báo lỗi:
+
+```bash
+sudo systemctl restart wazuh-agent
+sudo tail -n 80 /var/ossec/logs/ossec.log
+```
+
+Tạo user lab chưa có trong hệ thống rồi cấp quyền nhóm `sudo`:
+
+```bash
+if getent passwd soc-lab-admin-demo >/dev/null; then
+  echo "User đã tồn tại; chọn tên khác, không ghi đè hoặc xóa user này."
+else
+  sudo useradd --create-home --shell /bin/bash soc-lab-admin-demo
+  sudo usermod -aG sudo soc-lab-admin-demo
+fi
+```
+
+Nếu user đã tồn tại, không chạy lại demo với tên này. Kiểm tra log trên victim:
+
+```bash
+sudo journalctl --since "10 minutes ago" --no-pager | grep -E 'useradd|usermod|gpasswd'
+```
+
+Trên máy SOC, kiểm tra rule `101200` (tạo user) và rule `101201` (thêm vào `sudo`
+bằng `usermod`) hoặc `101202` (thêm bằng `gpasswd`) trong `alerts.json` và dashboard.
+Rule `101200` mức 5 chỉ lưu để analyst xem lại; rule cấp quyền mức 10 được AI điều tra
+tự động. Đối chiếu log gốc, Agent, thời gian và tài khoản; không coi sự kiện đơn lẻ là
+bằng chứng tài khoản đã bị xâm nhập.
+
+```powershell
+docker compose exec wazuh-manager sh -c 'tail -n 100 /var/ossec/logs/alerts/alerts.json'
+Invoke-RestMethod http://localhost:8100/api/alerts | ConvertTo-Json -Depth 10
+```
+
+Dọn tài khoản lab sau khi xác minh; các lệnh này gỡ user khỏi `sudo` rồi xóa home:
+
+```bash
+sudo gpasswd -d soc-lab-admin-demo sudo
+sudo userdel -r soc-lab-admin-demo
+```
+
+Nếu user được tạo bởi người khác hoặc đang được sử dụng, không xóa; nhờ quản trị viên
+xác nhận trước. Việc gỡ quyền/tài khoản cũng là thay đổi cần ghi nhận.
+
+## 8. Troubleshooting / recovery
 
 | Hiện tượng | Kiểm tra và xử lý |
 | --- | --- |
@@ -300,7 +362,7 @@ chạy `agent-auth`: `unset ENROLL_PASS` xóa giá trị của lần nhập trư
 trỏ tới máy chạy Manager và các cổng Docker được publish, không phải IP ví dụ
 trong tài liệu.
 
-## 8. Nguồn đối chiếu
+## 9. Nguồn đối chiếu
 
 - [Wazuh agent installation](https://documentation.wazuh.com/current/installation-guide/wazuh-agent/index.html)
 - [Windows Agent deployment](https://documentation.wazuh.com/current/installation-guide/wazuh-agent/wazuh-agent-package-windows.html)

@@ -517,8 +517,13 @@ def create_app(db_path=None, workers=True):
     def investigation_summary(alert_id: str):
         item=app.state.investigation_store.current(alert_id)
         if not item:
+            record=app.state.store.get(alert_id)
+            representative=(record or {}).get('ai_group',{}).get('representative_alert_id')
+            if representative:
+                item=app.state.investigation_store.current(representative)
+        if not item:
             raise HTTPException(404,'No saved graph investigation')
-        return {'id':item['id'],'status':item['status'],'summary':item['summary']}
+        return {'id':item['id'],'status':item['status'],'summary':item['summary'],'report':item['report']}
 
     @app.get('/api/investigations/{incident_id}')
     def investigation_detail(incident_id: str,section: Literal['evidence','tools','models','activity']='evidence',

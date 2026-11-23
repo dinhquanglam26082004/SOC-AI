@@ -178,3 +178,99 @@ def test_authentication_requires_same_source_and_username(tmp_path):
     assert store.accept(auth_alert(3,'192.0.2.2','victim'),True)[0]['ai_status']=='queued'
     assert store.accept(auth_alert(4,'192.0.2.1','admin'),True)[0]['ai_status']=='queued'
     assert store.accept(auth_alert(5,None,'victim'),True)[0]['ai_status']=='queued'
+
+
+def test_sudo_membership_alerts_group_by_account_and_group_while_running(tmp_path):
+    store = EventStore(tmp_path / 'events.db')
+
+    def sudo_alert(number, account, second, method='usermod'):
+        rule_id = '101202' if method == 'gpasswd' else '101201'
+        message = (f'gpasswd[123]: user {account} added by root to group sudo'
+                   if method == 'gpasswd' else
+                   f"usermod[123]: add '{account}' to group 'sudo'")
+        raw = {
+            'id': str(number), 'timestamp': f'2026-11-18T10:00:{second:02}Z',
+            'agent': {'id': '001', 'name': 'victim'}, 'manager': {'name': 'soc-manager'},
+            'rule': {'id': rule_id, 'level': 10, 'description': 'Linux account added to sudo group',
+                     'groups': ['account_management', 'privilege_escalation']},
+            'location': 'journald', 'full_log': message,
+        }
+        return map_wazuh_alert(raw)
+
+    first = sudo_alert(1, 'soc-lab-user', 0)
+    store.accept(first, True)
+    store.claim()
+    same = store.accept(sudo_alert(2, 'soc-lab-user', 1, method='gpasswd'), True)[0]
+    other = store.accept(sudo_alert(3, 'another-user', 2), True)[0]
+
+    assert same['ai_status'] == 'skipped'
+    assert same['ai_group']['representative_alert_id'] == first['id']
+    assert same['ai_group']['match'] == 'Cùng manager, agent, tài khoản và nhóm sudo.'
+    assert other['ai_status'] == 'queued'
+
+
+def test_sudo_alert_without_target_account_is_not_grouped_by_actor(tmp_path):
+    store = EventStore(tmp_path / 'events.db')
+    first = map_wazuh_alert({
+        'id': '1', 'timestamp': '2026-11-18T10:00:00Z',
+        'agent': {'id': '001', 'name': 'victim'}, 'manager': {'name': 'soc-manager'},
+        'rule': {'id': '101201', 'level': 10, 'description': 'Linux account added to sudo group',
+                 'groups': ['account_management', 'privilege_escalation']},
+        'location': 'journald', 'full_log': "usermod[123]: add 'soc-lab-user' to group 'sudo'",
+    })
+    missing_target = map_wazuh_alert({
+        'id': '2', 'timestamp': '2026-11-18T10:00:01Z',
+        'agent': {'id': '001', 'name': 'victim'}, 'manager': {'name': 'soc-manager'},
+        'rule': {'id': '101201', 'level': 10, 'description': 'Linux account added to sudo group',
+                 'groups': ['account_management', 'privilege_escalation']},
+        'location': 'journald', 'data': {'srcuser': 'root'},
+    })
+    store.accept(first, True)
+    store.claim()
+
+    assert store.accept(missing_target, True)[0]['ai_status'] == 'queued'
+
+
+def test_exact_duplicate_source_event_groups_even_if_prior_investigation_completed(tmp_path):
+    store = EventStore(tmp_path / 'events.db')
+
+    def group_alert(number, rule_id='5901'):
+        return map_wazuh_alert({
+            'id': str(number), 'timestamp': '2026-11-18T10:00:00Z',
+            'agent': {'id': '001', 'name': 'victim'}, 'manager': {'name': 'soc-manager'},
+            'rule': {'id': rule_id, 'level': 8, 'description': 'New group added to the system.',
+                     'groups': ['syslog']},
+            'location': 'journald', 'full_log': 'groupadd[123]: group added to /etc/group: name=labgrp',
+        })
+
+    first = group_alert(1)
+    store.accept(first, True)
+    running = store.claim()
+    assert store.finish(running)
+
+    duplicate = store.accept(group_alert(2), True)[0]
+    assert duplicate['ai_status'] == 'skipped'
+    assert duplicate['ai_group']['policy'] == 'exact_source_event'
+    assert duplicate['ai_group']['representative_alert_id'] == first['id']
+    assert duplicate['ai_group']['representative_state'] == 'completed'
+
+
+def test_distinct_source_messages_at_same_time_are_not_grouped(tmp_path):
+    store = EventStore(tmp_path / 'events.db')
+
+    def group_alert(number, name):
+        return map_wazuh_alert({
+            'id': str(number), 'timestamp': '2026-11-18T10:00:00Z',
+            'agent': {'id': '001', 'name': 'victim'}, 'manager': {'name': 'soc-manager'},
+            'rule': {'id': '5901', 'level': 8, 'description': 'New group added to the system.',
+                     'groups': ['syslog']},
+            'location': 'journald', 'full_log': f'groupadd[123]: group added to /etc/group: name={name}',
+        })
+
+    first = group_alert(1, 'labgrp-one')
+    store.accept(first, True)
+    running = store.claim()
+    assert store.finish(running)
+
+    distinct = store.accept(group_alert(2, 'labgrp-two'), True)[0]
+    assert distinct['ai_status'] == 'queued'

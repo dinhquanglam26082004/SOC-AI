@@ -1,5 +1,6 @@
 """No Ollama calls: exercise evidence isolation and malicious/malformed outputs."""
 import json
+from types import SimpleNamespace
 import pytest
 from agents.investigation_context import pack_evidence
 from agents.investigation_graph import InvestigationGraph
@@ -24,6 +25,26 @@ def test_context_prioritizes_trigger_and_separates_guidance():
     assert result['allowed_factual_evidence_ids']==['TRIGGER','FIRST']
     assert result['guidance'][0]['guidance_id']=='GUIDE'
     assert 'pci_dss' not in json.dumps(result)
+
+
+def test_model_context_includes_local_time_alongside_utc(monkeypatch, tmp_path):
+    monkeypatch.setenv('SOC_TIMEZONE','Asia/Ho_Chi_Minh')
+    audit=InvestigationStore(tmp_path/'audit.db')
+    incident=audit.create('alert-1',Limits().model_dump())['id']
+    audit.add_evidence(incident,'alert-1','trigger',{'event_time':'2026-11-20T08:54:51Z',
+        'rule':{'id':'5901','description':'New group added'}},'get_alert',{})
+    graph=InvestigationGraph(None,audit,checkpoint_path=tmp_path/'checkpoints.db')
+    graph.id=incident
+    graph.alert={'id':'alert-1','timestamp':'2026-11-20T08:54:51Z','rule':{'id':'5901'}}
+    graph.tools=SimpleNamespace(since='2026-11-20T08:39:51Z',until='2026-11-20T09:09:51Z',
+        envelope=lambda *_:{'scope':{'since':'2026-11-20T08:39:51Z','until':'2026-11-20T09:09:51Z'}})
+    graph.limits=Limits()
+    context=graph.context({'messages':[]})
+    assert context['display_timezone']=='Asia/Ho_Chi_Minh'
+    assert context['trigger_summary']['event_time']=='2026-11-20T08:54:51Z'
+    assert context['trigger_summary']['event_time_local']=='2026-11-20T15:54:51+07:00'
+    assert context['evidence'][0]['event_time_local']=='2026-11-20T15:54:51+07:00'
+    assert context['scope']['since_local']=='2026-11-20T15:39:51+07:00'
 
 
 def test_context_budget_and_interleaving():

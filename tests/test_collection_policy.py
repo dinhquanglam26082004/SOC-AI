@@ -30,6 +30,11 @@ def test_stats_with_conn_location_are_not_zeek():
 
 def test_journal_and_command_filtering():
     assert selected_source(raw('journald', predecoder={'program_name': 'sshd'}))
+    assert selected_source(raw('journald', predecoder={'program_name': 'useradd'}))
+    assert selected_source(raw('journald', predecoder={'program_name': 'usermod'}))
+    assert selected_source(raw('journald', predecoder={'program_name': 'gpasswd'}))
+    assert selected_source(raw('journald', groups=['account_management']))
+    assert selected_source(raw('journald', groups=['privilege_escalation']))
     assert selected_source(raw('journald', groups=['authentication_failed']))
     assert selected_source(raw('journald', decoder={'name': 'sudo'}))
     assert not selected_source(raw('journald', predecoder={'program_name': 'systemd'}))

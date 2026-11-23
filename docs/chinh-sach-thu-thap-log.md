@@ -5,7 +5,7 @@ SOC tiếp nhận Zeek `dns`, `conn`, `http`, `ssh`, `ssl`, `notice`, `files`,
 đầy đủ: chưa có danh sách IOC/cổng lạ hay tổng hợp theo giờ.
 
 Wazuh được tiếp nhận `journald` khi chương trình hoặc nhóm rule liên quan đến
-xác thực, SSH, sudo; `last -n 20`; `netstat listening ports` khi rule 533 báo
+xác thực, SSH, sudo, quản lý tài khoản; `last -n 20`; `netstat listening ports` khi rule 533 báo
 thay đổi; `wazuh-agent`, `wazuh-monitord`, `wazuh-remoted`, `syscheck`, `rootcheck`,
 `/var/log/dpkg.log`, `logcollector`. Nguồn khác và nhóm `stats`, `syscollector`,
 `sca` bị loại. Đây là lọc theo thuộc tính Wazuh, không bảo đảm

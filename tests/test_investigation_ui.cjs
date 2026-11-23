@@ -6,7 +6,11 @@ const html = fs.readFileSync(require('node:path').join(__dirname,'../web/index.h
 assert.doesNotMatch(html, /#analyst-queue\s*\{\s*display:\s*none\s*!important;/);
 assert.match(html, /if\(name==='investigations'\)loadAnalystQueue\(\)/);
 assert.match(html, /\['overview','Tổng quan'\]/);
-assert.match(html, /const overviewContent=assessmentPanel\(data,a\)\+responsePanel\(data,a\)/);
+assert.match(html, /assessmentPanel\(data,linkedAlert\)\+responsePanel\(data,linkedAlert\)/);
+assert.match(html, /a\.ai_group\?\.representative_alert_id/);
+assert.match(html, /\/investigation'/);
+assert.match(html, /101200.*101201.*101202/);
+assert.match(html, /search_account_events:'Tìm cảnh báo tạo tài khoản hoặc thay đổi nhóm Linux/);
 assert.match(html, /data-view="investigations"[^>]*>.*Điều tra &amp; phản ứng/);
 assert.doesNotMatch(html, /data-view="response"/);
 assert.match(html, /if\(name==='response'\)name='investigations'/);
@@ -25,6 +29,9 @@ const groupedAlert={id:'alert-2',rule:{id:'100181',description:'DNS'},agent:{nam
 assert.match(scope.alertRow(groupedAlert),/Đã gộp/);
 assert.match(scope.alertSummary(groupedAlert),/Xem cuộc điều tra liên quan/);
 assert.match(scope.alertSummary(groupedAlert),/Cùng domain/);
+const exactGroupedAlert={...groupedAlert,ai_group:{...groupedAlert.ai_group,policy:'exact_source_event',
+  match:'Cùng Agent, thời điểm, nguồn log và nội dung log gốc.'}};
+assert.match(scope.alertSummary(exactGroupedAlert),/Cùng Agent, thời điểm, nguồn log và nội dung log gốc/);
 assert.match(scope.alertRow({...groupedAlert,ai_group:null}),/Đã bỏ qua/);
 vm.runInNewContext(source+'\nthis.render=progressHTML;',scope);
 let out=scope.render({ai_status:'running',ai_progress:{model:'qwen3:8b'},investigation:{
@@ -91,6 +98,10 @@ const grounded={status:'available',incident_id:'INV-1',knowledge_guidance:{playb
 const groundedCard=scope.assessment({report:{...report,incident_id:'INV-1'},summary:{},status:'completed'},{grounded_response:grounded});
 assert.match(groundedCard,/PB-DNS/);assert.match(groundedCard,/Tăng giám sát<\/b> · 001/);assert.match(groundedCard,/Monitor DNS\./);
 assert.doesNotMatch(scope.assessment({report:{...report,incident_id:'INV-other'},summary:{}},{grounded_response:grounded}),/Monitor DNS\./);
+const noActionsCard=scope.assessment({report:{...report,incident_id:'INV-1'},summary:{},status:'completed'},
+  {grounded_response:{status:'no_actions',incident_id:'INV-1',actions:[]}});
+assert.match(noActionsCard,/Playbook đã được tìm thấy/);
+assert.match(noActionsCard,/không tự tạo hành động/);
 assert.doesNotMatch(scope.assessment({report,summary:{}},{}),/Xem thêm log DNS/);
 console.log('Investigation summary card checks passed.');
 const panels=html.slice(html.indexOf('    function analystPanel('),html.indexOf('    function activityHTML('));

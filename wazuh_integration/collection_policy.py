@@ -5,8 +5,9 @@ WAZUH_LOCATIONS = frozenset({'last -n 20', 'wazuh-agent', 'wazuh-monitord',
                              'wazuh-remoted', 'syscheck', 'rootcheck', '/var/log/dpkg.log', 'logcollector'})
 WAZUH_LOG_TYPES = WAZUH_LOCATIONS | {'journald', 'netstat listening ports'}
 AUTH_GROUPS = frozenset({'authentication_failed', 'authentication_success', 'invalid_login',
-                         'authentication', 'pam', 'sshd', 'sudo'})
-AUTH_PROGRAMS = frozenset({'sshd', 'ssh', 'sudo', 'su', 'login'})
+                         'authentication', 'pam', 'sshd', 'sudo', 'account_management',
+                         'privilege_escalation'})
+AUTH_PROGRAMS = frozenset({'sshd', 'ssh', 'sudo', 'su', 'login', 'useradd', 'usermod', 'gpasswd'})
 EXCLUDED_GROUPS = frozenset({'stats', 'syscollector', 'sca'})
 
 

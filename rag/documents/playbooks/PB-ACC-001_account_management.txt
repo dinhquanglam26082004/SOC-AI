@@ -1,0 +1,32 @@
+PLAYBOOK ID: PB-ACC-001
+
+NAME:
+Ứng phó thay đổi tài khoản và nhóm Linux (Linux Account Management Response)
+
+TRIGGER:
+Wazuh ghi nhận tạo tài khoản hoặc tạo nhóm mới trên Linux. Đây là tín hiệu cần
+xác minh, không tự chứng minh tài khoản trái phép hay xâm nhập.
+
+INVESTIGATION:
+1. Xác minh actor, tài khoản/nhóm đích, thời gian và lệnh nguồn từ log gốc.
+2. Đối chiếu phiếu thay đổi, người phê duyệt và mục đích vận hành.
+3. Với tài khoản mới, kiểm tra chủ sở hữu, shell, thư mục home và thời điểm tạo.
+4. Kiểm tra thành viên các nhóm đặc quyền như sudo; không suy ra quyền cao chỉ
+   từ việc tạo một nhóm thông thường.
+5. Đối chiếu sudo, SSH và hoạt động endpoint cùng thời điểm nếu có bằng chứng.
+6. Ghi rõ nguồn log chưa thu thập hoặc không có dữ liệu; không xem kết quả rỗng
+   là bằng chứng hệ thống an toàn.
+
+RESPONSE:
+1. Bảo toàn log xác thực và log quản lý tài khoản liên quan.
+2. Theo dõi tài khoản/nhóm thay đổi và yêu cầu chủ hệ thống xác nhận nếu chưa rõ.
+3. Nếu xác nhận thay đổi không được phép, thu hồi đúng quyền vừa cấp sau khi
+   được người có thẩm quyền phê duyệt.
+4. Nếu có dấu hiệu tài khoản bị xâm phạm, chuyển sự cố cho analyst phụ trách;
+   không xóa tài khoản hoặc khóa người dùng tự động.
+
+ESCALATION:
+Chuyển lên Tier 2 nếu tài khoản trái phép có quyền sudo/root, có đăng nhập hoặc
+thực thi lệnh đáng ngờ sau khi tạo, hoặc không thể xác định actor hợp lệ.
+
+Không có thay đổi tài khoản nào được thực thi tự động bởi playbook này.
