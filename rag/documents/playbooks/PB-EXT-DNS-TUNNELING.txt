@@ -1,65 +1,70 @@
 PLAYBOOK ID: PB-EXT-DNS-TUNNELING
 
 NAME:
-DNS tunneling, C2 and exfiltration over DNS
+Đường hầm DNS, C2 và rò rỉ dữ liệu qua DNS
 
-Provenance: Curated summary of MITRE ATT&CK T1071.004 (Application Layer
-Protocol: DNS), T1048.003 (Exfiltration Over Alternative Protocol) and T1572
-(Protocol Tunneling), detection strategy DET0400, and mitigations M1037 and
-M1031, reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1071/004/ ,
-https://attack.mitre.org/techniques/T1048/003/ , https://attack.mitre.org/techniques/T1572/ ,
-https://attack.mitre.org/mitigations/M1037/ and https://attack.mitre.org/mitigations/M1031/ .
-Guidance, not incident evidence.
+Provenance: Tóm tắt tuyển chọn MITRE ATT&CK T1071.004 (Application Layer Protocol: DNS),
+T1048.003 (Exfiltration Over Alternative Protocol), T1572 (Protocol Tunneling),
+chiến lược phát hiện DET0400 và các biện pháp giảm thiểu M1037/M1031;
+được rà soát 2026-11-19.
+Sources: https://attack.mitre.org/techniques/T1071/004/ ,
+https://attack.mitre.org/techniques/T1048/003/ ,
+https://attack.mitre.org/techniques/T1572/ ,
+https://attack.mitre.org/mitigations/M1037/ và
+https://attack.mitre.org/mitigations/M1031/ .
+Chỉ dẫn, không phải bằng chứng sự cố.
 
 TRIGGER:
-MITRE ATT&CK T1071.004 Application Layer Protocol: DNS is a Command and Control
-technique (TA0011) for Linux, Windows, macOS, Network Devices and ESXi. DNS
-tunneling encodes data or commands inside DNS queries and responses to conceal
-C2 and to move data past perimeter controls. It overlaps with T1048.003
-Exfiltration Over Alternative Protocol and T1572 Protocol Tunneling. A DNS query
-alone does not establish that data was stolen or that commands executed.
+MITRE ATT&CK T1071.004 Application Layer Protocol: DNS là kỹ thuật Command and
+Control (TA0011) trên Linux, Windows, macOS, Network Devices và ESXi. Đường hầm
+DNS mã hóa dữ liệu hoặc lệnh trong truy vấn và phản hồi DNS để che giấu C2
+và đưa dữ liệu vượt qua kiểm soát biên. Kỹ thuật này có điểm trùng với
+T1048.003 Exfiltration Over Alternative Protocol và T1572 Protocol Tunneling.
+Chỉ một truy vấn DNS không chứng minh dữ liệu đã bị đánh cắp hoặc lệnh đã chạy.
 
 INVESTIGATION:
-1. Behavioral detection (DET0400) relies on Network Traffic Content such as Zeek
-   dns.log, and the Linux analytic also uses process creation. Compare query
-   count, query length, number of unique subdomains, record types and response
-   codes against a suitably scoped baseline when one is available.
-2. Typical tunneling signals: many distinct, high-entropy subdomains under one
-   parent domain; atypical record types such as NULL, TXT, CNAME or MX; high
-   query rates; and long encoded labels. None of these alone proves malice.
-3. Identify the parent domain receiving the random subdomains, the source host,
-   the resolver or destination, and whether queries go to an internal resolver
-   or an unusual external authority. Internal-only destinations and lab domains
-   change the interpretation.
-4. Rule out benign explanations before concluding tunneling: content delivery
-   networks, privacy or security software, and misconfigured applications can
-   produce noisy DNS. Tune against the enterprise or host DNS baseline rather
-   than a universal threshold.
-5. Correlate DNS with the process that generated the queries, host identity,
-   timestamps, and any file-access evidence, only when those fields are actually
-   collected. Record the observation window, limits, missing fields and
-   truncation. Retained record counts are not complete capture and do not
-   measure the exact amount of data transferred.
+1. Phát hiện hành vi (DET0400) dựa vào Network Traffic Content như Zeek dns.log;
+   phân tích trên Linux còn sử dụng dữ liệu tạo tiến trình. Khi có đường cơ sở
+   phù hợp, hãy so sánh số truy vấn, độ dài truy vấn, số tên miền phụ duy nhất,
+   loại bản ghi và mã phản hồi.
+2. Dấu hiệu điển hình của đường hầm gồm nhiều tên miền phụ phân biệt, có entropy
+   cao dưới một tên miền cha; loại bản ghi bất thường như NULL, TXT, CNAME hoặc MX;
+   tần suất truy vấn cao; và nhãn mã hóa dài. Không dấu hiệu nào đứng riêng lẻ
+   chứng minh hành vi độc hại.
+3. Xác định tên miền cha nhận các tên miền phụ ngẫu nhiên, máy chủ nguồn,
+   bộ phân giải hoặc đích, đồng thời kiểm tra truy vấn đi tới bộ phân giải nội bộ
+   hay một DNS authority bên ngoài bất thường. Các đích chỉ nội bộ và tên miền lab
+   làm thay đổi cách diễn giải.
+4. Loại trừ giải thích hợp lệ trước khi kết luận có đường hầm: mạng phân phối
+   nội dung, phần mềm bảo mật/quyền riêng tư và ứng dụng cấu hình sai có thể
+   tạo ra lưu lượng DNS ồn ào. Hãy hiệu chỉnh theo đường cơ sở DNS của doanh nghiệp
+   hoặc máy chủ thay vì áp dụng một ngưỡng phổ quát.
+5. Chỉ đối chiếu DNS với tiến trình tạo truy vấn, danh tính máy chủ, mốc thời gian
+   và bằng chứng truy cập tệp khi các trường đó thực sự được thu thập. Ghi nhận
+   cửa sổ quan sát, giới hạn, trường bị thiếu và hiện tượng bị cắt. Số bản ghi
+   lưu giữ không phải tập bắt đầy đủ và không đo chính xác lượng dữ liệu đã truyền.
 
 RESPONSE:
-1. M1037 Filter Network Traffic: filter untrusted DNS destinations and route
-   clients through controlled internal resolvers or DNS proxies, taking care not
-   to disrupt legitimate services. Blocking the abused parent domain is a scoped,
-   reversible first control.
-2. M1031 Network Intrusion Prevention: deploy and tune network detection and
-   prevention signatures for DNS tunneling where supported.
-3. If a tunneling client process is identified on the host, scope it before
-   acting: capture the process and its parent, then stop it under approval.
-   Treat a running tunnel as active C2 and consider host isolation.
-4. Specify target, duration, expected effect, service impact, monitoring and
-   rollback before any control. These measures do not by themselves prove that
-   exfiltration occurred.
+1. M1037 Filter Network Traffic: lọc các đích DNS không tin cậy và định tuyến
+   máy trạm qua bộ phân giải nội bộ hoặc proxy DNS được kiểm soát, đồng thời
+   tránh làm gián đoạn dịch vụ hợp lệ. Chặn tên miền cha bị lạm dụng là biện
+   pháp phạm vi hẹp, khả thi và có thể đảo ngược.
+2. M1031 Network Intrusion Prevention: triển khai và tinh chỉnh chữ ký phát hiện,
+   ngăn chặn đường hầm DNS ở những nơi nền tảng hỗ trợ.
+3. Nếu xác định tiến trình máy trạm tạo đường hầm trên máy chủ, hãy xác định
+   phạm vi trước khi hành động: ghi lại tiến trình và tiến trình cha, sau đó
+   dừng tiến trình dưới cơ chế phê duyệt. Coi đường hầm đang chạy là C2 đang
+   hoạt động và xem xét cách ly máy chủ.
+4. Trước mọi biện pháp, cần nêu rõ đối tượng, thời lượng, hiệu ứng dự kiến,
+   tác động dịch vụ, giám sát và hoàn tác. Các biện pháp này không tự chứng minh
+   rằng rò rỉ dữ liệu đã xảy ra.
 
 ESCALATION:
-Preserve event and source identifiers, timestamps, DNS samples, query scope,
-the parent domain, endpoint evidence and known lab ground truth. Escalate
-unresolved process ownership, DNS visibility gaps, or suspected data transfer to
-the analyst. Zeek DNS alone does not prove command execution, file access, or
-the content and amount of data exfiltrated. Human approval is required before
-blocking a domain or destination, isolating a host, or stopping a process. No
-response action is executed by this playbook.
+Bảo toàn ID sự kiện và nguồn, mốc thời gian, mẫu DNS, phạm vi truy vấn,
+tên miền cha, bằng chứng trên máy trạm và kết quả lab đã xác minh. Chuyển
+cho phân tích viên khi chưa xác định được chủ sở hữu tiến trình, còn khoảng
+trống trong khả năng quan sát DNS hoặc nghi ngờ đã truyền dữ liệu. Chỉ dựa
+vào Zeek DNS không chứng minh lệnh đã được thực thi, tệp đã truy cập hoặc
+nội dung và lượng dữ liệu đã rò rỉ. Cần phê duyệt của con người trước khi
+chặn tên miền/đích, cách ly máy chủ hoặc dừng tiến trình. Playbook này không
+tự động thực thi hành động ứng phó nào.

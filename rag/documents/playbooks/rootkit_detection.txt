@@ -1,76 +1,77 @@
 PLAYBOOK ID: PB-ROOTKIT-001
 
 NAME:
-Rootkit and Stealth Persistence Investigation
+Điều tra Rootkit và cơ chế duy trì hiện diện tàng hình
 
-Provenance: Curated summary of MITRE ATT&CK T1014 (Rootkit), detection strategy
-DET0377 / AN1062, and related persistence techniques T1543.002, T1547.006 and
-T1574.006, reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1014/ ,
-https://attack.mitre.org/techniques/T1543/002/ , https://attack.mitre.org/techniques/T1547/006/
-and https://attack.mitre.org/techniques/T1574/006/ . Tooling references: rkhunter,
-chkrootkit, AIDE, auditd and Volatility3 Linux plugins. Guidance, not incident evidence.
+Provenance: Tóm tắt tuyển chọn MITRE ATT&CK T1014 (Rootkit), chiến lược phát hiện
+DET0377/AN1062 và các kỹ thuật duy trì hiện diện liên quan T1543.002,
+T1547.006, T1574.006; được rà soát 2026-11-19.
+Sources: https://attack.mitre.org/techniques/T1014/ ,
+https://attack.mitre.org/techniques/T1543/002/ ,
+https://attack.mitre.org/techniques/T1547/006/ và
+https://attack.mitre.org/techniques/T1574/006/ .
+Tham chiếu công cụ: rkhunter, chkrootkit, AIDE, auditd và các plugin
+Volatility3 Linux. Chỉ dẫn, không phải bằng chứng sự cố.
 
 TRIGGER:
-A Wazuh rootcheck alert (for example rule 521), a report of hidden processes,
-files, kernel modules, services or network connections, or integrity changes to
-system binaries, kernel modules, or startup/persistence locations. MITRE ATT&CK
-T1014 Rootkit is a Defense Evasion technique for Linux, Windows and macOS: a
-rootkit hides the presence of programs, files, services, drivers and connections.
-A rootcheck or integrity alert is a signal to investigate, not proof that a
-rootkit is present. Repeated identical rootcheck alerts are not independent
-corroboration.
+Cảnh báo rootcheck của Wazuh (ví dụ rule 521), báo cáo về tiến trình, tệp,
+mô-đun nhân, dịch vụ hoặc kết nối mạng bị che giấu, hoặc thay đổi toàn vẹn
+nhị phân hệ thống, mô-đun nhân hoặc vị trí khởi động/duy trì hiện diện.
+MITRE ATT&CK T1014 Rootkit là kỹ thuật Defense Evasion trên Linux, Windows
+và macOS: rootkit che giấu sự tồn tại của chương trình, tệp, dịch vụ,
+trình điều khiển và kết nối mạng. Cảnh báo rootcheck/toàn vẹn chỉ là tín hiệu
+cần điều tra, không chứng minh rootkit đang tồn tại. Các cảnh báo rootcheck
+lặp lại không phải bằng chứng độc lập bổ sung.
 
 INVESTIGATION:
-1. Record the agent, time window, the specific artifact the alert names (path,
-   PID, module, service), and the rule that fired. Note that once a kernel
-   rootkit is active, collection that depends on the compromised host can be
-   unreliable; treat host-sourced evidence as potentially tampered.
-2. The reliable signal is the install event, not the running rootkit. Look for
-   the moment a kernel module, driver, kernel extension, or preload library was
-   added: module load records (auditd kmod / linux syslog), LD_PRELOAD or
-   /etc/ld.so.preload changes, and writes to /dev or /proc.
-3. Correlate with persistence techniques commonly paired with stealth implants:
-   T1543.002 systemd service (new or modified unit under /etc/systemd/system/
-   or /lib/systemd/system/), T1547.006 kernel modules and extensions, and
-   T1574.006 LD_PRELOAD hijacking. A newly created or modified systemd unit near
-   the alert window is a strong pivot.
-4. Look for visibility discrepancies: a process, file, port or module that one
-   view shows and another hides (for example a PID that responds to signals but
-   is absent from the process listing). A stable discrepancy across rechecks is
-   more significant than a single transient one.
-5. Review file-integrity evidence (FIM/AIDE) for changes to system binaries
-   (ls, ps, netstat, ss, find, lsof), loader configuration, and module paths.
-   RPM/dpkg verification mismatches on these binaries are a strong indicator.
-6. Preserve volatile evidence before changing the host. Rebooting or killing
-   processes can destroy in-memory rootkit state. Where available, capture
-   memory for offline analysis rather than trusting live host tools.
-7. Record collection gaps explicitly. Absence of a finding on a possibly
-   compromised host does not prove the host is clean.
+1. Ghi lại agent, cửa sổ thời gian, hiện vật cụ thể trong cảnh báo (đường dẫn,
+   PID, mô-đun, dịch vụ) và rule đã kích hoạt. Khi rootkit nhân đã hoạt động,
+   dữ liệu thu thập phụ thuộc vào máy chủ bị xâm phạm có thể không đáng tin;
+   coi bằng chứng lấy từ máy chủ có khả năng đã bị làm sai.
+2. Tín hiệu đáng tin cậy hơn là sự kiện cài đặt, không phải rootkit đang chạy.
+   Tìm thời điểm mô-đun nhân, trình điều khiển, extension nhân hoặc thư viện preload
+   được thêm: bản ghi nạp mô-đun (auditd kmod/linux syslog), thay đổi LD_PRELOAD
+   hoặc /etc/ld.so.preload và ghi vào /dev hoặc /proc.
+3. Đối chiếu các kỹ thuật duy trì hiện diện thường đi kèm implant tàng hình:
+   T1543.002 systemd service (đơn vị mới hoặc sửa đổi trong /etc/systemd/system/
+   hoặc /lib/systemd/system/), T1547.006 mô-đun và extension nhân, và
+   T1574.006 LD_PRELOAD hijacking. Một đơn vị systemd được tạo/sửa gần cửa sổ
+   cảnh báo là một điểm liên kết quan trọng.
+4. Tìm khác biệt khả năng hiển thị: một tiến trình, tệp, cổng hoặc mô-đun được
+   công cụ này thấy nhưng công cụ khác che giấu (ví dụ PID đáp ứng tín hiệu nhưng
+   không có trong danh sách tiến trình). Sự khác biệt ổn định qua nhiều lần kiểm tra
+   có ý nghĩa hơn một sự sai lệch nhất thời.
+5. Xem bằng chứng toàn vẹn tệp (FIM/AIDE) để phát hiện thay đổi nhị phân hệ thống
+   (ls, ps, netstat, ss, find, lsof), cấu hình trình nạp và đường dẫn mô-đun.
+   MISMATCH xác minh RPM/dpkg trên các nhị phân này là chỉ báo mạnh.
+6. Bảo tồn bằng chứng dễ biến mất trước khi thay đổi máy chủ. Khởi động lại hoặc
+   dừng tiến trình có thể làm mất trạng thái rootkit trong bộ nhớ. Khi có thể,
+   thu thập bộ nhớ để phân tích ngoại tuyến thay vì chỉ tin công cụ trên máy chủ.
+7. Ghi rõ các khoảng trống thu thập. Không tìm thấy dấu hiệu trên máy chủ có thể
+   bị xâm phạm không chứng minh máy chủ sạch.
 
 RESPONSE:
-MITRE maps no preventive mitigation to T1014 because it abuses legitimate system
-features; detection and response focus on the install event and on trustworthy,
-off-host verification.
-1. If evidence is limited to repeated rootcheck alerts without an independent
-   positive snapshot confirming a hidden component, keep the case for analyst
-   review rather than concluding compromise.
-2. If a hidden component is corroborated, follow host containment: isolate the
-   host from the network to stop command-and-control and lateral movement,
-   preserving evidence first.
-3. Prefer verification from outside the suspect OS: offline/forensic review of a
-   memory image or disk, and comparison against a known-good kernel and binary
-   baseline. Dedicated scanners (rkhunter, chkrootkit) and host-based tools can
-   produce false positives and can themselves be subverted by a userland rootkit;
-   corroborate with auditd records and offline analysis.
-4. Remove persistence only after scoping: capture the systemd unit, module, or
-   preload entry, back it up, then disable or remove it. Removing one artifact
-   does not prove full eradication of a kernel implant.
-5. Plan rebuild-from-known-good as the reliable recovery for a confirmed kernel
-   rootkit; cleaning in place is often unreliable.
+MITRE không ánh xạ biện pháp phòng ngừa nào cho T1014 vì kỹ thuật này lạm dụng
+tính năng hợp lệ của hệ thống; phát hiện và ứng phó tập trung vào sự kiện cài đặt
+cùng xác minh đáng tin cậy ngoài máy chủ.
+1. Nếu bằng chứng chỉ là cảnh báo rootcheck lặp lại mà không có ảnh chụp độc lập
+   xác nhận thành phần ẩn, hãy giữ trường hợp để phân tích viên xem xét thay vì
+   kết luận hệ thống bị xâm phạm.
+2. Nếu thành phần ẩn đã được xác minh, thực hiện containment máy chủ: cách ly
+   khỏi mạng để ngăn C2 và di chuyển ngang, sau khi đã bảo toàn bằng chứng.
+3. Ưu tiên xác minh từ bên ngoài hệ điều hành nghi ngờ: phân tích pháp y ngoại tuyến
+   ảnh bộ nhớ hoặc đĩa, và so sánh với nhân, nhị phân cùng đường cơ sở đã biết là sạch.
+   Máy quét chuyên dụng (rkhunter, chkrootkit) và công cụ máy chủ có thể tạo dương tính
+   giả hoặc bị rootkit userland làm sai lệch; phải đối chiếu bằng auditd và phân tích ngoại tuyến.
+4. Chỉ gỡ cơ chế duy trì sau khi xác định phạm vi: ghi lại đơn vị systemd, mô-đun
+   hoặc mục preload, sao lưu rồi vô hiệu hóa hoặc gỡ bỏ. Gỡ một hiện vật không chứng minh
+   implant nhân đã được loại bỏ hoàn toàn.
+5. Với rootkit nhân đã xác nhận, tái dựng từ bản biết là sạch là phương án phục hồi
+   đáng tin cậy; làm sạch trên chính hệ thống thường không đáng tin cậy.
 
 ESCALATION:
-Escalate to the SOC lead and host owner when a hidden kernel component, a
-stealthy persistence mechanism, or tampering with system binaries is corroborated,
-or when host-sourced visibility cannot be trusted. Human approval is required
-before isolating the host, removing a service or module, resetting credentials,
-or rebuilding the system. No response action is executed by this playbook.
+Cần chuyển cho trưởng SOC và chủ sở hữu máy chủ khi xác nhận thành phần nhân ẩn,
+cơ chế duy trì tàng hình, hoặc thao túng nhị phân hệ thống, hoặc khi không thể
+tin cậy khả năng quan sát lấy từ máy chủ. Cần phê duyệt của con người trước khi
+cách ly máy chủ, gỡ dịch vụ/mô-đun, đặt lại thông tin đăng nhập hoặc tái dựng
+hệ thống. Playbook này không thực thi hành động ứng phó nào.

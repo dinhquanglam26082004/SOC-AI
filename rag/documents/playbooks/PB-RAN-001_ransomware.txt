@@ -1,42 +1,43 @@
 PLAYBOOK ID: PB-RAN-001
 
 NAME:
-Ransomware Incident Response
+Ứng phó sự cố ransomware (Ransomware Incident Response)
 
 TRIGGER:
-EDR/AV alert indicating ransomware activity, file encryption detected
-(mass .encrypted/.locked extension changes), or user reports inability
-to open files with ransom note present.
+Cảnh báo EDR/AV chỉ ra hoạt động ransomware, phát hiện mã hóa tệp
+(hàng loạt tệp đổi sang phần mở rộng .encrypted/.locked), hoặc người dùng
+báo không thể mở tệp đồng thời xuất hiện thư đòi tiền chuộc.
 
 INVESTIGATION:
-1. Identify the initially compromised host via EDR telemetry.
-2. Determine the ransomware family (check ransom note, file extension,
-   and compare against known signatures).
-3. Map the spread: identify other hosts showing encryption activity
-   via file integrity monitoring and EDR alerts.
-4. Identify patient zero: review login history, email, USB, RDP,
-   and web proxy logs for the initial infection vector.
-5. Determine which network shares and backup locations were reached.
-6. Check whether shadow copies (VSS) have been deleted.
-7. Identify the active user account context under which ransomware ran.
+1. Xác định máy chủ bị xâm phạm đầu tiên qua dữ liệu đo lường EDR.
+2. Xác định họ ransomware (xem thư đòi tiền chuộc, phần mở rộng tệp
+   và đối chiếu chữ ký đã biết).
+3. Lập bản đồ phạm vi lan rộng: xác định máy chủ khác đang mã hóa tệp
+   qua giám sát toàn vẹn tệp và cảnh báo EDR.
+4. Xác định patient zero: xem lịch sử đăng nhập, thư điện tử, USB, RDP
+   và nhật ký proxy để tìm vectơ nhiễm ban đầu.
+5. Xác định các chia sẻ mạng và vị trí sao lưu đã được truy cập.
+6. Kiểm tra bản sao bóng (VSS) có bị xóa không.
+7. Xác định tài khoản người dùng đang hoạt động khi ransomware chạy.
 
 RESPONSE:
-1. IMMEDIATELY isolate all affected hosts from the network
-   (disable NIC or move to quarantine VLAN). Do not power off.
-2. Isolate network shares accessed by affected hosts.
-3. Suspend or disable the compromised user account(s).
-4. Notify management and initiate Crisis Communication Plan.
-5. Preserve memory dumps and forensic images before any remediation.
-6. Identify and restore clean backups (verify backup integrity first).
-7. Do NOT pay ransom without legal/management approval and law enforcement
-   notification.
-8. Rebuild compromised systems from known-good images after forensic capture.
-9. Patch the initial entry vector before reconnecting systems.
+1. NGAY LẬP TỨC cách ly khỏi mạng mọi máy chủ bị ảnh hưởng
+   (vô hiệu hóa NIC hoặc chuyển sang VLAN cách ly). Không tắt nguồn.
+2. Cách ly các chia sẻ mạng mà máy bị ảnh hưởng đã truy cập.
+3. Tạm ngưng hoặc vô hiệu hóa tài khoản người dùng bị xâm phạm.
+4. Thông báo ban quản lý và kích hoạt Kế hoạch Truyền thông Khủng hoảng.
+5. Bảo toàn bộ nhớ đổ ra và bản sao pháp y trước mọi hoạt động khắc phục.
+6. Xác định và khôi phục bản sao lưu sạch (ưu tiên xác minh tính toàn vẹn của bản sao lưu).
+7. Không thanh toán tiền chuộc nếu chưa có phê duyệt pháp lý/quản lý
+   và thông báo cơ quan thực thi pháp luật.
+8. Sau khi thu thập bằng chứng pháp y, tái dựng hệ thống bị xâm phạm
+   từ bản ảnh đã biết là sạch.
+9. Vá vectơ xâm nhập ban đầu trước khi kết nối lại hệ thống.
 
 ESCALATION:
-Escalate to Tier 3 / CISO immediately upon detection. Notify legal
-and HR if internal accounts are involved. Report to law enforcement
-if required by regulation (e.g., GDPR, local cybercrime law).
+Cần chuyển ngay lên Tier 3/CISO khi phát hiện. Thông báo phòng Pháp lý
+và HR nếu liên quan đến tài khoản nội bộ. Báo cơ quan thực thi pháp luật
+khi quy định yêu cầu (ví dụ: GDPR hoặc luật an ninh mạng địa phương).
 
-Human approval is required before isolating hosts, suspending accounts,
-restoring backups, or any ransom payment discussion.
+Cần có phê duyệt của con người trước khi cách ly máy chủ, tạm ngưng tài khoản,
+khôi phục bản sao lưu hoặc thảo luận bất kỳ khoản thanh toán tiền chuộc nào.

@@ -263,14 +263,13 @@ def main():
         show_progress_bar=True,
     ).tolist()
 
-    client     = chromadb.PersistentClient(path=CHROMA_PATH,settings=chromadb.Settings(anonymized_telemetry=False))
-    collection = client.get_or_create_collection(name=COLLECTION_NAME)
-
-    # Clear existing collection and re-populate (full rebuild)
-    existing_ids = collection.get(include=[])["ids"]
-    if existing_ids:
-        collection.delete(ids=existing_ids)
-        print(f"Cleared {len(existing_ids)} old documents from collection.")
+    client = chromadb.PersistentClient(
+        path=CHROMA_PATH,
+        settings=chromadb.Settings(anonymized_telemetry=False),
+    )
+    if any(collection.name == COLLECTION_NAME for collection in client.list_collections()):
+        client.delete_collection(name=COLLECTION_NAME)
+    collection = client.create_collection(name=COLLECTION_NAME)
 
     # Upsert in batches of 500 to avoid memory issues
     batch_size = 500
@@ -282,6 +281,8 @@ def main():
             embeddings=embeddings[start:start + batch_size],
             metadatas=[d["metadata"] for d in batch],
         )
+    # A query makes the asynchronously built HNSW index available before this process exits.
+    collection.query(query_embeddings=[embeddings[0]], n_results=1)
     final_count = collection.count()
     print(f"\nDone. ChromaDB collection '{COLLECTION_NAME}' now has {final_count} chunks.")
     print(f"Path: {CHROMA_PATH}")

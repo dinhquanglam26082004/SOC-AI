@@ -1,13 +1,12 @@
-[PB-ATTACK-AN0399] Behavioral Detection of CLI Abuse on Network Devices — T1059.008 Network Device CLI
+[PB-ATTACK-AN0399] Phát hiện hành vi lạm dụng CLI trên Network Devices — T1059.008 Network Device CLI
 Source: https://attack.mitre.org/detectionstrategies/DET0142#AN0399
 MITRE analytic: AN0399; version: 1.0; source modified: 2025-10-21T15:10:28.402Z; retrieved: 2026-11-02.
 Platforms: Network Devices
-Provenance: Official MITRE ATT&CK detection guidance, reproduced under MITRE-ATTACK.LICENSE in this directory. © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
-Guidance only. This document is not an observation from the victim.
+Provenance: Hướng dẫn phát hiện chính thức của MITRE ATT&CK, được tái tạo theo MITRE-ATTACK.LICENSE trong thư mục này. © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
 
-Investigation guidance:
+Hướng dẫn điều tra:
 Official analytic text:
-Detects unauthorized or anomalous use of command-line interfaces (CLI) on network devices. Focuses on remote access sessions (e.g., SSH/Telnet), privilege escalation within CLI sessions, execution of high-risk commands (e.g., config replace, terminal monitor, no logging), and configuration changes outside of approved windows.
+Phát hiện việc sử dụng trái phép hoặc bất thường các giao diện dòng lệnh (CLI) trên network devices. Tập trung vào các phiên truy cập từ xa (ví dụ: SSH/Telnet), leo thang đặc quyền trong các phiên CLI, thực thi các lệnh có rủi ro cao (ví dụ: config replace, terminal monitor, no logging) và các thay đổi cấu hình ngoài windows được phê duyệt.
 
-Local applicability (SOC-AI project guidance, not MITRE text):
-Use retained Wazuh authentication/FIM/sudo records and Zeek conn/HTTP/DNS only when the required source exists. These are historical observations, not live endpoint inspection. Process lineage, resource utilization, service availability and authorization may require additional sources or analyst verification. Do not claim those signals were checked unless an actual tool returned them. No numerical threshold here establishes an attack by itself. Cite source event IDs for incident findings; this document supports investigation recommendations only. An absent result does not prove safety. Public examples or MITRE technique names are not proof that the same attack occurred locally.
+Local applicability (hướng dẫn riêng của dự án SOC-AI, không thuộc văn bản của MITRE):
+Chỉ sử dụng các bản ghi xác thực/FIM/sudo của Wazuh và dữ liệu conn/HTTP/DNS của Zeek khi nguồn dữ liệu yêu cầu thực sự tồn tại. Đây là quan sát lịch sử, không phải kiểm tra trực tiếp thiết bị đầu cuối. Cần nguồn bổ sung hoặc xác minh của phân tích viên để đánh giá cây tiến trình, mức sử dụng tài nguyên, tính sẵn sàng dịch vụ và quyền được cấp. Không khẳng định các tín hiệu đã được kiểm tra trừ khi công cụ thực tế đã trả về dữ liệu. Không có ngưỡng số nào trong tài liệu này tự nó xác lập một cuộc tấn công. Khi đưa ra kết luận sự cố, hãy trích dẫn ID sự kiện nguồn; tài liệu này chỉ hỗ trợ đề xuất điều tra. Không có kết quả không chứng minh hệ thống an toàn. Ví dụ công khai hoặc tên kỹ thuật MITRE không phải bằng chứng cuộc tấn công tương tự đã xảy ra tại địa phương.

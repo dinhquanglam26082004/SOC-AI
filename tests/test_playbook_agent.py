@@ -96,9 +96,9 @@ def test_dos_playbook_is_an_existing_selectable_source(monkeypatch):
 
     assert result["status"] == "matched"
     assert result["playbook_id"] == "PB-DOS-001"
-    assert result["playbook_name"] == "Suspected Denial of Service Response"
-    assert "not proof that the service is unavailable" in result["playbook_text"]
-    assert "Human approval" in result["playbook_text"]
+    assert result["playbook_name"] == "Ứng phó nghi ngờ từ chối dịch vụ (Suspected Denial of Service Response)"
+    assert "không chứng minh dịch vụ ngừng hoạt động" in result["playbook_text"]
+    assert "Cần có phê duyệt" in result["playbook_text"]
     assert result["actions"] == []
 
 

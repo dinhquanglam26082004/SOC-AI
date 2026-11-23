@@ -1,40 +1,40 @@
 PLAYBOOK ID: PB-PHI-001
 
 NAME:
-Phishing Email Response
+Ứng phó thư lừa đảo (Phishing Email Response)
 
 TRIGGER:
-User reports suspicious email, or email security gateway flags a message
-as phishing / malicious attachment / credential harvesting link.
+Người dùng báo cáo thư đáng ngờ, hoặc cổng bảo mật thư điện tử đánh dấu
+tin nhắn là thư lừa đảo, tệp đính kèm độc hại hoặc liên kết thu thập thông tin đăng nhập.
 
 INVESTIGATION:
-1. Obtain the original email headers and body (do not click any links).
-2. Extract and defang all URLs and attachment hashes.
-3. Check URLs against threat intelligence (VirusTotal, URLScan.io).
-4. Check attachment hashes against AV and sandboxing tools.
-5. Identify all recipients of the same campaign within the organization.
-6. Check mail server logs for delivery and open/click events.
-7. Determine whether any user clicked links or opened attachments.
-8. If credentials were submitted: check for account logins from unusual IPs
-   or locations in the past 24 hours.
-9. Correlate with EDR telemetry for payload execution on endpoints.
+1. Lấy tiêu đề và nội dung thư gốc (không được nhấp vào liên kết).
+2. Trích xuất và vô hiệu hóa hiển thị trực tiếp của mọi URL cùng hash tệp đính kèm.
+3. Đối chiếu URL với nguồn tình báo an ninh (VirusTotal, URLScan.io).
+4. Đối chiếu hash tệp đính kèm với công cụ AV và sandbox.
+5. Xác định mọi người nhận trong chiến dịch tương tự trong tổ chức.
+6. Xem nhật ký máy chủ thư để tìm sự kiện phân phối, mở thư và nhấp liên kết.
+7. Xác định người dùng nào đã nhấp liên kết hoặc mở tệp đính kèm.
+8. Nếu thông tin đăng nhập đã được gửi đi: kiểm tra đăng nhập tài khoản
+   từ IP hoặc vị trí bất thường trong 24 giờ qua.
+9. Đối chiếu dữ liệu đo lường EDR để phát hiện payload đã thực thi trên máy trạm.
 
 RESPONSE:
-1. Quarantine the phishing email from all affected mailboxes.
-2. Block sender domain and all extracted malicious URLs at the gateway.
-3. If a user clicked a link or opened an attachment:
-   a. Isolate the endpoint from the network.
-   b. Force password reset for the affected account(s).
-   c. Revoke active sessions / OAuth tokens.
-4. Notify affected users and their managers.
-5. Submit indicators to threat intelligence platform.
-6. Preserve email headers, URLs, and attachment samples as evidence.
+1. Cách ly thư lừa đảo khỏi mọi hộp thư bị ảnh hưởng.
+2. Chặn tên miền người gửi và mọi URL độc hại đã trích xuất tại cổng.
+3. Nếu người dùng đã nhấp liên kết hoặc mở tệp đính kèm:
+   a. Cách ly máy trạm khỏi mạng.
+   b. Buộc đặt lại mật khẩu cho tài khoản bị ảnh hưởng.
+   c. Thu hồi phiên hoạt động và mã OAuth.
+4. Thông báo cho người dùng bị ảnh hưởng và quản lý trực tiếp của họ.
+5. Gửi chỉ báo đến nền tảng tình báo an ninh.
+6. Bảo toàn tiêu đề thư, URL và mẫu tệp đính kèm làm bằng chứng.
 
 ESCALATION:
-Escalate to Tier 2 / Incident Response if:
-- Credential theft is confirmed.
-- Malware execution is detected on any endpoint.
-- More than 10 users received or interacted with the email.
+Cần chuyển lên Tier 2/Bộ phận ứng phó sự cố nếu:
+- Xác nhận đánh cắp thông tin đăng nhập.
+- Phát hiện thực thi phần mềm độc hại trên bất kỳ máy trạm nào.
+- Hơn 10 người dùng đã nhận hoặc tương tác với thư.
 
-Human approval is required before quarantining mailboxes, blocking
-domains, isolating endpoints, or resetting user credentials.
+Cần có phê duyệt của con người trước khi cách ly hộp thư, chặn tên miền,
+cách ly máy trạm hoặc đặt lại thông tin đăng nhập người dùng.

@@ -1,48 +1,48 @@
 PLAYBOOK ID: PB-DLP-001
 
 NAME:
-Data Exfiltration Response
+Ứng phó rò rỉ dữ liệu (Data Exfiltration Response)
 
 TRIGGER:
-Alert indicating unusually large outbound data transfer, DLP policy
-violation, or detection of data staging/compression activity:
-- Outbound transfer > 500 MB to external IP in short window.
-- DLP alert on sensitive file upload (PII, financial, source code).
-- DNS tunneling or covert channel indicators.
-- Large archive creation (zip/rar/7z) followed by outbound transfer.
+Cảnh báo chỉ ra lưu lượng dữ liệu truyền ra ngoài bất thường, vi phạm chính
+sách DLP hoặc phát hiện hoạt động chuẩn bị/nén dữ liệu:
+- Truyền ra ngoài hơn 500 MB đến IP bên ngoài trong thời gian ngắn.
+- Cảnh báo DLP khi tải tệp nhạy cảm (PII, dữ liệu tài chính hoặc mã nguồn).
+- Dấu hiệu đường hầm DNS hoặc kênh truyền bí mật.
+- Tạo kho lưu trữ lớn (zip/rar/7z) rồi truyền dữ liệu ra ngoài.
 
 INVESTIGATION:
-1. Identify the source host, user account, and destination IP/domain.
-2. Determine the volume and type of data transferred.
-3. Review proxy/firewall logs for the full session details
-   (URLs, bytes transferred, duration, HTTP method).
-4. Check whether the destination is a known cloud storage service
-   (Dropbox, OneDrive, Mega, WeTransfer) or unusual IP.
-5. Check for data staging activity: archive creation, file copying
-   to temp directories, or bulk file access before transfer.
-6. Determine if the activity is authorized (business justification,
-   approved data transfer, backup agent).
-7. Review the user's recent activity pattern for anomalies.
-8. Check for concurrent credential theft or privilege escalation.
-9. Identify what data was exfiltrated (file names, directories accessed).
+1. Xác định máy chủ nguồn, tài khoản người dùng và IP/tên miền đích.
+2. Xác định dung lượng và loại dữ liệu đã truyền.
+3. Xem nhật ký proxy/tường lửa để lấy đầy đủ chi tiết phiên
+   (URL, số byte truyền, thời lượng, phương thức HTTP).
+4. Kiểm tra đích có phải dịch vụ lưu trữ đám mây quen thuộc
+   (Dropbox, OneDrive, Mega, WeTransfer) hay một IP bất thường không.
+5. Kiểm tra hoạt động chuẩn bị dữ liệu: tạo kho lưu trữ, sao chép tệp
+   vào thư mục tạm hoặc truy cập hàng loạt tệp trước khi truyền.
+6. Xác định hoạt động có được cấp phép hay không (lý do kinh doanh,
+   truyền dữ liệu đã phê duyệt hay tác nhân sao lưu).
+7. Xem lại mẫu hoạt động gần đây của người dùng để phát hiện bất thường.
+8. Kiểm tra đồng thời dấu hiệu đánh cắp thông tin đăng nhập hoặc leo thang đặc quyền.
+9. Xác định dữ liệu đã bị rò rỉ (tên tệp, thư mục đã truy cập).
 
 RESPONSE:
-1. Block the destination IP/domain at the firewall and proxy immediately.
-2. If insider threat is suspected: preserve evidence BEFORE alerting
-   the user (coordinate with HR and Legal).
-3. Isolate the host if malware-driven exfiltration is confirmed.
-4. Preserve proxy logs, DLP logs, and endpoint artifacts.
-5. Assess regulatory reporting obligations (GDPR, PCI-DSS, HIPAA).
-6. Notify Data Protection Officer (DPO) and Legal within required
-   timeframes if PII or regulated data is involved.
-7. Revoke cloud storage OAuth tokens if cloud service was abused.
-8. Submit destination indicators to threat intelligence.
+1. Chặn IP/tên miền đích ngay trên tường lửa và proxy.
+2. Nếu nghi ngờ mối đe dọa từ bên trong, bảo toàn bằng chứng TRƯỚC KHI
+   thông báo người dùng (phối hợp với HR và phòng Pháp lý).
+3. Cách ly máy chủ nếu xác nhận rò rỉ do phần mềm độc hại thực hiện.
+4. Bảo toàn nhật ký proxy, nhật ký DLP và các hiện vật trên máy trạm.
+5. Đánh giá nghĩa vụ báo cáo theo quy định (GDPR, PCI-DSS, HIPAA).
+6. Thông báo cho cán bộ bảo vệ dữ liệu (DPO) và phòng Pháp lý trong thời
+   hạn quy định nếu liên quan đến PII hoặc dữ liệu chịu điều chỉnh.
+7. Thu hồi mã OAuth của dịch vụ lưu trữ đám mây nếu dịch vụ đó bị lạm dụng.
+8. Gửi các chỉ báo đích đến hệ thống tình báo an ninh.
 
 ESCALATION:
-Immediately escalate to Tier 3 / CISO and Legal if regulated data
-(PII, PHI, financial records) is confirmed to have been exfiltrated.
-Law enforcement notification may be required.
+Cần chuyển ngay lên Tier 3/CISO và phòng Pháp lý nếu xác nhận dữ liệu
+chịu điều chỉnh (PII, PHI, hồ sơ tài chính) đã bị rò rỉ.
+Có thể phải thông báo cơ quan thực thi pháp luật.
 
-Human approval is required before blocking destinations, isolating
-hosts, or notifying regulators. HR must approve any action involving
-employee accounts suspected of insider threat.
+Cần có phê duyệt của con người trước khi chặn đích, cách ly máy chủ
+hoặc thông báo cho cơ quan quản lý. HR phải phê duyệt mọi hành động
+liên quan đến tài khoản nhân viên bị nghi ngờ gây mối đe dọa từ bên trong.

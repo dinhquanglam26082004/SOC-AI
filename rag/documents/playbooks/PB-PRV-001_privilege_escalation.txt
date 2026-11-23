@@ -1,48 +1,48 @@
 PLAYBOOK ID: PB-PRV-001
 
 NAME:
-Privilege Escalation Response
+Ứng phó leo thang đặc quyền (Privilege Escalation Response)
 
 TRIGGER:
-Alert indicating a user or process gaining elevated privileges:
-- Windows: Event ID 4672 (special privileges assigned), unexpected
-  addition to Administrators / Domain Admins group (Event ID 4728/4732).
-- Linux: sudo usage anomaly, unexpected SUID binary execution,
-  or /etc/sudoers modification.
-- EDR alert on known privilege escalation techniques (e.g., token
-  impersonation, UAC bypass, LSASS access).
+Cảnh báo cho biết người dùng hoặc tiến trình đang chiếm quyền cao hơn:
+- Windows: Event ID 4672 (được gán đặc quyền đặc biệt), thêm bất thường
+  vào nhóm Administrators/Domain Admins (Event ID 4728/4732).
+- Linux: sử dụng sudo bất thường, thực thi tệp nhị phân SUID bất thường
+  hoặc chỉnh sửa /etc/sudoers.
+- Cảnh báo EDR về kỹ thuật leo thang đặc quyền đã biết (ví dụ: mạo danh
+  token, vượt qua UAC, truy cập LSASS).
 
 INVESTIGATION:
-1. Identify the account that gained elevated privileges and the host.
-2. Determine whether the escalation was authorized (change ticket exists?).
-3. Review the process tree leading to the escalation event via EDR.
-4. Check whether any known exploit tools or LOLBins were used
-   (e.g., mshta, certutil, regsvr32, psexec, runas).
-5. Examine what actions were taken after escalation:
-   - New accounts created?
-   - Scheduled tasks or services added?
-   - Sensitive files accessed?
-   - Lateral movement attempted?
-6. On Linux: check /var/log/auth.log, /var/log/secure, /etc/passwd,
-   /etc/sudoers, and bash history.
-7. Review Group Policy changes if Domain Admin access was obtained.
+1. Xác định tài khoản đã đạt được đặc quyền cao và máy chủ liên quan.
+2. Xác định việc leo thang đặc quyền có được cấp phép không (có phiếu thay đổi không).
+3. Xem cây tiến trình dẫn đến sự kiện leo thang qua EDR.
+4. Kiểm tra có công cụ khai thác hoặc LOLBins nào đã được dùng không
+   (ví dụ: mshta, certutil, regsvr32, psexec, runas).
+5. Xem các hoạt động xảy ra sau khi leo thang đặc quyền:
+   - Có tài khoản mới được tạo không?
+   - Có tác vụ theo lịch hoặc dịch vụ nào được thêm không?
+   - Có tệp nhạy cảm nào được truy cập không?
+   - Có thử di chuyển ngang không?
+6. Trên Linux, kiểm tra /var/log/auth.log, /var/log/secure, /etc/passwd,
+   /etc/sudoers và lịch sử bash.
+7. Xem các thay đổi chính sách nhóm nếu đã đạt quyền Domain Admin.
 
 RESPONSE:
-1. Revoke the elevated privileges if unauthorized.
-2. Disable the compromised account immediately.
-3. Isolate the affected host if malicious tool execution is confirmed.
-4. Reset credentials for the compromised account and all accounts
-   accessed during the session.
-5. Review and remove any persistence mechanisms (scheduled tasks,
-   registry run keys, new local accounts, authorized_keys changes).
-6. Patch the exploited vulnerability if a local exploit was used.
-7. Preserve logs and memory dump for forensic analysis.
+1. Thu hồi đặc quyền cao nếu không được cấp phép.
+2. Vô hiệu hóa ngay tài khoản bị xâm phạm.
+3. Cách ly máy chủ bị ảnh hưởng nếu xác nhận đã chạy công cụ độc hại.
+4. Đặt lại thông tin đăng nhập của tài khoản bị xâm phạm và mọi tài khoản
+   được truy cập trong phiên hoạt động.
+5. Rà soát và gỡ bỏ cơ chế duy trì hiện diện (tác vụ theo lịch,
+   registry Run key, tài khoản cục bộ mới, thay đổi authorized_keys).
+6. Vá lỗ hổng khai thác nếu kẻ tấn công đã dùng một khai thác cục bộ.
+7. Bảo toàn nhật ký và bộ nhớ đổ ra để phục vụ phân tích pháp y.
 
 ESCALATION:
-Escalate to Tier 2 / Incident Response if:
-- Domain Admin or root-level access was obtained.
-- Persistence mechanisms were installed.
-- Lateral movement is detected.
+Cần chuyển lên Tier 2/Bộ phận ứng phó sự cố nếu:
+- Đã đạt quyền Domain Admin hoặc root.
+- Đã cài cơ chế duy trì hiện diện.
+- Phát hiện di chuyển ngang.
 
-Human approval is required before disabling accounts, isolating hosts,
-or reverting Group Policy / sudoers changes.
+Cần có phê duyệt của con người trước khi vô hiệu hóa tài khoản, cách ly máy chủ
+hoặc hoàn tác thay đổi Group Policy/sudoers.

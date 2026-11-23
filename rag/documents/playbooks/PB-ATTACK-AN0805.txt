@@ -1,13 +1,12 @@
-[PB-ATTACK-AN0805] Cross-Platform Detection of Cron Job Abuse for Persistence and Execution — T1053.003 Cron
+[PB-ATTACK-AN0805] Phát hiện lạm dụng tác vụ Cron để duy trì và thực thi trên nhiều nền tảng — T1053.003 Cron
 Source: https://attack.mitre.org/detectionstrategies/DET0290#AN0805
 MITRE analytic: AN0805; version: 1.0; source modified: 2025-10-21T15:10:28.402Z; retrieved: 2026-11-02.
 Platforms: Linux
-Provenance: Official MITRE ATT&CK detection guidance, reproduced under MITRE-ATTACK.LICENSE in this directory. © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
-Guidance only. This document is not an observation from the victim.
+Provenance: Hướng dẫn phát hiện chính thức của MITRE ATT&CK, được tái tạo theo MITRE-ATTACK.LICENSE trong thư mục này. © 2026 The MITRE Corporation. This work is reproduced and distributed with the permission of The MITRE Corporation.
 
-Investigation guidance:
+Hướng dẫn điều tra:
 Official analytic text:
-Detects creation or modification of crontab entries by non-root users or from abnormal parent processes, followed by the execution of uncommon binaries at scheduled intervals.
+Phát hiện việc tạo hoặc sửa đổi các mục nhập crontab bởi những người dùng không phải là người dùng gốc hoặc từ các quy trình gốc bất thường, sau đó là việc thực thi các tệp nhị phân không phổ biến theo các khoảng thời gian đã lên lịch.
 
-Local applicability (SOC-AI project guidance, not MITRE text):
-Use retained Wazuh authentication/FIM/sudo records and Zeek conn/HTTP/DNS only when the required source exists. These are historical observations, not live endpoint inspection. Process lineage, resource utilization, service availability and authorization may require additional sources or analyst verification. Do not claim those signals were checked unless an actual tool returned them. No numerical threshold here establishes an attack by itself. Cite source event IDs for incident findings; this document supports investigation recommendations only. An absent result does not prove safety. Public examples or MITRE technique names are not proof that the same attack occurred locally.
+Local applicability (hướng dẫn riêng của dự án SOC-AI, không thuộc văn bản của MITRE):
+Chỉ sử dụng các bản ghi xác thực/FIM/sudo của Wazuh và dữ liệu conn/HTTP/DNS của Zeek khi nguồn dữ liệu yêu cầu thực sự tồn tại. Đây là quan sát lịch sử, không phải kiểm tra trực tiếp thiết bị đầu cuối. Cần nguồn bổ sung hoặc xác minh của phân tích viên để đánh giá cây tiến trình, mức sử dụng tài nguyên, tính sẵn sàng dịch vụ và quyền được cấp. Không khẳng định các tín hiệu đã được kiểm tra trừ khi công cụ thực tế đã trả về dữ liệu. Không có ngưỡng số nào trong tài liệu này tự nó xác lập một cuộc tấn công. Khi đưa ra kết luận sự cố, hãy trích dẫn ID sự kiện nguồn; tài liệu này chỉ hỗ trợ đề xuất điều tra. Không có kết quả không chứng minh hệ thống an toàn. Ví dụ công khai hoặc tên kỹ thuật MITRE không phải bằng chứng cuộc tấn công tương tự đã xảy ra tại địa phương.

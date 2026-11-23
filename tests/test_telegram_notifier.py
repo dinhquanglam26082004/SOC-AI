@@ -90,6 +90,14 @@ def test_notification_message_is_capped():
     assert len(message) <= 4000
 
 
+def test_notification_displays_alert_timestamp_in_vietnam_time():
+    msg = format_investigation_alert({
+        'timestamp': '2026-11-20T00:39:00Z',
+        'investigation_report': {},
+    })
+    assert 'Thời gian (UTC+07:00): 2026-11-20T07:39:00+07:00' in msg
+
+
 def test_zeek_measurements_are_not_misrepresented_as_window_totals():
     msg=format_investigation_alert({'source_product':'zeek','log_type':'conn',
         'zeek_data':{'orig_pkts':3,'resp_pkts':0,'duration':0.5},
@@ -166,7 +174,7 @@ def test_dns_summary_uses_its_actual_scope_not_rule_window():
                 'scope': {'domain': 'tunnel.lab.local', 'since': '2026-11-20T00:39:00Z',
                           'until': '2026-11-20T01:09:00Z', 'window_seconds': 1800}}}]}})
     assert '80 bản ghi đã lưu' in msg and '65 tên truy vấn khác nhau' in msg
-    assert '2026-11-20T00:39:00Z → 2026-11-20T01:09:00Z' in msg
+    assert '2026-11-20T07:39:00+07:00 → 2026-11-20T08:09:00+07:00' in msg
     assert 'Loại query: NULL: 25, A: 30' in msg and 'trùng lặp' in msg
     assert '80 bản ghi trong 120' not in msg
     assert len(msg) < 1200
@@ -175,9 +183,10 @@ def test_dns_summary_uses_its_actual_scope_not_rule_window():
 def test_partial_flow_summary_preserves_scope_and_missing_packet_fields():
     msg = format_investigation_alert({'investigation_report': {'tool_outcomes': [{
         'tool': 'summarize_zeek_flows', 'status': 'ok', 'flow_summary': {
-            'flow_observations': 20, 'scope': {'since': '10:00Z', 'until': '10:05Z'},
+            'flow_observations': 20, 'scope': {'since': '2026-11-20T10:00:00Z', 'until': '2026-11-20T10:05:00Z'},
             'totals': {'orig_pkts': 30, 'resp_pkts': 2}, 'missing_fields': {'orig_pkts': 3, 'resp_pkts': 0}}}]}})
-    assert 'Flow: 20 quan sát đã lưu' in msg and '10:00Z → 10:05Z' in msg
+    assert 'Flow: 20 quan sát đã lưu' in msg
+    assert 'Phạm vi (UTC+07:00): 2026-11-20T17:00:00+07:00 → 2026-11-20T17:05:00+07:00' in msg
     assert '30 / 2' in msg and 'thiếu trường: 3 / 0' in msg
 
 

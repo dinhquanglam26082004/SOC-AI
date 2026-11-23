@@ -1,79 +1,82 @@
 PLAYBOOK ID: PB-DOS-001
 
 NAME:
-Suspected Denial of Service Response
+Ứng phó nghi ngờ từ chối dịch vụ (Suspected Denial of Service Response)
 
-Provenance: Curated summary of MITRE ATT&CK T1498 (Network Denial of Service,
-sub-techniques Direct Network Flood T1498.001 and Reflection Amplification
-T1498.002), T1499 (Endpoint Denial of Service), mitigation M1037, and the
-CISA/FBI/MS-ISAC guidance on understanding and responding to DDoS attacks,
-reviewed 2026-11-19. Sources: https://attack.mitre.org/techniques/T1498/ ,
-https://attack.mitre.org/techniques/T1499/ , https://attack.mitre.org/mitigations/M1037/
-and https://www.cisa.gov/ (search "Understanding and Responding to DDoS Attacks").
-Guidance, not incident evidence.
+Provenance: Tóm tắt tuyển chọn MITRE ATT&CK T1498 (Network Denial of Service;
+các sub-technique Direct Network Flood T1498.001 và Reflection Amplification
+T1498.002), T1499 (Endpoint Denial of Service), biện pháp giảm thiểu M1037
+và hướng dẫn của CISA/FBI/MS-ISAC về nhận diện và ứng phó tấn công DDoS;
+được rà soát 2026-11-19. Sources: https://attack.mitre.org/techniques/T1498/ ,
+https://attack.mitre.org/techniques/T1499/ ,
+https://attack.mitre.org/mitigations/M1037/ và https://www.cisa.gov/
+(tìm cụm "Understanding and Responding to DDoS Attacks").
+Chỉ dẫn, không phải bằng chứng sự cố.
 
 TRIGGER:
-Network or application telemetry shows an unusual increase in requests,
-connections, or failed flows targeting a service. A threshold alert is a
-signal to investigate, not proof that the service is unavailable or that
-the traffic is malicious. This playbook applies to suspected DoS and
-possible DDoS activity. MITRE maps network floods to T1498 (Impact, TA0040):
-T1498.001 Direct Network Flood from one or many sources, and T1498.002
-Reflection Amplification, which abuses third-party servers that respond to a
-spoofed victim address. DoS aimed at the host itself is T1499.
+Dữ liệu đo lường mạng hoặc ứng dụng cho thấy số lượng yêu cầu, kết nối
+hoặc luồng thất bại nhắm đến một dịch vụ tăng bất thường. Cảnh báo chạm
+ngưỡng chỉ là tín hiệu cần điều tra, không chứng minh dịch vụ ngừng hoạt động
+hoặc lưu lượng truy cập là độc hại. Playbook này áp dụng cho DoS nghi ngờ
+và hoạt động DDoS có thể xảy ra. MITRE ánh xạ các cuộc tấn công làm nghẽn
+mạng sang T1498 (Impact, TA0040): T1498.001 Direct Network Flood từ một
+hoặc nhiều nguồn, và T1498.002 Reflection Amplification, khai thác máy chủ
+bên thứ ba để chúng phản hồi lại địa chỉ nạn nhân đã bị giả mạo. DoS nhắm
+trực tiếp vào máy chủ được ánh xạ sang T1499.
 
 INVESTIGATION:
-1. Identify the affected service, destination, port, protocol, detection
-   window, observed count, configured threshold, and available source count.
-2. Confirm service impact with the service owner using health checks,
-   latency, error rates, resource utilization, and user reports.
-3. Compare the observation with the service's normal baseline, expected
-   business traffic, scheduled jobs, and recent deployments or load tests.
-4. Review relevant load balancer, firewall, application, and network
-   telemetry for request patterns and whether traffic reached the service.
-5. Check sensor health, capture loss, event backlog, aggregation limits,
-   and time synchronization. Counts may represent observed flows or
-   requests, not packets or unique clients.
-6. Assess whether traffic comes from one source or many. NAT, proxies,
-   spoofed addresses, and shared infrastructure can make source counts
-   misleading; multiple sources alone do not prove a distributed attack.
-   Source spoofing and reflection reduce the value of simple source-IP
-   filtering, so prefer behavior-based assessment over fixed source lists.
-7. Preserve the relevant alerts, logs, service-health measurements, and
-   timeline before making changes.
-8. Record the assessment as suspected or confirmed service impact, and
-   document remaining uncertainty. Do not infer attacker identity or intent
-   from traffic volume alone.
+1. Xác định dịch vụ và đích bị ảnh hưởng, cổng, giao thức, khoảng thời gian
+   phát hiện, số lượng quan sát, ngưỡng cấu hình và số nguồn có sẵn.
+2. Xác nhận tác động đến dịch vụ với chủ sở hữu bằng kiểm tra sức khỏe,
+   độ trễ, tỷ lệ lỗi, mức sử dụng tài nguyên và báo cáo của người dùng.
+3. So sánh quan sát với đường cơ sở bình thường, lưu lượng kinh doanh dự kiến,
+   tác vụ theo lịch và các triển khai hoặc kiểm thử tải gần đây.
+4. Xem nhật ký bộ cân bằng tải, tường lửa, ứng dụng và mạng liên quan để
+   xác định mẫu yêu cầu và liệu lưu lượng có thực sự đến được dịch vụ.
+5. Kiểm tra tình trạng cảm biến, mất gói bắt, hàng đợi sự kiện, giới hạn
+   tổng hợp và đồng bộ thời gian. Số liệu có thể là luồng hoặc yêu cầu quan sát,
+   không nhất thiết là số gói tin hoặc số máy trạm duy nhất.
+6. Đánh giá lưu lượng đến từ một hay nhiều nguồn. NAT, proxy, địa chỉ giả mạo
+   và hạ tầng dùng chung có thể làm sai lệch số nguồn; nhiều nguồn chưa
+   chứng minh được cuộc tấn công phân tán. Giả mạo nguồn và phản xạ làm giảm
+   hiệu quả của lọc theo IP nguồn đơn thuần; ưu tiên đánh giá theo hành vi
+   thay vì danh sách nguồn cố định.
+7. Bảo toàn cảnh báo, nhật ký, số đo sức khỏe dịch vụ và dòng thời gian liên quan
+   trước khi thực hiện thay đổi.
+8. Ghi nhận đánh giá là tác động dịch vụ nghi ngờ hay đã xác nhận, đồng thời
+   nêu rõ những điểm chưa chắc chắn. Không suy diễn danh tính hoặc mục đích
+   của kẻ tấn công chỉ từ lưu lượng truy cập.
 
 RESPONSE:
-1. If service impact is not corroborated, continue monitoring and gather
-   service-owner and telemetry evidence; do not block sources solely because
-   a threshold alert fired.
-2. If impact is confirmed, coordinate mitigation with the service owner and
-   network/hosting provider. Prefer scoped, reversible controls such as
-   rate limits, filtering for a verified traffic pattern, or provider
-   scrubbing where available (M1037 Filter Network Traffic).
-3. Before applying a control, identify its target, duration, expected effect,
-   customer impact, monitoring criteria, and rollback procedure.
-4. Avoid broad IP, country, or network-range blocks unless an analyst and
-   service owner validate the scope and business impact.
-5. Monitor service health and legitimate traffic after mitigation; roll back
-   or adjust controls if they disrupt expected service.
-6. Preserve incident evidence and record decisions, approvals, changes,
-   timestamps, and observed outcomes.
-7. After recovery, follow the CISA/FBI/MS-ISAC guidance: watch for a secondary
-   attack, update the DoS response plan, and refresh the baseline of normal
-   network activity. Review capacity, upstream protections, and alert
-   thresholds with the service owner.
+1. Nếu chưa xác nhận tác động đến dịch vụ, tiếp tục giám sát và thu thập
+   bằng chứng từ chủ sở hữu dịch vụ và dữ liệu đo lường; không chặn nguồn
+   chỉ vì một cảnh báo đã chạm ngưỡng.
+2. Khi đã xác nhận tác động, phối hợp giảm thiểu với chủ sở hữu dịch vụ
+   và nhà cung cấp mạng/lưu trữ. Ưu tiên biện pháp có phạm vi rõ ràng,
+   có thể đảo ngược như giới hạn tốc độ, lọc theo mẫu lưu lượng đã xác minh
+   hoặc dịch vụ scrub của nhà cung cấp khi có (M1037 Filter Network Traffic).
+3. Trước khi áp dụng biện pháp, xác định đối tượng, thời lượng, hiệu ứng
+   mong đợi, tác động tới khách hàng, tiêu chí giám sát và quy trình hoàn tác.
+4. Tránh chặn rộng theo IP, quốc gia hoặc dải mạng trừ khi nhà phân tích
+   và chủ sở hữu dịch vụ đã xác nhận phạm vi và tác động kinh doanh.
+5. Sau khi giảm thiểu, giám sát sức khỏe dịch vụ và lưu lượng hợp lệ;
+   hoàn tác hoặc điều chỉnh nếu biện pháp làm gián đoạn dịch vụ dự kiến.
+6. Bảo toàn bằng chứng sự cố và ghi lại quyết định, phê duyệt, thay đổi,
+   mốc thời gian và kết quả quan sát được.
+7. Sau khi phục hồi, làm theo hướng dẫn CISA/FBI/MS-ISAC: theo dõi cuộc
+   tấn công thứ cấp, cập nhật kế hoạch ứng phó DoS và làm mới đường cơ sở
+   của hoạt động mạng bình thường. Cùng chủ sở hữu dịch vụ xem xét công suất,
+   cơ chế bảo vệ thượng nguồn và ngưỡng cảnh báo.
 
 ESCALATION:
-Escalate promptly to the SOC lead and affected service owner when availability
-impact is confirmed, critical services are affected, or mitigation requires
-provider or production changes. Engage the network/hosting provider for
-upstream traffic mitigation. Escalate to incident management when impact is
-prolonged, widespread, or affects critical business operations.
+Cần báo ngay cho trưởng SOC và chủ sở hữu dịch vụ bị ảnh hưởng khi đã xác nhận
+tác động đến tính sẵn sàng, dịch vụ quan trọng bị ảnh hưởng hoặc biện pháp
+giảm thiểu yêu cầu thay đổi nhà cung cấp hay môi trường sản xuất. Liên hệ
+nhà cung cấp mạng/lưu trữ để giảm thiểu lưu lượng ở thượng nguồn. Chuyển
+cho quản lý sự cố khi tác động kéo dài, lan rộng hoặc ảnh hưởng hoạt động
+kinh doanh quan trọng.
 
-Human approval from the incident lead and affected service owner is required
-before production traffic filtering, rate-limit changes, service isolation,
-or other controls that may affect legitimate users. No response action is
-executed by this playbook.
+Cần có phê duyệt của người dẫn sự cố và chủ sở hữu dịch vụ bị ảnh hưởng
+trước khi lọc lưu lượng sản xuất, thay đổi giới hạn tốc độ, cách ly dịch vụ
+hoặc áp dụng biện pháp khác có thể ảnh hưởng người dùng hợp lệ. Playbook này
+không thực thi trực tiếp bất kỳ hành động ứng phó nào.

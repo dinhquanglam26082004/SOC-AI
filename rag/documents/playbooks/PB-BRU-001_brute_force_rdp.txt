@@ -1,42 +1,43 @@
 PLAYBOOK ID: PB-BRU-001
 
 NAME:
-RDP Brute Force Response
+Ứng phó tấn công dò mật khẩu RDP (RDP Brute Force Response)
 
 TRIGGER:
-More than 20 failed RDP (port 3389) authentication attempts against the
-same account or host within 5 minutes, or repeated failures from a
-single external IP.
+Cảnh báo có hơn 20 lần xác thực RDP (cổng 3389) thất bại nhắm vào cùng
+một tài khoản hoặc máy chủ trong vòng 5 phút, hoặc xuất hiện các lần
+thất bại lặp lại từ một địa chỉ IP bên ngoài.
 
 INVESTIGATION:
-1. Identify the source IP address(es) and geolocate them.
-2. Check threat intelligence feeds for the source IP reputation.
-3. Review Windows Security Event Log (Event ID 4625) on the target host
-   for authentication failure details.
-4. Determine which accounts were targeted.
-5. Check for Event ID 4624 (successful logon) following failures —
-   this indicates a successful brute force.
-6. If successful login occurred: review actions taken during that session
-   (Event IDs 4672, 4688, 7045) for privilege escalation or tool execution.
-7. Determine whether RDP is exposed directly to the internet or via a
-   jump server / VPN.
+1. Xác định các địa chỉ IP nguồn và tra cứu vị trí địa lý.
+2. Kiểm tra nguồn tình báo an ninh để đánh giá uy tín của IP nguồn.
+3. Xem Nhật ký Bảo mật Windows trên máy chủ mục tiêu (Event ID 4625) để
+   lấy thông tin chi tiết về lỗi xác thực.
+4. Xác định các tài khoản đã bị nhắm đến.
+5. Kiểm tra xem sau các lần thất bại có xuất hiện Event ID 4624
+   (đăng nhập thành công), điều này cho thấy kẻ tấn công có thể đã dò
+   mật khẩu thành công.
+6. Nếu phát hiện đăng nhập thành công, xem xét các hoạt động trong phiên đó
+   (Event IDs 4672, 4688, 7045) để phát hiện leo thang đặc quyền hoặc chạy công cụ.
+7. Xác định RDP có được công khai trực tiếp ra Internet hay qua máy chủ
+   trung gian/jump server hoặc VPN.
 
 RESPONSE:
-1. Block the source IP at the perimeter firewall and/or WAF.
-2. Enable account lockout policy if not already enforced (lockout after
-   5 failed attempts, 30-minute lockout duration).
-3. If a successful login was detected:
-   a. Immediately isolate the compromised host.
-   b. Disable or lock the compromised account.
-   c. Force password reset and MFA enrollment.
-4. Restrict RDP access to authorized VPN users or jump hosts only.
-5. Enable NLA (Network Level Authentication) on all RDP-exposed hosts.
-6. Collect and preserve Windows Event Logs from the target host.
-7. Increase logging verbosity on Windows hosts (Audit Logon Events).
+1. Chặn IP nguồn trên tường lửa biên hoặc WAF.
+2. Bật chính sách khóa tài khoản nếu chưa được áp dụng (khóa sau 5 lần
+   thất bại, với thời gian khóa 30 phút).
+3. Nếu phát hiện đăng nhập thành công:
+   a. Cách ly ngay máy chủ bị xâm phạm khỏi mạng.
+   b. Vô hiệu hóa hoặc khóa tài khoản bị xâm phạm.
+   c. Buộc đặt lại mật khẩu và đăng ký MFA.
+4. Chỉ cho phép truy cập RDP của người dùng VPN được cấp quyền hoặc qua máy chủ trung gian.
+5. Bật NLA (Network Level Authentication) trên mọi máy chủ công khai RDP.
+6. Thu thập và lưu giữ Nhật ký Sự kiện Windows từ máy chủ mục tiêu.
+7. Tăng mức ghi nhật ký đăng nhập trên máy chủ Windows (Audit Logon Events).
 
 ESCALATION:
-Escalate to Tier 2 if a successful login after brute force is confirmed,
-or if multiple hosts are being targeted simultaneously.
+Chuyển sự cố lên Tier 2 nếu xác nhận có đăng nhập thành công sau tấn công
+dò mật khẩu, hoặc nếu nhiều máy chủ bị nhắm đến cùng lúc.
 
-Human approval is required before blocking IPs, disabling accounts,
-isolating hosts, or modifying firewall rules.
+Cần có sự phê duyệt của con người trước khi chặn IP, vô hiệu hóa tài khoản,
+cách ly máy chủ hoặc thay đổi quy tắc tường lửa.

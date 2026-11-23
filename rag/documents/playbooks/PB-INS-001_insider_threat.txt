@@ -1,51 +1,51 @@
 PLAYBOOK ID: PB-INS-001
 
 NAME:
-Insider Threat Response
+Ứng phó mối đe dọa từ bên trong (Insider Threat Response)
 
 TRIGGER:
-Behavioral analytics or DLP alert indicating potential insider threat:
-- Employee accessing data outside normal working hours or from unusual
-  location, especially before resignation/termination.
-- Bulk download of sensitive files to personal device or cloud storage.
-- Privilege abuse: access to data beyond job function.
-- User account active after offboarding.
+Phân tích hành vi hoặc cảnh báo DLP cho thấy có thể có mối đe dọa từ bên trong:
+- Nhân viên truy cập dữ liệu ngoài giờ làm việc bình thường hoặc từ vị trí
+  bất thường, đặc biệt trước khi xin thôi việc hoặc bị chấm dứt hợp đồng.
+- Tải hàng loạt tệp nhạy cảm xuống thiết bị cá nhân hoặc lưu trữ đám mây.
+- Lạm dụng đặc quyền: truy cập dữ liệu ngoài phạm vi công việc.
+- Tài khoản người dùng vẫn hoạt động sau khi đã nghỉ việc.
 
 INVESTIGATION:
-1. Engage HR and Legal BEFORE alerting or confronting the user.
-   This investigation must be covert in initial stages.
-2. Collect and preserve logs without modifying them:
-   - VPN and authentication logs.
-   - File access logs (DLP, DRM, file server audit).
-   - Email logs (sent items, forwarding rules).
-   - Cloud storage access (OneDrive, SharePoint, personal accounts).
-   - Badge access records.
-3. Establish a baseline of the user's normal behavior patterns.
-4. Document all anomalous activities with timestamps.
-5. Determine whether the activity is malicious, negligent, or a
-   policy violation (misuse vs. deliberate theft).
-6. Assess what data was accessed, copied, or transmitted.
-7. Preserve chain of custody for all evidence (required for legal action).
+1. Phối hợp với HR và phòng Pháp lý TRƯỚC KHI thông báo hoặc tiếp cận người dùng.
+   Trong giai đoạn đầu, cuộc điều tra phải được thực hiện kín đáo.
+2. Thu thập và bảo toàn nhật ký mà không thay đổi chúng:
+   - Nhật ký VPN và xác thực.
+   - Nhật ký truy cập tệp (DLP, DRM, nhật ký kiểm toán máy chủ tệp).
+   - Nhật ký thư điện tử (thư đã gửi, quy tắc chuyển tiếp).
+   - Nhật ký truy cập lưu trữ đám mây (OneDrive, SharePoint, tài khoản cá nhân).
+   - Hồ sơ truy cập thẻ.
+3. Xây dựng đường cơ sở cho mẫu hành vi bình thường của người dùng.
+4. Ghi lại mọi hoạt động bất thường kèm mốc thời gian.
+5. Xác định hành vi có tính chất độc hại, sơ suất hay vi phạm chính sách
+   (lạm dụng hay đánh cắp có chủ đích).
+6. Đánh giá dữ liệu nào đã được truy cập, sao chép hoặc truyền đi.
+7. Duy trì chuỗi bảo quản bằng chứng (cần thiết cho các biện pháp pháp lý).
 
 RESPONSE:
-1. All response actions require approval from HR, Legal, and Management.
-2. If termination is pending or confirmed:
-   a. Immediately revoke all access on the last day of employment.
-   b. Disable accounts, revoke VPN certificates, remove email access.
-   c. Recover company-owned devices.
-3. If active data exfiltration is occurring:
-   a. Block outbound transfer at the proxy (without alerting user).
-   b. Preserve evidence simultaneously.
-4. Conduct exit interview coordinated with HR (if appropriate).
-5. File a law enforcement report if criminal activity (IP theft, fraud)
-   is confirmed.
-6. Review access controls to prevent similar incidents:
-   - Implement need-to-know data access.
-   - Enable User Behavior Analytics (UBA) monitoring.
+1. Mọi hành động ứng phó đều phải có phê duyệt của HR, phòng Pháp lý và ban quản lý.
+2. Nếu việc chấm dứt hợp đồng sắp xảy ra hoặc đã xác nhận:
+   a. Thu hồi toàn bộ quyền truy cập ngay trong ngày làm việc cuối cùng.
+   b. Vô hiệu hóa tài khoản, thu hồi chứng chỉ VPN và xóa quyền truy cập thư điện tử.
+   c. Thu hồi thiết bị thuộc công ty.
+3. Nếu đang xảy ra rò rỉ dữ liệu:
+   a. Chặn truyền ra ngoài tại proxy (không thông báo cho người dùng).
+   b. Đồng thời bảo toàn bằng chứng.
+4. Tổ chức phỏng vấn nghỉ việc phối hợp với HR khi phù hợp.
+5. Gửi báo cáo cho cơ quan thực thi pháp luật nếu xác nhận hoạt động phạm tội
+   (đánh cắp tài sản trí tuệ, gian lận).
+6. Rà soát kiểm soát truy cập để ngăn sự cố tương tự:
+   - Áp dụng nguyên tắc truy cập dữ liệu theo nhu cầu công việc.
+   - Bật giám sát Phân tích Hành vi Người dùng (UBA).
 
 ESCALATION:
-Engage HR, Legal, and executive management at the earliest stage.
-This playbook must NOT be executed by SOC Tier 1 alone.
+Ngay từ giai đoạn sớm, cần phối hợp HR, phòng Pháp lý và ban điều hành.
+SOC Tier 1 không được tự mình thực thi toàn bộ playbook này.
 
-All actions against the suspected user account require explicit written
-approval from HR Director and Legal Counsel.
+Mọi hành động đối với tài khoản người dùng bị nghi ngờ đều cần phê duyệt
+bằng văn bản rõ ràng của Giám đốc HR và cố vấn pháp lý.

@@ -51,6 +51,10 @@ def test_reset_clears_events_and_blocks_old_deliveries_but_keeps_cases(tmp_path)
                              'responses': [{'action': 'keep response'}]})
     assert store.log_stats()['total'] == 2
     assert store.queue_stats() == {'queued': 1}
+    runtime = RuntimeStore(path)
+    runtime.save({'alerts': {alert['id']: alert}, 'cases': {'case-1': {'id': 'case-1'}},
+                  'responses': [{'action': 'remove response history'}],
+                  'other_state': {'keep': True}})
 
     request_id = str(uuid4())
     result = store.clear_logs_and_alerts(request_id)
@@ -61,8 +65,10 @@ def test_reset_clears_events_and_blocks_old_deliveries_but_keeps_cases(tmp_path)
     assert store.list_logs()['logs'] == []
     assert store.queue_stats() == {}
     assert store.list_cases() == [{'id': 'case-1', 'note': 'keep case'}]
-    snapshot = RuntimeStore(path).load()
-    assert 'alerts' not in snapshot and 'cases' in snapshot and snapshot['responses']
+    snapshot = runtime.load()
+    assert 'alerts' not in snapshot and 'responses' not in snapshot
+    assert snapshot['cases'] == {'case-1': {'id': 'case-1'}}
+    assert snapshot['other_state'] == {'keep': True}
     with store.connect() as db:
         for table in ('events', 'zeek_logs', 'log_index', 'investigation_event_index',
                       'authentication_facts', 'ai_jobs'):

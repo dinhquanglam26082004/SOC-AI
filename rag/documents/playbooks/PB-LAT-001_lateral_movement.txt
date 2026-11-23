@@ -1,49 +1,49 @@
 PLAYBOOK ID: PB-LAT-001
 
 NAME:
-Lateral Movement Response
+Ứng phó di chuyển ngang (Lateral Movement Response)
 
 TRIGGER:
-Alert indicating movement between internal hosts:
-- Pass-the-Hash or Pass-the-Ticket activity (Event ID 4624 logon type 3
-  with NTLM on non-standard accounts).
-- SMB/WMI/PSExec access from workstation to workstation.
-- Unusual RDP connections between internal systems.
-- EDR alert on credential dumping tools (Mimikatz, secretsdump).
+Cảnh báo chỉ ra hoạt động di chuyển giữa các máy chủ nội bộ:
+- Hoạt động Pass-the-Hash hoặc Pass-the-Ticket (Event ID 4624, loại đăng nhập 3
+  với NTLM trên các tài khoản không bình thường).
+- Truy cập SMB/WMI/PSExec từ máy trạm này sang máy trạm khác.
+- Kết nối RDP bất thường giữa các hệ thống nội bộ.
+- Cảnh báo EDR về công cụ trích xuất thông tin đăng nhập (Mimikatz, secretsdump).
 
 INVESTIGATION:
-1. Map the movement: identify source host, destination hosts, and
-   the account(s) used for movement.
-2. Determine the timeline and sequence of lateral movement events.
-3. Check for credential dumping activity on the source host:
-   - LSASS access (Event ID 4656 on lsass.exe)
-   - Volume shadow copy access
-   - SAM/SYSTEM/SECURITY registry hive reads
-4. Identify all accounts whose credentials may have been harvested.
-5. Review network traffic for SMB, WMI, DCOM, RDP between endpoints.
-6. Determine the original infection point (patient zero).
-7. Assess which sensitive systems were reached (AD DC, file servers,
-   database servers, backup servers).
+1. Lập sơ đồ di chuyển: xác định máy chủ nguồn, máy chủ đích và tài khoản
+   được dùng để di chuyển.
+2. Xác định dòng thời gian và thứ tự các sự kiện di chuyển ngang.
+3. Kiểm tra hoạt động trích xuất thông tin đăng nhập trên máy chủ nguồn:
+   - Truy cập LSASS (Event ID 4656 trên lsass.exe)
+   - Truy cập bản sao bóng volume
+   - Đọc hive registry SAM/SYSTEM/SECURITY
+4. Xác định mọi tài khoản có thể đã bị lấy thông tin đăng nhập.
+5. Xem lưu lượng mạng cho SMB, WMI, DCOM và RDP giữa các đầu cuối.
+6. Xác định điểm nhiễm ban đầu (patient zero).
+7. Đánh giá các hệ thống nhạy cảm đã được truy cập (AD DC, máy chủ tệp,
+   máy chủ cơ sở dữ liệu, máy chủ sao lưu).
 
 RESPONSE:
-1. Isolate all confirmed compromised hosts from the network.
-2. Reset passwords for ALL accounts that authenticated on compromised hosts
-   (attacker may have harvested hashes from memory).
-3. Invalidate all Kerberos tickets (krbtgt password reset x2 if golden
-   ticket is suspected).
-4. Disable NTLM authentication if Pass-the-Hash is confirmed (evaluate
-   business impact first).
-5. Enable SMB signing on all hosts to prevent relay attacks.
-6. Remove PsExec and other dual-use tools from compromised hosts.
-7. Block lateral movement paths via host-based firewall rules
-   (workstation-to-workstation SMB, WMI).
-8. Collect memory dumps from affected hosts before remediation.
+1. Cách ly khỏi mạng mọi máy chủ đã xác nhận bị xâm phạm.
+2. Đặt lại mật khẩu cho TẤT CẢ tài khoản từng xác thực trên máy chủ bị xâm phạm
+   (kẻ tấn công có thể đã lấy hash từ bộ nhớ).
+3. Làm mất hiệu lực mọi vé Kerberos (nếu nghi ngờ Golden Ticket, đặt lại mật khẩu
+   krbtgt hai lần).
+4. Vô hiệu hóa xác thực NTLM nếu xác nhận Pass-the-Hash (trước tiên đánh giá
+   tác động kinh doanh).
+5. Bật SMB signing trên mọi máy chủ để ngăn tấn công relay.
+6. Gỡ PsExec và các công cụ hai dụng cụ khác khỏi máy chủ bị xâm phạm.
+7. Chặn đường di chuyển ngang bằng quy tắc tường lửa máy chủ
+   (SMB/WMI giữa các máy trạm).
+8. Thu thập bộ nhớ đổ ra từ máy bị ảnh hưởng trước khi khắc phục.
 
 ESCALATION:
-Escalate to Tier 3 / CISO immediately if:
-- Domain Controller or Active Directory is reached.
-- Golden or Silver Ticket attack is suspected.
-- 5 or more hosts are involved.
+Cần chuyển ngay lên Tier 3/CISO nếu:
+- Đã truy cập Domain Controller hoặc Active Directory.
+- Nghi ngờ tấn công Golden hoặc Silver Ticket.
+- Có 5 máy chủ trở lên bị liên quan.
 
-Human approval is required before host isolation, account resets,
-NTLM disabling, or krbtgt password reset.
+Cần có phê duyệt của con người trước khi cách ly máy chủ, đặt lại tài khoản,
+vô hiệu hóa NTLM hoặc đặt lại mật khẩu krbtgt.

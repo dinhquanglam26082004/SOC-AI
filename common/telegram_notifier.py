@@ -1,8 +1,11 @@
 """Telegram notifications for completed SOC-AI investigations."""
 import os
 import re
+from datetime import datetime, timedelta, timezone
 
 import requests
+
+_LOCAL_TIMEZONE = timezone(timedelta(hours=7))
 
 _ACTION_LABELS = {'block_domain':'Chặn domain', 'block_ip':'Chặn IP', 'isolate_host':'Cô lập máy',
                   'kill_process':'Dừng tiến trình', 'disable_service':'Vô hiệu dịch vụ',
@@ -15,13 +18,24 @@ def _short(value, limit=500):
     return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
+def _local_time(value):
+    """Convert an ISO timestamp to Vietnam time while preserving unparseable values."""
+    try:
+        stamp = datetime.fromisoformat(str(value).replace('Z', '+00:00'))
+    except ValueError:
+        return _short(value, 40)
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return stamp.astimezone(_LOCAL_TIMEZONE).isoformat()
+
+
 def _window(scope):
     """Use the aggregation's actual query window, never the rule's timeframe."""
     scope = scope if isinstance(scope, dict) else {}
     since, until = scope.get('since'), scope.get('until')
     if not since or not until:
         return 'Phạm vi thời gian: chưa được ghi'
-    return f"Phạm vi (UTC): {_short(since, 40)} → {_short(until, 40)}"
+    return f"Phạm vi (UTC+07:00): {_local_time(since)} → {_local_time(until)}"
 
 
 def _evidence_lines(record, outcomes):
@@ -105,7 +119,7 @@ def format_investigation_alert(record):
     if metadata:
         lines.append(' | '.join(metadata))
     if record.get('timestamp'):
-        lines.append('Thời gian (UTC): ' + _short(record['timestamp'], 40))
+        lines.append('Thời gian (UTC+07:00): ' + _local_time(record['timestamp']))
     if record.get('src_ip') or record.get('dst_ip'):
         destination = _short(record.get('dst_ip') or '?', 45)
         if record.get('dst_port') is not None:

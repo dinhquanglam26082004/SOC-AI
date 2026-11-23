@@ -92,7 +92,9 @@ services:
       CHROMA_PATH: /app/rag/chroma_db
       WAZUH_FORWARDER_STATUS_FILE: /spool/status.json
     volumes:
-      - ./rag/chroma_db:/app/rag/chroma_db
+      - type: bind
+        source: ${CHROMA_PATH:-./rag/chroma_db}
+        target: /app/rag/chroma_db
       - ./rag/documents:/app/rag/documents:ro
       - ./data:/app/data
       - embedding_cache:/root/.cache/huggingface

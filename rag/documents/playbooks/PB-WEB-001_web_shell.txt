@@ -1,52 +1,50 @@
 PLAYBOOK ID: PB-WEB-001
 
 NAME:
-Web Shell Detection and Response
+Ứng phó phát hiện Web Shell (Web Shell Detection and Response)
 
 TRIGGER:
-EDR/WAF/IDS alert indicating a web shell uploaded or executed on a
-web server, or anomalous HTTP requests with command injection patterns
-(cmd=, exec=, system=, eval=), or unusual child processes spawned by
-web server processes (httpd, nginx, IIS worker process).
+Cảnh báo EDR/WAF/IDS chỉ ra web shell đã được tải lên hoặc thực thi trên
+máy chủ web, yêu cầu HTTP bất thường có mẫu tiêm lệnh
+(cmd=, exec=, system=, eval=), hoặc tiến trình con bất thường do tiến trình
+máy chủ web tạo ra (httpd, nginx, IIS worker process).
 
 INVESTIGATION:
-1. Identify the affected web server host and the web application.
-2. Locate the web shell file: check web server access logs for POST
-   requests to unusual file paths, or for unexpected .php/.aspx/.jsp
-   files in the web root.
-3. Review process tree: look for web server processes (apache2, w3wp,
-   nginx) spawning cmd.exe, powershell.exe, bash, or python.
-4. Examine web server access logs for attacker activity:
-   - Commands executed via web shell.
-   - Files accessed or downloaded.
-   - Lateral movement from the web server.
-5. Determine the upload vector: file upload vulnerability, RCE exploit,
-   compromised admin credentials, or supply chain.
-6. Check for additional backdoors or persistence mechanisms installed
-   after web shell access.
-7. Identify the attacker's source IPs from access logs.
+1. Xác định máy chủ web và ứng dụng web bị ảnh hưởng.
+2. Tìm tệp web shell: xem nhật ký truy cập máy chủ web để phát hiện POST
+   đến đường dẫn bất thường hoặc tệp .php/.aspx/.jsp bất ngờ trong thư mục gốc web.
+3. Xem cây tiến trình: tìm các tiến trình máy chủ web (apache2, w3wp, nginx)
+   tạo ra cmd.exe, powershell.exe, bash hoặc python.
+4. Xem nhật ký truy cập máy chủ web để phát hiện hoạt động của kẻ tấn công:
+   - Lệnh được thực thi qua web shell.
+   - Tệp đã truy cập hoặc tải xuống.
+   - Di chuyển ngang từ máy chủ web.
+5. Xác định vectơ tải lên: lỗ hổng tải tệp, khai thác RCE,
+   thông tin quản trị bị xâm phạm hoặc chuỗi cung ứng.
+6. Kiểm tra có backdoor bổ sung hoặc cơ chế duy trì hiện diện nào được
+   cài sau khi truy cập web shell không.
+7. Xác định IP nguồn của kẻ tấn công từ nhật ký truy cập.
 
 RESPONSE:
-1. Take the web application offline or redirect to maintenance page
-   (minimize data exposure).
-2. Remove the web shell file(s) from the filesystem.
-3. Block attacker source IPs at the WAF and perimeter firewall.
-4. Reset all web application and database credentials.
-5. Patch the vulnerability that allowed the web shell upload:
-   - Unrestricted file upload: add extension/MIME validation.
-   - RCE: apply vendor patch or virtual patch via WAF.
-6. Restore the web server from a clean baseline snapshot if compromise
-   depth is unclear.
-7. Review and harden web server configuration:
-   - Disable PHP execution in upload directories.
-   - Apply web application firewall rules.
-   - Enable audit logging on the web server.
-8. Preserve web server logs, web shell sample, and memory dump.
+1. Ngừng hoạt động ứng dụng web hoặc chuyển sang trang bảo trì
+   để giảm thiểu rủi ro rò rỉ dữ liệu.
+2. Gỡ các tệp web shell khỏi hệ thống tệp.
+3. Chặn IP nguồn của kẻ tấn công trên WAF và tường lửa biên.
+4. Đặt lại mọi thông tin đăng nhập của ứng dụng web và cơ sở dữ liệu.
+5. Vá lỗ hổng cho phép tải web shell:
+   - Tải tệp không giới hạn: bổ sung xác thực phần mở rộng/MIME.
+   - RCE: áp dụng bản vá của nhà cung cấp hoặc vá ảo qua WAF.
+6. Khôi phục máy chủ web từ bản snapshot sạch nếu chưa rõ mức độ xâm phạm.
+7. Rà soát và gia cố cấu hình máy chủ web:
+   - Vô hiệu hóa thực thi PHP trong thư mục tải lên.
+   - Áp dụng quy tắc web application firewall.
+   - Bật ghi nhật ký kiểm toán trên máy chủ web.
+8. Bảo toàn nhật ký máy chủ web, mẫu web shell và bộ nhớ đổ ra.
 
 ESCALATION:
-Escalate to Tier 2 if the web server has access to internal network
-segments or sensitive databases. Escalate to Tier 3 if lateral movement
-from the web server is detected.
+Cần chuyển lên Tier 2 nếu máy chủ web có quyền truy cập phân đoạn mạng
+nội bộ hoặc cơ sở dữ liệu nhạy cảm. Chuyển lên Tier 3 nếu phát hiện
+di chuyển ngang từ máy chủ web.
 
-Human approval is required before taking the application offline,
-removing files, or restoring from snapshot.
+Cần có phê duyệt của con người trước khi ngừng ứng dụng, gỡ tệp
+hoặc khôi phục từ bản snapshot.

@@ -321,14 +321,14 @@ class EventStore:
             }
             for table in ('ai_jobs', 'authentication_facts', 'investigation_event_index', 'log_index', 'zeek_logs', 'events'):
                 db.execute('DELETE FROM ' + table)
-            # Old snapshots can still contain an alerts copy. Preserve cases and
-            # other legacy runtime state, while removing event/log collections.
+            # Old snapshots can still contain copies of event and response data.
+            # Preserve cases and other runtime state while removing those collections.
             row = db.execute('SELECT payload FROM runtime_state WHERE id=1').fetchone()
             if row:
                 legacy = json.loads(row[0])
                 if not isinstance(legacy, dict):
                     raise ValueError('Invalid legacy runtime snapshot')
-                for key in ('alerts', 'logs', 'zeek_logs'):
+                for key in ('alerts', 'logs', 'zeek_logs', 'responses'):
                     legacy.pop(key, None)
                 db.execute('UPDATE runtime_state SET payload=? WHERE id=1', (json.dumps(legacy, ensure_ascii=False),))
             result = {'cleared_at': cutoff, 'deleted': counts}
