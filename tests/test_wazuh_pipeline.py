@@ -323,6 +323,46 @@ def test_exact_zeek_duplicate_from_archive_and_alert(event):
     other=deepcopy(archive);other['timestamp']='2026-10-20T08:01:00+07:00'
     assert map_wazuh_alert(other)['id']!=first['id']
 
+
+def test_dns_100154_is_visible_and_can_be_investigated_manually(tmp_path, event):
+    event.update(location='/opt/zeek/logs/current/dns.log',
+                 full_log='{"uid":"C-DNS","query":"long.example"}',
+                 data={'uid': 'C-DNS', 'query': 'long.example', 'qtype_name': 'NULL'})
+    event['rule'] = {'id': '100154', 'level': 7, 'description': 'Long DNS label',
+                     'groups': ['zeek', 'zeek_telemetry', 'zeek_dns_anomaly']}
+    archive = deepcopy(event)
+    archive['_soc_stream'] = 'archives'
+    archive['id'] = 'different-manager-id'
+    alert, archived = map_wazuh_alert(event), map_wazuh_alert(archive)
+    assert alert['event_kind'] == 'alert' and alert['ai_allowed']
+    assert not ai_eligible(alert) and not ai_eligible(archived)
+    assert alert['id'] == archived['id']
+
+    store = EventStore(tmp_path / 'runtime.db')
+    stored, duplicate = store.accept(archived, ai_eligible(archived))
+    assert not duplicate and stored['ai_status'] == 'skipped'
+    assert 'manual' in stored['ai_skip_reason']
+    assert store.accept(alert, ai_eligible(alert))[1]
+    assert len(store.list_events()) == 1 and store.queue_stats() == {}
+    assert store.retry(stored['id'])
+    assert store.queue_stats() == {'queued': 1}
+
+
+@pytest.mark.parametrize('change', [
+    {'rule_id': '100155'}, {'log_type': 'conn'}, {'level': 6},
+    {'groups': ['zeek', 'zeek_telemetry']},
+    {'groups': ['zeek', 'zeek_telemetry', 'zeek_dns_anomaly', 'zeek_operational']},
+])
+def test_dns_candidate_exception_does_not_promote_other_records(event, change):
+    event.update(location='/opt/zeek/logs/current/' + change.get('log_type', 'dns') + '.log',
+                 data={'query': 'example.test', 'qtype_name': 'TXT'})
+    event['rule'] = {'id': change.get('rule_id', '100154'), 'level': change.get('level', 7),
+                     'description': 'DNS candidate',
+                     'groups': change.get('groups', ['zeek', 'zeek_telemetry', 'zeek_dns_anomaly'])}
+    mapped = map_wazuh_alert(event)
+    assert mapped['event_kind'] == 'telemetry'
+    assert not ai_eligible(mapped)
+
 def test_agent_queue_alerts_remain_visible_but_skip_ai(event):
     for rule in ('202','203','204'):
         event['rule']={'id':rule,'level':8,'description':'Agent queue pressure','groups':['ossec']}

@@ -57,8 +57,9 @@ $sample | docker compose -f docker-compose.yml -f data/local-runtime.compose.yml
 ```
 
 Đối với bộ rule trong repo tại thời điểm viết, mẫu này khớp `100154`, level 7,
-ở Phase 3. Đây là rule con thuộc nhóm telemetry trong SOC-AI, chưa phải cảnh
-báo tương quan. Một dòng duy nhất không kiểm tra được ngưỡng tần suất. `-l` đặt
+ở Phase 3. SOC-AI hiển thị rule này như cảnh báo ứng viên để chuyên viên xem xét,
+nhưng không tự đưa từng query cho AI; đây chưa phải cảnh báo tương quan. Một dòng
+duy nhất không kiểm tra được ngưỡng tần suất. `-l` đặt
 đúng đường dẫn vì rule cha của dự án có điều kiện `location`.
 
 ## 3. Thử tương quan năm query TXT khác nhau
@@ -93,6 +94,10 @@ Các rule chồng điều kiện có thể cạnh tranh, nên không mặc đị
 tất cả ID. `wazuh-logtest` chỉ kiểm tra decoder/rule trong phiên thử; nó không
 kiểm tra việc Agent thu file, Zeek thấy cả hai chiều mạng, hay forwarder đưa log
 tới SOC. Theo dõi log thật ở các chặng đó khi chạy demo.
+
+Rule `100152` cũng nhận diện label có byte được Zeek biểu diễn bằng `\xNN`, mỗi
+escape được tính là một byte khi áp ngưỡng 32. Đây chỉ là dấu hiệu bổ sung; có thể
+gặp ở dữ liệu hợp lệ và không tự xác nhận DNS tunneling hay đánh cắp dữ liệu.
 
 Tài liệu tham khảo: [cấu hình localfile của Wazuh](https://documentation.wazuh.com/current/user-manual/reference/ossec-conf/localfile.html),
 [kiểm thử decoder và rule](https://documentation.wazuh.com/current/user-manual/ruleset/testing.html).

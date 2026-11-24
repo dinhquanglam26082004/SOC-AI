@@ -26,8 +26,8 @@ Do not edit default Wazuh rules. IDs in this managed range must remain unique.
 | 100141 | Frequency 12 / 60 seconds; same origin and destination, different destination ports, rule 100140 | 8 | Possible port scan / Medium |
 | 100150 | DNS NXDOMAIN response | 3 | Correlation evidence, Telemetry |
 | 100151 | Frequency 20 / 60 seconds; same origin, rule 100150 | 7 | DNS failure burst / Medium |
-| 100152 | DNS label at least 32 characters, with domain exclusions | 5 | Candidate / telemetry |
-| 100154 | Long label and TXT, NULL, CNAME or MX query type | 7 | Candidate / telemetry |
+| 100152 | DNS label at least 32 octets, including Zeek `\xNN` representations, with domain exclusions | 5 | Candidate / telemetry |
+| 100154 | Long label and TXT, NULL, CNAME or MX query type | 7 | Candidate alert; manual AI investigation |
 | 100155 | Long label resembling base32 or hex | 7 | Candidate / telemetry |
 | 100153 | 2 distinct long-label queries from same source in 120 seconds | 8 | Suspected DNS tunneling / Medium |
 | 100156 | 5 distinct long-label TXT/NULL/CNAME/MX queries from same source in 120 seconds | 12 | Suspected DNS tunneling / High |
@@ -42,7 +42,11 @@ See [DoS detection](zeek-dos.md) for thresholds, live sensor installation,
 evidence fields, and limitations. Packet flood coverage is incomplete; findings
 must not be described as confirmed DoS or DDoS.
 
-Correlation rule ignore intervals vary (100153 uses 300 seconds). Counters are scoped
+Rule 100152 counts each Zeek `\xNN` escape as one byte, not four display
+characters. Escaped bytes or long labels alone do not prove a tunnel or intent;
+the broader match may increase candidate and correlated alert volume.
+DNS tunneling rules 100153, 100156, and 100157 do not set a Wazuh ignore interval.
+Rule 100151 retains its 60-second interval. Correlation counters are scoped
 to the collecting Wazuh agent and reset with the Manager/session. Sensor overlap
 and duplicated input can affect thresholds. Tune for actual traffic before
 using findings for response decisions. A DNS failure burst may be a configuration
@@ -50,7 +54,7 @@ problem; URI signatures describe attempts and do not prove successful exploitati
 
 ## DNS tunneling limitations
 
-Rules 100152–100157 are heuristics for repeated long DNS names, not proof of DNS
+Rules 100152–100157 are heuristics for long DNS names, not proof of DNS
 tunneling, C2, exfiltration or service impact. Rule 100153 groups by origin and
 agent, not by domain; long queries to unrelated domains can contribute. Short or
 infrequent tunnel queries and encrypted DNS may be missed. The two-query threshold

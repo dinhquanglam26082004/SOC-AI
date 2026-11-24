@@ -57,6 +57,17 @@ anchored to an investigated alert, not a sliding attack-duration detector.
 This is a noise-control policy, not a determination that alerts are the same
 attack. The active-investigation grouping below can also handle queued jobs.
 
+## Tạm dừng điều tra AI
+
+- Nút ở Tổng quan và Điều tra & phản ứng điều khiển cùng một trạng thái được lưu
+  trong runtime SQLite; trạng thái giữ nguyên khi ứng dụng khởi động lại.
+- Khi tạm dừng, worker không nhận thêm job. Lượt đã nhận vẫn được hoàn tất và
+  hàng đợi có sẵn được giữ nguyên. Log và cảnh báo tiếp tục được thu thập.
+- Cảnh báo mới vẫn được lưu nhưng không tự tạo job trong thời gian tạm dừng,
+  tránh đầy hàng đợi. Người dùng có thể đưa từng cảnh báo vào hàng đợi thủ công;
+  job thủ công cũng chỉ chạy sau khi bật lại AI. Các cảnh báo không được tự xếp
+  hàng trong thời gian tạm dừng không tự hồi tố khi bật lại.
+
 ## Gộp cảnh báo khi AI đang điều tra
 
 - Khi bắt đầu một lượt AI, hệ thống tìm các job đang chờ có cùng phạm vi và

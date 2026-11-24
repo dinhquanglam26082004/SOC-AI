@@ -68,3 +68,22 @@ def test_separate_sources_each_trigger_and_nxdomain_is_not_lost():
 def test_long_null_query_still_reaches_existing_tunneling_rule():
     events = [event('z8' * 16 + str(i)) for i in range(6)]
     assert matched_rules(events) == ['100154', '100154', '100154', '100154', '100156', '100154']
+
+
+def test_escaped_dns_bytes_count_as_one_label_octet():
+    # Zeek represents non-ASCII octets as literal \xNN sequences. A 31-octet
+    # label remains below the threshold despite its longer display text.
+    short = ('z' * 15) + (r'\xf9' * 16)
+    assert matched_rules([event(short)]) == ['100183']
+
+    # Keep samples in a single logtest session to exercise correlation.
+    long_labels = [('z' * 15) + (r'\xf9' * 16) + str(i) for i in range(5)]
+    assert matched_rules([event(label) for label in long_labels]) == [
+        '100154', '100154', '100154', '100154', '100156'
+    ]
+
+
+def test_escaped_octets_do_not_bypass_long_label_domain_exclusions():
+    sample = event(('z' * 16) + (r'\xf9' * 16))
+    sample['query'] = ('z' * 16) + (r'\xf9' * 16) + '.cloudfront.net'
+    assert matched_rules([sample]) == ['100183']

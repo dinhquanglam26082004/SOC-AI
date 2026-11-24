@@ -46,6 +46,15 @@ def dos_summary(data):
         return None
 
 
+def is_dns_long_label_candidate(record):
+    """Expose Wazuh 100154 for review without automatically investigating it."""
+    rule = record.get('rule') or {}
+    groups = set(rule.get('groups') or [])
+    return (record.get('source_product') == 'zeek' and record.get('log_type') == 'dns'
+            and str(rule.get('id')) == '100154' and 'zeek_dns_anomaly' in groups
+            and 'zeek_operational' not in groups and rule.get('level', 0) >= 7)
+
+
 def map_wazuh_alert(raw):
     if not isinstance(raw, dict):
         raise ValueError('Expected a JSON object')
@@ -123,7 +132,8 @@ def map_wazuh_alert(raw):
         record['source_product'] = 'zeek'
         record['transport'] = 'wazuh'
         record['log_type'] = location.rsplit('/', 1)[-1][:-4]
-        detection = 'zeek_detection' in groups and 'zeek_operational' not in groups and level >= 7
+        detection = (('zeek_detection' in groups and 'zeek_operational' not in groups and level >= 7)
+                     or is_dns_long_label_candidate(record))
         summary = dos_summary(data) if 'zeek_dos_summary' in groups else None
         if 'zeek_dos_summary' in groups and summary is None:
             detection = False
@@ -173,8 +183,8 @@ def is_security_alert(record):
     groups = set(rule.get('groups', []))
     if record.get('source_product') == 'zeek':
         note = str(record.get('zeek_notice', {}).get('note', ''))
-        return ('zeek_detection' in groups and 'zeek_operational' not in groups
-                and rule.get('level', 0) >= 7
+        return (('zeek_detection' in groups or is_dns_long_label_candidate(record))
+                and 'zeek_operational' not in groups and rule.get('level', 0) >= 7
                 and not note.startswith(('CaptureLoss::', 'ChecksumOffloading::')))
     if groups.intersection({'sca', 'syscollector', 'dpkg', 'package', 'package_management', 'inventory'}):
         return False
@@ -212,6 +222,8 @@ def fim_manual_only(record):
 def ai_eligible(record):
     if not is_security_alert(record):
         return False
+    if is_dns_long_label_candidate(record):
+        return False  # Individual long-label DNS queries are available for manual review.
     if str(record.get('rule', {}).get('id')) in {'202', '203', '204'}:
         return False
     if fim_manual_only(record):

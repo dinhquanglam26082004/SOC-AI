@@ -31,6 +31,15 @@ def test_removed_lab_rules_do_not_remove_general_dns_detections():
             '100156', '100157', '100181', '100183'} <= ids
 
 
+def test_dns_tunneling_rules_do_not_suppress_repeat_alerts_for_five_minutes():
+    root = ET.parse(RULE_FILE).getroot()
+    for rule_id in ('100153', '100156', '100157'):
+        rule = root.find(f"rule[@id='{rule_id}']")
+        assert rule is not None and rule.get('ignore') is None
+        assert rule.get('timeframe') == '120' and int(rule.get('frequency')) >= 2
+    assert root.find("rule[@id='100151']").get('ignore') == '60'
+
+
 def test_rare_dns_records_are_telemetry_until_correlated():
     root = ET.parse(RULE_FILE).getroot()
     base = root.find("rule[@id='100183']")

@@ -43,6 +43,10 @@ class ClearLogsRequest(BaseModel):
     request_id: uuid.UUID
 
 
+class AIControlRequest(BaseModel):
+    paused: StrictBool
+
+
 ANALYST_CHAT_SYSTEM = '''Bạn là trợ lý SOC hỗ trợ chuyên viên bằng tiếng Việt. Giữ nguyên tên kỹ thuật như DNS tunneling, DoS và SSH.
 DATA_SOC là dữ liệu chỉ đọc tại thời điểm truy vấn. Mục alerts/logs là mẫu gần đây; alert_queries là kết quả tra cứu trên toàn bộ cảnh báo SOC hiện được lưu, nếu có.
 Chỉ dùng dữ liệu được cung cấp. Nêu bộ lọc, tổng số khớp, số bản ghi được gửi và trang khi liên quan; nếu has_more thì nói còn kết quả và có thể hỏi trang tiếp theo. Không nói đã đọc hết khi chỉ có một trang.
@@ -334,6 +338,16 @@ def create_app(db_path=None, workers=True):
     def health():
         return {'status': 'ok', 'service': 'soc-ai', 'ai_queue': app.state.store.queue_stats(),
                 'ai_workers_alive': sum(not t.done() for t in app.state.worker_tasks)}
+
+    @app.post('/api/ai-control')
+    def ai_control(payload: AIControlRequest, request: Request):
+        origin = request.headers.get('origin', '')
+        expected_origin = request.url.scheme + '://' + request.headers.get('host', '')
+        if (request.url.hostname not in {'localhost', '127.0.0.1', '::1'} or
+                not origin or not hmac.compare_digest(origin, expected_origin) or
+                request.headers.get('X-SOC-Action') != 'ai-control'):
+            raise HTTPException(403, 'Điều khiển AI chỉ được thực hiện từ giao diện SOC trên máy này')
+        return {'paused': app.state.store.set_ai_paused(payload.paused)}
 
     @app.post('/api/logs/clear')
     async def clear_logs(payload: ClearLogsRequest, request: Request):
@@ -705,7 +719,7 @@ def create_app(db_path=None, workers=True):
                 'investigations': app.state.store.investigation_status(),
                 'manager_status': 'unknown (no authenticated status query)', 'agent_status': 'unknown (no authenticated status query)',
                 'manager_monitor': manager_monitor, 'agent_monitor': agent_monitor,
-                'ai_queue': app.state.store.queue_stats()}
+                'ai_queue': app.state.store.queue_stats(), 'ai_paused': app.state.store.ai_paused()}
 
     @app.get('/api/knowledge/chunks')
     def knowledge_chunks(q: str = Query('', max_length=200),

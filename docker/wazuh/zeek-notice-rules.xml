@@ -218,11 +218,11 @@
     <group>zeek_detection,zeek_dns_anomaly,</group>
   </rule>
 
-  <!-- Label DNS dai; giu .local cho lab -->
+  <!-- Label DNS dai; dem moi byte Zeek ghi dang \xNN la mot ky tu, giu .local cho lab -->
   <rule id="100152" level="5">
     <if_sid>100121</if_sid>
     <location type="pcre2">/dns\.log$</location>
-    <field name="query" type="pcre2">(?i)^(?!.*(?:\.arpa|\.lan|\.akamaiedge\.net|\.cloudfront\.net|\.amazonaws\.com|\.windows\.net|\.msedge\.net|\.googleusercontent\.com)\.?$)(?!.*(?:^|\.)(?:_domainkey|_dmarc|_acme-challenge)(?:\.|$)).*(?:^|\.)[a-z0-9_+=-]{32,}\.</field>
+    <field name="query" type="pcre2">(?i)^(?!.*(?:\.arpa|\.lan|\.akamaiedge\.net|\.cloudfront\.net|\.amazonaws\.com|\.windows\.net|\.msedge\.net|\.googleusercontent\.com)\.?$)(?!.*(?:^|\.)(?:_domainkey|_dmarc|_acme-challenge)(?:\.|$)).*(?:^|\.)(?:[a-z0-9_+=-]|\\x[0-9a-f]{2}){32,}\.</field>
     <description>Zeek DNS label dai (nghi tunneling): $(query)</description>
     <group>zeek_telemetry,zeek_dns_anomaly,</group>
   </rule>
@@ -241,7 +241,7 @@
     <group>zeek_telemetry,zeek_dns_anomaly,</group>
   </rule>
 
-  <rule id="100153" level="8" frequency="2" timeframe="120" ignore="300">
+  <rule id="100153" level="8" frequency="2" timeframe="120">
     <if_matched_sid>100152</if_matched_sid>
     <same_field>id.orig_h</same_field>
     <different_field>query</different_field>
@@ -250,7 +250,7 @@
     <group>zeek_detection,zeek_dns_tunneling,</group>
   </rule>
 
-  <rule id="100156" level="12" frequency="5" timeframe="120" ignore="300">
+  <rule id="100156" level="12" frequency="5" timeframe="120">
     <if_matched_sid>100154</if_matched_sid>
     <same_field>id.orig_h</same_field>
     <different_field>query</different_field>
@@ -259,7 +259,7 @@
     <group>zeek_detection,zeek_dns_tunneling,</group>
   </rule>
 
-  <rule id="100157" level="8" frequency="2" timeframe="120" ignore="300">
+  <rule id="100157" level="8" frequency="2" timeframe="120">
     <if_matched_sid>100155</if_matched_sid>
     <same_field>id.orig_h</same_field>
     <different_field>query</different_field>

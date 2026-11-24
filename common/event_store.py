@@ -10,7 +10,7 @@ from pathlib import Path
 from common.runtime_store import RuntimeStore
 from common.investigation_index import migrate as migrate_investigation_index, write_index as write_investigation_index
 from common.log_index import backup_before_migration, migrate_index, upsert_index, utc_stamp
-from wazuh_integration.mapper import is_security_alert, fim_manual_only
+from wazuh_integration.mapper import is_security_alert, fim_manual_only, is_dns_long_label_candidate
 from wazuh_integration.collection_policy import WAZUH_LOG_TYPES, ZEEK_LOG_TYPES
 
 
@@ -172,6 +172,24 @@ class EventStore:
                 db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), row[0]))
             db.execute("UPDATE ai_jobs SET state='queued',updated=? WHERE state='running'", (time.time(),))
 
+    @staticmethod
+    def _ai_paused(db):
+        row = db.execute("SELECT value FROM runtime_control WHERE key='ai_paused'").fetchone()
+        return bool(row and row[0] == '1')
+
+    def ai_paused(self):
+        with self.connect() as db:
+            return self._ai_paused(db)
+
+    def set_ai_paused(self, paused):
+        if type(paused) is not bool:
+            raise ValueError('paused must be boolean')
+        with self.connect() as db:
+            db.execute('BEGIN IMMEDIATE')
+            db.execute("INSERT INTO runtime_control(key,value) VALUES('ai_paused',?) "
+                       "ON CONFLICT(key) DO UPDATE SET value=excluded.value", ('1' if paused else '0',))
+        return paused
+
     def _related_dos_job(self, db, record):
         """Find a recent representative without suppressing or deleting alerts."""
         rule=str((record.get('rule') or {}).get('id',''))
@@ -303,10 +321,14 @@ class EventStore:
         eligible = bool(eligible and record['ai_allowed'])
         record['ai_skip_reason'] = (None if eligible else
             'Not a security alert; retained as log only' if not record['ai_allowed'] else
+            'DNS long-label candidate requires manual investigation to avoid repeated AI jobs' if is_dns_long_label_candidate(record) else
             'FIM path outside automatic critical-path policy; manual investigation available' if fim_manual_only(record) else
             'Below automatic investigation policy; manual investigation available')
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if eligible and self._ai_paused(db):
+                eligible = False
+                record['ai_skip_reason'] = 'AI đang tạm dừng; có thể đưa cảnh báo vào hàng đợi thủ công.'
             cutoff = db.execute("SELECT value FROM runtime_control WHERE key='reset_before'").fetchone()
             if cutoff and datetime.fromisoformat(record['timestamp'].replace('Z', '+00:00')) < datetime.fromisoformat(cutoff[0]):
                 record.update(ai_status='skipped', ai_skip_reason='Before reset cutoff', _ignored_before_reset=True)
@@ -570,6 +592,8 @@ class EventStore:
     def claim(self):
         with self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
+            if self._ai_paused(db):
+                return None
             self._group_queued_with_running(db)
             # Authentication and other operational alerts must not wait behind
             # an initial SCA inventory burst. Keep FIFO within equal priority.
