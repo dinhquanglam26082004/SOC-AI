@@ -592,13 +592,13 @@ class InvestigationGraph:
         graph.add_edge('conclude','verify'); graph.add_edge('verify','report'); graph.add_edge('report',END)
         return graph.compile(checkpointer=saver)
 
-    def run_alert(self,alert):
+    def run_alert(self,alert,force_new=False):
         from wazuh_integration.mapper import is_security_alert
         if not is_security_alert(alert):
             raise WorkflowError('not_security_alert','Ordinary logs cannot launch an investigation')
         with self.audit.lease(alert['id'],315360000 if self.default_limits.progress_mode else self.default_limits.seconds):
             previous=self.audit.current(alert['id'])
-            if previous and previous['status']=='completed':
+            if previous and previous['status']=='completed' and not force_new:
                 return previous['report']
             self.run=previous if previous and previous['status']=='running' else self.audit.create(alert['id'],self.default_limits.model_dump())
             self.id,self.alert=self.run['id'],alert

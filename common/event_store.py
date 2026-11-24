@@ -680,9 +680,10 @@ class EventStore:
             if not is_security_alert(record):
                 raise ValueError('Only security alerts can be investigated; ordinary logs are excluded')
             job = db.execute('SELECT state, attempts, updated FROM ai_jobs WHERE event_id=?', (event_id,)).fetchone()
-            if job and job[0] in ('queued', 'running', 'completed'):
+            if job and job[0] in ('queued', 'running'):
                 return False
-            if job and (job[1] >= 5 or time.time() - job[2] < 10):
+            fresh_run = bool(job and job[0] in ('completed', 'skipped'))
+            if job and not fresh_run and (job[1] >= 5 or time.time() - job[2] < 10):
                 raise ValueError('Retry limited to 5 attempts with a 10 second cooldown')
             if self._pending(db) >= self.max_jobs:
                 raise QueueFull()
@@ -694,7 +695,10 @@ class EventStore:
             record.pop('investigation_report', None)
             record.pop('playbook_proposal', None)
             db.execute('UPDATE events SET payload=? WHERE id=?', (json.dumps(record), event_id))
-            db.execute("INSERT INTO ai_jobs VALUES(?,'queued',0,NULL,?) ON CONFLICT(event_id) DO UPDATE SET state='queued',error=NULL,updated=excluded.updated", (event_id, time.time()))
+            db.execute("""INSERT INTO ai_jobs VALUES(?,'queued',0,NULL,?)
+                ON CONFLICT(event_id) DO UPDATE SET state='queued',
+                attempts=CASE WHEN ai_jobs.state IN ('completed','skipped') THEN 0 ELSE ai_jobs.attempts END,
+                error=NULL,updated=excluded.updated""", (event_id, time.time()))
             return True
 
     def queue_stats(self):

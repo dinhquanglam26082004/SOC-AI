@@ -172,7 +172,8 @@ def analyze(record, on_progress=None, store=None, audit=None):
             record['investigation']=compact(summary)
             if on_progress:
                 on_progress(stage,step)
-        report=InvestigationGraph(store,audit,model=AGENT_MODEL,on_progress=progress).run_alert(record)
+        report=InvestigationGraph(store,audit,model=AGENT_MODEL,on_progress=progress).run_alert(
+            record,force_new=bool(record.get('ai_manual_request')))
         current=audit.current(record['id'])
         record['investigation']=compact(current['summary'])
         # Timeline/history remain in the dossier DB; event payload and status polling stay compact.
@@ -520,7 +521,7 @@ def create_app(db_path=None, workers=True):
         except KeyError:
             raise HTTPException(404, 'Alert not found')
         except (ValueError, QueueFull):
-            raise HTTPException(409, 'Job already processed, cooldown, attempt limit or queue full')
+            raise HTTPException(409, 'Job already queued, cooldown, attempt limit or queue full')
 
     @app.get('/api/cases')
     def cases():

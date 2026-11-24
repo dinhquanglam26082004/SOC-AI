@@ -147,6 +147,25 @@ def test_failed_ai_survives_recovery_no_fake_report(tmp_path, event):
     assert s.retry(r['id']) and not s.retry(r['id'])
 
 
+def test_manual_investigation_can_restart_skipped_and_completed_alert(tmp_path, event):
+    app=create_app(tmp_path/'events.db',workers=False)
+    with TestClient(app) as client:
+        stored,_=app.state.store.accept(map_wazuh_alert(event),False)
+        url='/api/alerts/'+stored['id']+'/investigate'
+        assert stored['ai_status']=='skipped'
+        first=client.post(url)
+        assert first.status_code==202 and first.json()['queued'] is True
+        assert client.post(url).json()['queued'] is False
+        running=app.state.store.claim()
+        assert app.state.store.finish(running)
+        second=client.post(url)
+        assert second.status_code==202 and second.json()['queued'] is True
+        assert app.state.store.get(stored['id'])['ai_status']=='queued'
+        with app.state.store.connect() as db:
+            assert db.execute('SELECT attempts FROM ai_jobs WHERE event_id=?',
+                              (stored['id'],)).fetchone()[0]==0
+
+
 def test_worker_service_failure(tmp_path, event):
     async def run():
         from types import SimpleNamespace

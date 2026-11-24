@@ -130,6 +130,32 @@ def test_graph_bounded_persisted_and_cached(lab):
         assert db.execute('SELECT COUNT(*) FROM checkpoints').fetchone()[0]>0
 
 
+def test_manual_reinvestigation_of_completed_alert_keeps_prior_dossier(lab):
+    store,audit,trigger,_=lab
+    first=InvestigationGraph(store,audit,client=client_for(audit,trigger,False)).run_alert(trigger)
+    old_id=first['incident_id']
+    old_evidence=audit.evidence(old_id)
+    assert store.retry(trigger['id'])
+    running=store.claim()
+    running['investigation_report']=first
+    assert store.finish(running)
+    assert store.get(trigger['id'])['ai_status']=='completed'
+    assert store.retry(trigger['id'])
+    assert not store.retry(trigger['id'])
+    rerun=store.claim()
+    assert rerun['ai_manual_request'] and rerun['ai_status']=='running'
+    second=InvestigationGraph(store,audit,client=client_for(audit,trigger,False)).run_alert(
+        rerun,force_new=True)
+    assert second['incident_id']!=old_id
+    assert audit.current(trigger['id'])['id']==second['incident_id']
+    assert audit.detail(old_id)['id']==old_id
+    assert audit.evidence(old_id)==old_evidence
+    assert {e['evidence_id'] for e in audit.evidence(old_id)}=={
+        e['evidence_id'] for e in audit.evidence(second['incident_id'])}
+    rerun['investigation_report']=second
+    assert store.finish(rerun)
+
+
 def test_model_selects_tools_without_static_recommendations(lab, monkeypatch):
     # Mechanics test for the unrouted tool set; routing is covered in test_investigation_profiles.py.
     monkeypatch.setenv("AI_TOOL_ROUTING", "false")

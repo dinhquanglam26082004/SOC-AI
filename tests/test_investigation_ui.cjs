@@ -14,6 +14,45 @@ assert.match(html, /search_account_events:'Tìm cảnh báo tạo tài khoản h
 assert.match(html, /data-view="investigations"[^>]*>.*Điều tra &amp; phản ứng/);
 assert.doesNotMatch(html, /data-view="response"/);
 assert.match(html, /if\(name==='response'\)name='investigations'/);
+assert.match(html, /id="investigation-back"[^>]*>← Trở lại cảnh báo/);
+assert.match(html, /history\.replaceState\(\{view:initialView/);
+assert.match(html, /addEventListener\('popstate'/);
+assert.match(html, /history\.replaceState\(history\.state,'',url\)/);
+assert.match(html, /\$\('investigation-back'\)\.hidden=!a/);
+assert.match(html, /\$\('investigation-back'\)\.onclick=\(\)=>\{const id=selectedInvestigation;showView\('alerts'\);if\(id\)openAlert\(id\)\}/);
+const navigationSource=html.slice(html.indexOf('    function showView('),html.indexOf("    document.querySelectorAll('[data-view]').forEach(b=>b.onclick"));
+let activeView='dashboard';const navigationPushes=[];
+const navButtons=['dashboard','alerts','logs','investigations','analyst-chat','intel'].map(view=>({dataset:{view},classList:{toggle(_name,active){if(active)activeView=view}}}));
+const navigationElements=new Map();
+const navigationScope={views:navButtons.map(button=>button.dataset.view),labels:{alerts:'Cảnh báo',investigations:'Điều tra'},
+  pageDescriptions:{alerts:'',investigations:''},location:{href:'http://localhost:8100/'},URL,
+  history:{pushState(state,_title,url){navigationPushes.push([state.view,String(url)])}},
+  document:{body:{classList:{toggle(){}}},querySelector:()=>({dataset:{view:activeView}}),querySelectorAll:()=>navButtons},
+  $:id=>{if(!navigationElements.has(id))navigationElements.set(id,{classList:{toggle(){},remove(){}},textContent:''});return navigationElements.get(id)},
+  logsWorkspace:{onView(){}},loadAnalystQueue(){},scrollTo(){},setTimeout(){}};
+vm.runInNewContext(navigationSource+'\nthis.navigate=showView;',navigationScope);
+navigationScope.navigate('alerts');navigationScope.navigate('investigations');navigationScope.navigate('alerts',false);
+assert.deepEqual(navigationPushes.map(([view])=>view),['alerts','investigations']);
+assert.equal(activeView,'alerts');
+const popstateSource=html.match(/    addEventListener\('popstate'.*?;\r?\n/)[0];
+let popstateHandler;
+navigationScope.addEventListener=(_name,handler)=>{popstateHandler=handler};
+navigationScope.URLSearchParams=URLSearchParams;
+vm.runInNewContext(popstateSource,navigationScope);
+navigationScope.navigate('investigations');
+popstateHandler({state:{view:'alerts'}});
+assert.equal(activeView,'alerts');
+assert.equal(navigationPushes.length,3);
+const backSource=html.match(/    \$\('investigation-back'\)\.onclick=.*?;\r?\n/)[0];
+const openedAlerts=[];
+const backButton={};
+const backScope={selectedInvestigation:'alert-1',showView:view=>navigationScope.navigate(view),openAlert:id=>openedAlerts.push(id),$:()=>backButton};
+vm.runInNewContext(backSource,backScope);
+backScope.selectedInvestigation='alert-2';
+backButton.onclick();
+assert.deepEqual(openedAlerts,['alert-2']);
+assert.match(html, /\['queued','running'\]\.includes\(a\.ai_status\)/);
+assert.match(html, /\['completed','failed'\]\.includes\(a\.ai_status\)\?'Điều tra lại'/);
 const source = html.slice(html.indexOf('    const aiStages='),html.indexOf('    function renderProgress(){'));
 const scope = {
   icon:()=>'',esc:s=>String(s).replaceAll('<','&lt;').replaceAll('>','&gt;'),
