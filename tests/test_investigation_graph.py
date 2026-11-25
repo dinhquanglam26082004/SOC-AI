@@ -548,6 +548,8 @@ def test_analyze_creates_audited_source_backed_response_preview(lab,monkeypatch)
     assert preview['status']=='available' and preview['incident_id']==original['incident_id']
     assert preview['knowledge_guidance']['playbook_id']=='PB-SSH'
     assert preview['actions'][0]['guidance_ids']==['G1'] and preview['actions'][0]['status']=='proposed'
+    assert trigger['_automatic_response_plan']['actions'] == preview['actions']
+    assert trigger['_automatic_response_plan']['verdict_source'] == 'model_report'
     assert retrieve.call_args.kwargs['allow_inconclusive'] is True
     assert 'grounding_response' in progress and model.call_count==1
     assert trigger['investigation']['response_model_calls']==1

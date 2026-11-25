@@ -33,7 +33,7 @@ Do not edit default Wazuh rules. IDs in this managed range must remain unique.
 | 100156 | 5 distinct long-label TXT/NULL/CNAME/MX queries from same source in 120 seconds | 12 | Suspected DNS tunneling / High |
 | 100157 | 2 distinct encoded-looking long-label queries from same source in 120 seconds | 8 | Suspected DNS tunneling / Medium |
 | 100183 | A DNS query type NULL, PRIVATE or KEY | 4 | Individual observation / telemetry |
-| 100181 | At least 3 matching observations in 120 seconds, from the same agent and source to the same destination/port, with the same rare query type and a differing query | 7 | Unusual DNS activity / Medium |
+| 100181 | Frequency 5 / 60 seconds for the same agent, source, destination/port and rare query type, with a differing query; ignore for 200 seconds after firing | 7 | Unusual DNS activity / Medium |
 | 100142 | Failed TCP flow burst to the same destination port | 8 | Suspected DoS / Medium |
 | 100160 | Unclassified live DoS summary | 3 | Telemetry |
 | 100161–100164 | Live TCP/HTTP/UDP-flow/ICMP-flow threshold summaries | 8 | Suspected DoS / Medium |
@@ -67,14 +67,17 @@ Rule 100181 requires `qtype_name`, `query`, `id.orig_h`, `id.resp_h`, and
 `id.resp_p` in collected Zeek JSON. Its counter is per agent, source, destination,
 port, and query type, but **not** per domain. Wazuh's `different_field` is not a
 distinct-name counter: repeated values can contribute, so do not describe the
-result as three distinct queries. Events may be repeated observations and rare
+result as five distinct queries. Events may be repeated observations and rare
 DNS types alone do not prove tunneling. Rule 100183 is telemetry in SOC; Wazuh
 itself may still write its level-4 match to `alerts.json`. Long-label matches can
 take the 100152/100154/100155 branch and reach its correlation rules instead of
-100181; 100181 therefore does not count every rare-type query. No `ignore` is
-configured on 100181: another group of matching events can generate a new alert,
-while SOC's active-investigation grouping can avoid a concurrent duplicate AI job.
-Tune the threshold after measuring ordinary traffic.
+100181; 100181 therefore does not count every rare-type query. After rule 100181
+fires, its `ignore=200` interval suppresses repeat matches for 200 seconds. Do
+not assume this interval is isolated per source or agent; validate on the deployed
+Wazuh version. Other rule IDs can still alert, and retained source logs are needed
+to inspect activity during suppression. This 5/60 threshold may miss slow tunnels;
+tune it after measuring ordinary traffic. SOC's active-investigation grouping can
+also avoid a concurrent duplicate AI job without suppressing source alerts.
 The excluded suffix list is a local policy, not proof the domains are benign; review
 it for your environment. Rule 100157 covers 100155 because a more specific child
 can prevent the 100152 correlation rule from matching in logtest.

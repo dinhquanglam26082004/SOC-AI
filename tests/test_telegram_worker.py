@@ -134,3 +134,36 @@ def test_worker_persists_and_notifies_only_source_backed_preview(tmp_path):
         assert 'PB-1' in message and 'Theo dõi máy.' in message and 'Monitor the host.' in message
         assert 'Gợi ý không nguồn' not in message
     asyncio.run(run())
+
+
+def test_worker_saves_automatic_plan_once_after_successful_investigation(tmp_path):
+    from agents.response_store import ResponseStore
+
+    async def run():
+        event={'id':'auto-plan-alert','timestamp':'2026-10-20T08:00:00+07:00',
+               'agent':{'id':'007','name':'lab'},'manager':{'name':'soc-manager'},
+               'rule':{'id':'550','level':8,'description':'File changed','groups':['syscheck']},
+               'syscheck':{'path':'/tmp/example','event':'modified'}}
+        store=EventStore(tmp_path/'auto-plan-events.db')
+        record,_=store.accept(map_wazuh_alert(event),True)
+        responses=ResponseStore(tmp_path/'auto-plan-audit.db')
+        app=SimpleNamespace(state=SimpleNamespace(store=store,response_store=responses,ai_slots=asyncio.Semaphore(1)))
+        plan={'summary':'Đề xuất.','verdict':'malicious','verdict_source':'model_report',
+              'actions':[{'id':'A1','status':'proposed','action':'increase_monitoring','target':'007'}]}
+        def analyze_plan(current,*args):
+            current['_automatic_response_plan']=plan
+            return {'incident_id':'INV-auto','verdict':'malicious'},{}
+        with patch('api.app.analyze',side_effect=analyze_plan),patch('api.app.send_investigation_alert') as notify:
+            task=asyncio.create_task(ai_worker(app))
+            for _ in range(100):
+                await asyncio.sleep(.01)
+                if notify.called:break
+            task.cancel();await asyncio.gather(task,return_exceptions=True)
+        saved=responses.latest(record['id'],'INV-auto')
+        assert saved['actions']==plan['actions'] and saved['status']=='proposed'
+        assert '_automatic_response_plan' not in store.get(record['id'])
+        again=responses.create(record['id'],'INV-auto',plan,if_absent=True)
+        assert again['id']==saved['id']
+        assert responses.latest(record['id'],'INV-other') is None
+        notify.assert_called_once()
+    asyncio.run(run())

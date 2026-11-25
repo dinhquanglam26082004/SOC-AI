@@ -9,7 +9,10 @@ within a separate protocol to avoid detection/network filtering and/or enable
 access to otherwise unreachable systems. Tunneling involves explicitly
 encapsulating a protocol within another. This behavior may conceal malicious
 traffic by blending in with existing traffic and/or provide an outer layer of
-encryption (similar to a VPN). Tunneling could also enable routing of network
+encryption (similar to a VPN).
+
+Description:
+Tunneling could also enable routing of network
 packets that would otherwise not reach their intended destination, such as
 SMB, RDP, or other traffic that would be filtered by network appliances or not
 routed over the Internet.   There are various means to encapsulate a protocol
@@ -28,3 +31,16 @@ Monitor for anomalous behavior related to this technique.
 Mitigation:
   - Network Intrusion Prevention
   - Filter Network Traffic
+
+Detection:
+Hướng dẫn SOC-AI, không thuộc nội dung MITRE gốc: T1572 mô tả tạo đường hầm
+qua giao thức nói chung; không phải mọi truy vấn DNS bất thường đều chứng minh
+đường hầm đã hoạt động. Xác định giao thức bên ngoài, hai đầu kết nối, thời
+gian và bằng chứng về dữ liệu bên trong trước khi gắn kỹ thuật cho sự kiện.
+
+Detection:
+Với DNS, xem Zeek DNS và conn theo phạm vi; đối chiếu tiến trình và log endpoint
+nếu có. DoH/DoT hoặc raw UDP có thể không hiện trong dns.log; conn không xác
+định PID hay nội dung truyền. Không khẳng định C2, lệnh đã chạy hoặc dữ liệu
+bị lấy đi khi thiếu bằng chứng độc lập. Tham chiếu PB-EXT-DNS-TUNNELING để
+chọn phản ứng phù hợp và bảo toàn bằng chứng trước khi can thiệp.

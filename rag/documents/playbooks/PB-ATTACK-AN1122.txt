@@ -8,5 +8,20 @@ Hướng dẫn điều tra:
 Official analytic text:
 Detects local daemons or scripts generating outbound DNS queries with long or frequent subdomains, indicative of DNS tunneling via tools like `iodine`, `dnscat2`, or `dig` from cronjobs or reverse shells.
 
-Local applicability (hướng dẫn riêng của dự án SOC-AI, không thuộc văn bản của MITRE):
-Chỉ sử dụng các bản ghi xác thực/FIM/sudo của Wazuh và dữ liệu conn/HTTP/DNS của Zeek khi nguồn dữ liệu yêu cầu thực sự tồn tại. Đây là quan sát lịch sử, không phải kiểm tra trực tiếp thiết bị đầu cuối. Cần nguồn bổ sung hoặc xác minh của phân tích viên để đánh giá cây tiến trình, mức sử dụng tài nguyên, tính sẵn sàng dịch vụ và quyền được cấp. Không khẳng định các tín hiệu đã được kiểm tra trừ khi công cụ thực tế đã trả về dữ liệu. Không có ngưỡng số nào trong tài liệu này tự nó xác lập một cuộc tấn công. Khi đưa ra kết luận sự cố, hãy trích dẫn ID sự kiện nguồn; tài liệu này chỉ hỗ trợ đề xuất điều tra. Không có kết quả không chứng minh hệ thống an toàn. Ví dụ công khai hoặc tên kỹ thuật MITRE không phải bằng chứng cuộc tấn công tương tự đã xảy ra tại địa phương.
+INVESTIGATION:
+Áp dụng cho Linux — hướng dẫn SOC-AI, không thuộc văn bản gốc MITRE. Dùng
+get_alert để xác định Agent, thời gian, IP và domain; dùng summarize_dns_activity
+và search_zeek_dns xem các bản ghi DNS đã lưu theo đúng phạm vi. Nhiều query,
+label dài hoặc loại NULL chỉ là dấu hiệu cần xem xét, chưa chứng minh C2.
+
+INVESTIGATION:
+Đối chiếu search_process_events và search_privilege_events nếu nguồn audit và
+quyền truy vấn đã được cấu hình; xem search_file_changes khi có dữ liệu FIM.
+Tìm tiến trình, service, cron, người dùng và thời gian liên quan; không suy ra
+quan hệ cha–con hoặc tiến trình phát DNS nếu log không thể hiện điều đó.
+
+INVESTIGATION:
+search_file_access chỉ có dữ liệu khi đã thu thập audit đọc file. FIM ghi nhận
+thay đổi, không chứng minh nội dung bị đọc hay gửi đi. Tool rỗng có thể do thiếu
+nguồn; không coi là an toàn. Bảo toàn ID bằng chứng và dùng playbook
+PB-EXT-DNS-TUNNELING để chọn phản ứng sau khi xác minh bối cảnh.

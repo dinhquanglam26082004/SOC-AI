@@ -199,6 +199,7 @@
     .evidence-summary-item small{display:block;margin-top:4px;overflow-wrap:anywhere}.response-workspace>summary{cursor:pointer;color:var(--text);font-weight:700}
     @media(max-width:600px){.investigation-summary-head{flex-direction:column}.investigation-summary-body{padding:0 16px 16px}}
     .response-workspace{margin-top:18px;padding:20px 22px;border:1px solid var(--border);border-radius:10px;background:#0a1421}
+    .investigation-workspace>.investigation-summary,.investigation-workspace>.assessment-card{margin-top:16px}
     .response-workspace h3{margin:0 0 6px}.response-workspace>p{margin:0 0 14px;color:var(--muted)}
     .response-workspace details{margin:12px 0}.response-workspace summary,.response-history>summary{cursor:pointer;color:var(--cyan)}
     .response-workspace .plan{margin-top:16px}.response-workspace .plan-actions{padding-left:22px}
@@ -460,7 +461,7 @@
       responseHistory=history;
       $('response-history').innerHTML=history.length?history.map(item=>`<article class="response-item"><h3>${esc(ACTION_LABEL[item.action]||item.action||item.name||'Hành động')}</h3><p>${esc(ACTION_STATUS[item.status]||item.status||'Chưa ghi trạng thái')} · ${esc(date(item.created_at||item.timestamp))}</p>${item.knowledge_guidance?.playbook_id?`<p>Nguồn: ${esc(item.knowledge_guidance.playbook_id)} · ${(item.guidance_ids||[]).map(esc).join(', ')}</p>`:''}<details><summary>Chi tiết</summary><pre class="detail">${esc(JSON.stringify(item,null,2))}</pre></details></article>`).join(''):'<div class="empty">Chưa ghi nhận hành động nào.</div>';
     }
-    const responsePlans={},responseErrors={},responseBusy=new Set(),responseLoading=new Set(),responseFetched=new Set();
+    const responsePlans={},responseErrors={},responseIncidents={},responseBusy=new Set(),responseLoading=new Set(),responseFetched=new Set(),overviewWorkspaceStates=new Map();
     const ACTION_LABEL={block_domain:'Chặn domain',block_ip:'Chặn IP',isolate_host:'Cô lập host',kill_process:'Dừng tiến trình',disable_service:'Vô hiệu hóa persistence',disable_account:'Khóa tài khoản',collect_forensics:'Bảo toàn chứng cứ',increase_monitoring:'Tăng giám sát'};
     const PHASE_LABEL={preservation:'Bảo toàn chứng cứ',containment:'Ngăn chặn',eradication:'Loại bỏ',recovery:'Phục hồi'};
     const ACTION_STATUS={proposed:'Chờ duyệt',approved:'Đã duyệt',declined:'Analyst từ chối',rejected:'Bị chính sách chặn',simulated:'Đã thực thi (mô phỏng)'};
@@ -470,7 +471,7 @@
       if(responseLoading.has(id))return '<p class="muted">Đang tải kế hoạch phản ứng…</p>';
       if(responseErrors[id])return `<p class="logs-error">Không thể tải kế hoạch: ${esc(responseErrors[id])}</p><button class="btn" data-plan-retry="${esc(id)}">Thử tải lại</button>`;
       const p=responsePlans[id],make=`<button class="btn" data-plan-create="${esc(id)}">${p?'Lập lại kế hoạch (AI)':'AI lập kế hoạch phản ứng'}</button>`;
-      if(!p)return `<div class="buttons">${make}</div>`;
+      if(!p)return `<p class="muted">Chưa có kế hoạch phản ứng được lưu cho lượt điều tra này.</p><div class="buttons">${make}</div>`;
       const done=p.status==='executed',kb=p.knowledge_guidance||{},passages=Array.isArray(kb.passages)?kb.passages:[],byId=new Map(passages.map(x=>[x.id,x]));
       const hasSource=Boolean(kb.playbook_id&&kb.source&&kb.sha256),grounded=a=>hasSource&&Array.isArray(a.guidance_ids)&&a.guidance_ids.length>0&&a.guidance_ids.every(ref=>byId.has(ref));
       const rows=p.actions.map(a=>{const can=!done&&grounded(a)&&['proposed','approved','declined'].includes(a.status),sel=p._sel?.[a.id]??a.status==='approved',refs=(a.guidance_ids||[]).filter(ref=>byId.has(ref));return `<li class="plan-action"><label><input type="checkbox" data-plan-action="${esc(a.id)}" ${sel?'checked':''} ${can?'':'disabled'}> <b>${esc(a.id)}. ${esc(ACTION_LABEL[a.action]||a.action)}</b> → <code>${esc(a.target)}</code></label> <span class="status">${esc(ACTION_STATUS[a.status]||a.status)}</span><p>${esc(PHASE_LABEL[a.phase]||a.phase)} · ảnh hưởng ${esc(a.impact)} · ${a.reversible?'hoàn tác được':'không hoàn tác được'}${a.mitigation?' · danh mục '+esc(a.mitigation):''}</p><p>${esc(a.reason)}</p>${a.evidence_ids?.length?`<p class="muted">Bằng chứng sự cố: ${a.evidence_ids.map(esc).join(', ')}</p>`:''}${refs.length?`<details><summary>Cơ sở hướng dẫn (${refs.map(esc).join(', ')})</summary>${refs.map(ref=>`<p><b>${esc(ref)} · ${esc(byId.get(ref).section)}</b>: ${esc(byId.get(ref).text)}</p>`).join('')}</details>`:'<p class="logs-error">Hành động chưa có trích dẫn hướng dẫn hợp lệ.</p>'}${a.policy_reasons?.length?`<p class="logs-error">Cổng chính sách: ${a.policy_reasons.map(esc).join(' ')}</p>`:''}<details><summary>Lệnh mô phỏng và cách hoàn tác</summary><pre class="detail">${esc(a.command)}\n# rollback: ${esc(a.rollback)}</pre></details></li>`}).join('');
@@ -497,9 +498,28 @@
       }catch(e){root.innerHTML=`<p class="logs-error">Không thể tải trạng thái nguồn: ${esc(e.message)}</p>`}finally{knowledgeBusy=false;root.removeAttribute('aria-busy')}
     }
     function row(a,full=false){const title=a.rule?.description||a.attack_type||'Historical event';const con=`${esc(a.agent?.name)} · ${esc(a.agent?.ip)} / rule ${esc(a.rule?.id)} · level ${esc(a.rule?.level)}`;const aiState=a.ai_status==='skipped'&&a.ai_group?'grouped':(a.ai_status||a.status);return`<tr data-alert="${esc(a.id||'')}"><td><span class="event">${esc(title)}</span><span class="sub">${esc(a.source_product==='zeek'?'Zeek · via Wazuh':(a.source||'historical'))}</span></td><td class="mono">${con}</td><td>${badge(a.severity)}</td><td>${state(aiState)}</td><td class="mono" style="color:var(--muted)">${date(a.created_at||a.timestamp)}</td></tr>`}
+    const expandedAlertGroups=new Set();
+    function groupLoadedAlerts(items){
+      const groups=new Map();
+      for(const alert of items){
+        const key=String(alert.ai_group?.representative_alert_id||alert.id||'');
+        if(!groups.has(key))groups.set(key,[]);
+        groups.get(key).push(alert);
+      }
+      return [...groups].map(([key,items])=>({key,items,representative:items.find(a=>String(a.id)===key)||items[0]}));
+    }
+    function alertGroupsHTML(items,expanded){
+      return groupLoadedAlerts(items).map(group=>{
+        if(group.items.length<2)return row(group.representative,true);
+        const open=expanded.has(group.key);
+        const toggle=`<button type="button" class="btn" data-alert-group="${esc(group.key)}" aria-expanded="${open}">${open?'Thu gọn':'Xem'} ${group.items.length} cảnh báo liên quan đã tải</button>`;
+        const head=row(group.representative,true).replace('</td>',`<span class="sub">${toggle}</span></td>`);
+        return head+(open?group.items.filter(a=>a!==group.representative).map(a=>row(a,true)).join(''):'');
+      }).join('');
+    }
     function empty(cols,message){return`<tr><td colspan="${cols}" class="empty">${message}</td></tr>`}
     function wireRows(root){root.querySelectorAll('tr[data-alert]').forEach(r=>r.onclick=()=>openAlert(r.dataset.alert))}
-    function renderAlerts(){const recent=$('recent-alerts'),all=$('all-alerts');recent.innerHTML=attentionHTML();all.innerHTML=alerts.length?alerts.map(a=>row(a,true)).join(''):empty(5,'Chưa có cảnh báo.');recent.querySelectorAll('[data-next-investigation]').forEach(b=>b.onclick=()=>goInvestigation(b.dataset.nextInvestigation));wireRows(all);$('alert-summary').textContent=alerts.length===alertTotal?`${alertTotal} cảnh báo bảo mật`:`${alerts.length} đã tải · ${alertTotal} đã lưu`;const list=$('investigation-list');list.innerHTML=alerts.length?[...alerts].filter(a=>['queued','running','completed','failed'].includes(a.ai_status)||a.investigation_report).sort((a,b)=>({completed:2,running:0,failed:3,queued:1,skipped:4}[a.ai_status]??5)-({completed:2,running:0,failed:3,queued:1,skipped:4}[b.ai_status]??5)).map(a=>`<button data-investigation="${esc(a.id)}" aria-current="${String(a.id)===String(selectedInvestigation)}"><span class="event">${esc(a.rule?.description||a.attack_type||a.id)}</span><span class="sub">${esc(a.agent?.name)} · ${esc(severityName(a.severity))}</span><span class="investigation-list-status">${esc({running:'Đang điều tra',queued:'Đang chờ',completed:'Hoàn tất',failed:'Cần chú ý'}[a.ai_status]||a.ai_status||'Đang chờ')}</span></button>`).join(''):'<div class="empty">Không có cảnh báo để điều tra.</div>';if(!list.innerHTML)list.innerHTML='<div class="empty">Chưa có cuộc điều tra. Hãy chọn cảnh báo để đưa vào hàng đợi.</div>';list.querySelectorAll('[data-investigation]').forEach(b=>b.onclick=()=>investigate(b.dataset.investigation))}
+    function renderAlerts(){const recent=$('recent-alerts'),all=$('all-alerts');recent.innerHTML=attentionHTML();all.innerHTML=alerts.length?alertGroupsHTML(alerts,expandedAlertGroups):empty(5,'Chưa có cảnh báo.');recent.querySelectorAll('[data-next-investigation]').forEach(b=>b.onclick=()=>goInvestigation(b.dataset.nextInvestigation));wireRows(all);all.querySelectorAll('[data-alert-group]').forEach(b=>b.onclick=e=>{e.stopPropagation();const key=b.dataset.alertGroup;if(expandedAlertGroups.has(key))expandedAlertGroups.delete(key);else expandedAlertGroups.add(key);renderAlerts()});$('alert-summary').textContent=alerts.length===alertTotal?`${alertTotal} cảnh báo bảo mật`:`${alerts.length} đã tải · ${alertTotal} đã lưu`;const list=$('investigation-list');list.innerHTML=alerts.length?[...alerts].filter(a=>['queued','running','completed','failed'].includes(a.ai_status)||a.investigation_report).sort((a,b)=>({completed:2,running:0,failed:3,queued:1,skipped:4}[a.ai_status]??5)-({completed:2,running:0,failed:3,queued:1,skipped:4}[b.ai_status]??5)).map(a=>`<button data-investigation="${esc(a.id)}" aria-current="${String(a.id)===String(selectedInvestigation)}"><span class="event">${esc(a.rule?.description||a.attack_type||a.id)}</span><span class="sub">${esc(a.agent?.name)} · ${esc(severityName(a.severity))}</span><span class="investigation-list-status">${esc({running:'Đang điều tra',queued:'Đang chờ',completed:'Hoàn tất',failed:'Cần chú ý'}[a.ai_status]||a.ai_status||'Đang chờ')}</span></button>`).join(''):'<div class="empty">Không có cảnh báo để điều tra.</div>';if(!list.innerHTML)list.innerHTML='<div class="empty">Chưa có cuộc điều tra. Hãy chọn cảnh báo để đưa vào hàng đợi.</div>';list.querySelectorAll('[data-investigation]').forEach(b=>b.onclick=()=>investigate(b.dataset.investigation))}
     function render(data){const m=data.metrics||{};$('total').textContent=m.total??alerts.length;$('critical').textContent=m.critical??0;$('high').textContent=m.high??0;$('case-count').textContent=cases.length;renderAlerts()}
     async function refreshAll(){if(document.hidden||refreshing)return;refreshing=true;try{const [a,c,source,responses]=await Promise.all([api('/api/alerts'),api('/api/cases'),api('/api/sources/status'),api('/api/response/history')]);alerts=a.alerts||[];alertTotal=a.metrics?.total??alerts.length;alertNextCursor=a.next_cursor;$('alerts-older').hidden=!alertNextCursor;alertRevision=source.alert_revision;cases=c.cases||[];render(a);renderProgress();if(openedAlert)openAlert(openedAlert);if(selectedInvestigation)investigate(selectedInvestigation);else{const ready=alerts.find(x=>x.ai_status==='running')||alerts.find(x=>x.ai_status==='queued')||alerts.find(x=>x.ai_status==='completed'&&x.investigation_report);if(ready)investigate(ready.id)}renderResponse(responses.history||[]);backend(true,'Backend đang hoạt động');renderCollection(source);if(location.protocol==='file:')throw Error('Mở http://localhost:8100 để kết nối backend.')}catch(e){backend(false,'Backend không khả dụng');toast(e.message,true)}finally{refreshing=false}try{await refreshLogs()}catch(e){$('logs-summary').textContent='Không thể tải log: '+e.message}}
     function openAlert(id){openedAlert=id;const a=alerts.find(x=>String(x.id)===String(id));if(!a)return;$('modal-title').textContent=a.rule?.description||a.attack_type||'Historical alert';$('modal-meta').textContent=`${a.source_product==='zeek'?'Zeek · ':''}${a.agent?.name||'—'} · rule ${a.rule?.id||'—'} / level ${a.rule?.level??'—'}`;$('modal-content').innerHTML=alertSummary(a);if($('view-group-investigation'))$('view-group-investigation').onclick=()=>goInvestigation(a.ai_group.representative_alert_id);$('modal-view-investigation').onclick=()=>goInvestigation(id);$('modal-view-log').onclick=()=>goSourceLog(a);$('retry-ai').disabled=a.ai_allowed!==true||a.source!=='wazuh'||['queued','running'].includes(a.ai_status);$('retry-ai').hidden=$('retry-ai').disabled;$('retry-ai').textContent=['completed','failed'].includes(a.ai_status)?'Điều tra lại':'Điều tra bằng AI';$('retry-ai').onclick=async()=>{try{const result=await api('/api/alerts/'+encodeURIComponent(id)+'/investigate',{method:'POST'});toast(result.queued?'Đã đưa yêu cầu điều tra vào hàng đợi.':'Cảnh báo đang chờ hoặc đang được điều tra.');await refreshAll();openAlert(id)}catch(e){toast(e.message,true)}};$('modal').classList.remove('hidden')};function closeModal(){openedAlert=null;$('modal').classList.add('hidden')}function investigationText(a){
@@ -563,18 +583,6 @@
         cards.push(`<article class="evidence-summary-item"><strong>Xác thực</strong>${lines||'<p>Không có nhóm xác thực trong kết quả tổng hợp.</p>'}<small>${esc(scopeText(s.scope))}${groups.length>2||s.groups_truncated?' · Còn nhóm khác trong hồ sơ':''}</small><small>Số bản ghi đã lưu, không nhất thiết là số lần thử duy nhất.</small></article>`)}
       return cards.length?`<section class="assessment-section"><h3>Số liệu đã ghi nhận</h3><div class="evidence-summary">${cards.join('')}</div>${canViewEvidence?'<button type="button" class="link" id="investigation-evidence">Xem bằng chứng →</button>':''}</section>`:'';
     }
-    function groundedSuggestions(a,r){
-      const result=a.grounded_response,expected=r.incident_id||a.investigation?.incident_id;
-      if(!result||!expected||result.incident_id!==expected)return '<p>Chưa có gợi ý gắn nguồn cho lượt điều tra này.</p>';
-      if(result.status==='no_actions')return '<p>Playbook đã được tìm thấy, nhưng chưa có hành động nào vừa được bằng chứng hỗ trợ vừa có trích dẫn phù hợp. Đây không phải kết luận rằng alert hoặc playbook không khớp; hệ thống không tự tạo hành động khi căn cứ chưa đủ.</p>';
-      if(result.status!=='available')return `<p>${esc({no_source:'Chưa tìm thấy playbook phù hợp; chưa có gợi ý gắn nguồn.',not_applicable:'Không lập gợi ý phản ứng cho kết luận lành tính.',investigation_incomplete:'Điều tra chưa hoàn tất; chưa lập gợi ý phản ứng.',error:'Không lập được gợi ý có nguồn; kiểm tra playbook và model.'}[result.status]||'Chưa có gợi ý gắn nguồn.')}</p>`;
-      const kb=result.knowledge_guidance||{},sections=new Map((Array.isArray(kb.passages)?kb.passages:[]).filter(p=>p&&p.id&&p.text).map(p=>[p.id,p]));
-      const actions=Array.isArray(result.actions)?result.actions.filter(a=>a&&a.status==='proposed'&&Array.isArray(a.guidance_ids)&&a.guidance_ids.length&&a.guidance_ids.every(id=>sections.has(id))):[];
-      if(!actions.length)return '<p>Không có hành động đủ điều kiện và nguồn để đề xuất.</p>';
-      const renderAction=action=>{const refs=(action.guidance_ids||[]).filter(id=>sections.has(id));
-        return `<li><b>${esc(ACTION_LABEL[action.action]||action.action)}</b>${action.target?' · '+esc(action.target):''}: ${assessmentText(action.reason||'')}${refs.length?`<details class="assessment-more"><summary>Cơ sở ${refs.map(esc).join(', ')}</summary>${refs.map(id=>`<p><b>${esc(sections.get(id).section)}</b>: ${esc(sections.get(id).text)}</p>`).join('')}</details>`:''}</li>`};
-      return `<p><b>Nguồn:</b> ${esc(kb.playbook_id||'Playbook')} · ${esc(kb.title||'Tài liệu')} · ${esc(kb.source||'Không rõ tệp')}</p><ol class="ai-text-list">${actions.slice(0,3).map(renderAction).join('')}</ol>${actions.length>3?`<details class="assessment-more"><summary>Gợi ý khác (${actions.length-3})</summary><ol class="ai-text-list" start="4">${actions.slice(3).map(renderAction).join('')}</ol></details>`:''}<small>AI chọn trích dẫn; chuyên viên cần đối chiếu nội dung và bằng chứng trước khi áp dụng.</small>`;
-    }
     function assessmentPanel(data,a){
       const r=data.report||a.investigation_report, s=data.summary||{};
       if(!r){const failed=data.status==='failed',running=data.status==='running';return `<section class="assessment-card"><h3>Đánh giá của AI</h3><p>${esc(s.error||a.ai_error||(failed?'Điều tra chưa hoàn tất.':running?'AI đang thu thập và phân tích bằng chứng; đánh giá sẽ xuất hiện khi có kết quả.':'Chưa có đánh giá cho cảnh báo này.'))}</p></section>`}
@@ -589,17 +597,26 @@
       return `<section class="investigation-summary"><header class="investigation-summary-head"><div><h3>Đánh giá của AI</h3><small>Đối chiếu với bằng chứng gốc</small></div><div class="investigation-summary-meta"><span class="status ${esc(r.verdict||'')}">${esc(verdictName(r.verdict))}</span><span class="log-chip" title="Ước lượng của mô hình, chưa được hiệu chuẩn">Độ tin cậy: ${esc(confidence)}</span></div></header><div class="investigation-summary-body">
         <section class="assessment-section"><h3>Tóm tắt</h3>${summary}${confidence!=='Chưa có'?'<small>Độ tin cậy là ước lượng của mô hình, chưa được hiệu chuẩn.</small>':''}</section>
         ${recordedEvidence(outcomes,a,Boolean(data.id||a.investigation?.incident_id||r.incident_id))}
-        <section class="assessment-section"><h3>Gợi ý bước phản ứng</h3>${groundedSuggestions(a,r)}</section>
         <section class="assessment-section"><h3>Bằng chứng thiếu hoặc chưa đầy đủ</h3>${gaps.length?list(gaps.slice(0,2)):outcomes.length?'<p>Không có công cụ nào được ghi là rỗng, lỗi hoặc bị cắt.</p>':'<p>Không có trạng thái công cụ được ghi trong báo cáo này.</p>'}<details class="assessment-more"><summary>Chi tiết và việc cần xác minh${unknowns.length||questions.length||gaps.length>2?` (${unknowns.length+questions.length+Math.max(0,gaps.length-2)})`:''}</summary><div>${gaps.length>2?list(gaps.slice(2)):''}${unknowns.length?`<p>Thông tin AI cho biết chưa xác minh:</p>${list(unknowns)}`:''}${questions.length?`<p>Việc cần xác minh:</p>${list(questions)}`:'<p>AI chưa ghi câu hỏi xác minh cụ thể trong phần đang tải.</p>'}</div></details></section>
         ${analystReviewControl(data,r,a)}<div class="buttons report-links"><button class="btn" id="investigation-source">Xem log gốc</button><button class="btn" id="download-report">Tải báo cáo đầy đủ</button></div></div></section>`;
+    }
+    function investigationWorkspace(data,a){
+      return `<details class="investigation-workspace response-workspace" data-overview-workspace="investigation"><summary>Kết quả điều tra · xem đánh giá và bằng chứng</summary>${assessmentPanel(data,a)}</details>`;
     }
     function responsePanel(data,a){
       const report=data.report||a.investigation_report;
       if(!report)return '';
+      const incident=data.id||report.incident_id||a.investigation?.incident_id;
+      if(incident&&responseIncidents[a.id]!==incident){delete responsePlans[a.id];delete responseErrors[a.id];responseFetched.delete(a.id);responseIncidents[a.id]=incident;}
       const complete=data.status==='completed'||(!data.status&&a.ai_status==='completed'),p=a.playbook_proposal||{};
-      return `<details class="response-workspace"><summary>Kế hoạch phản ứng · xem và duyệt mô phỏng</summary><p>Chuyên viên xem xét từng hành động; hệ thống chỉ thực thi mô phỏng.</p>${p.status==='matched'&&p.playbook_text?`<details><summary>Playbook tham chiếu: ${esc(p.playbook_name||p.playbook_id||'Playbook')}</summary><p class="muted">Nguồn: ${esc(p.playbook_source||'Chưa ghi nhận')}</p><pre class="detail">${esc(p.playbook_text)}</pre></details>`:''}${complete?`<div data-plan-box="${esc(a.id)}">${planHTML(a.id)}</div>`:'<p>Hoàn tất điều tra trước khi lập kế hoạch phản ứng.</p>'}</details>`;
+      return `<details class="response-workspace" data-overview-workspace="response"><summary>Kế hoạch phản ứng · xem và duyệt mô phỏng</summary><p>Chuyên viên xem xét từng hành động; hệ thống chỉ thực thi mô phỏng.</p>${p.status==='matched'&&p.playbook_text?`<details><summary>Playbook tham chiếu: ${esc(p.playbook_name||p.playbook_id||'Playbook')}</summary><p class="muted">Nguồn: ${esc(p.playbook_source||'Chưa ghi nhận')}</p><pre class="detail">${esc(p.playbook_text)}</pre></details>`:''}${complete?`<div data-plan-box="${esc(a.id)}">${planHTML(a.id)}</div>`:'<p>Hoàn tất điều tra trước khi lập kế hoạch phản ứng.</p>'}</details>`;
     }
     function wireInvestigationOverview(box,data,a){
+      box.querySelectorAll('details[data-overview-workspace]').forEach(section=>{
+        const key=String(a.id)+':'+section.dataset.overviewWorkspace;
+        if(overviewWorkspaceStates.has(key))section.open=overviewWorkspaceStates.get(key);
+        section.ontoggle=()=>overviewWorkspaceStates.set(key,section.open);
+      });
       if($('download-report'))$('download-report').onclick=()=>downloadReport(data,a);
       if($('investigation-source'))$('investigation-source').onclick=()=>goSourceLog(a);
       if($('investigation-evidence'))$('investigation-evidence').onclick=()=>{dossierSection='evidence';loadDossier(a,false,true)};
@@ -677,7 +694,7 @@
           linkedRun=null;
         }
       }
-      if(!linkedRun){const data={summary:a?.investigation||{},report:a?.investigation_report,status:a?.ai_status};box.innerHTML=a?`<div class="investigation-tab-content">${assessmentPanel(data,a)}${responsePanel(data,a)}${!data.report?'<button class="btn" id="investigation-source">Xem log gốc</button>':''}</div>`:'<div class="empty">Chọn cảnh báo để xem quá trình điều tra.</div>';if(a)wireInvestigationOverview(box,data,a);dossierKey='';dossierBusyKey='';dossierSignature='';dossierRequest++;return}
+      if(!linkedRun){const data={summary:a?.investigation||{},report:a?.investigation_report,status:a?.ai_status};box.innerHTML=a?`<div class="investigation-tab-content">${investigationWorkspace(data,a)}${responsePanel(data,a)}${!data.report?'<button class="btn" id="investigation-source">Xem log gốc</button>':''}</div>`:'<div class="empty">Chọn cảnh báo để xem quá trình điều tra.</div>';if(a)wireInvestigationOverview(box,data,a);dossierKey='';dossierBusyKey='';dossierSignature='';dossierRequest++;return}
       const key=[linkedRun,linkedStatus,linkedAlert.investigation?.node,linkedAlert.investigation?.model_calls,linkedAlert.investigation?.tool_calls,dossierSection].join(':');
       if(dossierBusyKey===key)return;
       if(!force&&!more&&key===dossierKey)return;
@@ -690,7 +707,7 @@
         dossierItems.push(...data.items);dossierOffset=data.next_offset;
         const signature=JSON.stringify([key,data.summary,dossierItems]);if(signature===dossierSignature)return;dossierSignature=signature;
         const tabs=[['overview','Tổng quan'],['activity','Các bước điều tra'],['evidence','Bằng chứng']].map(([s,label])=>`<button class="btn" data-dossier-tab="${s}" aria-pressed="${s===dossierSection}">${label}</button>`).join('');
-        const overviewContent=assessmentPanel(data,linkedAlert)+responsePanel(data,linkedAlert);
+        const overviewContent=investigationWorkspace(data,linkedAlert)+responsePanel(data,linkedAlert);
         const visibleItems=dossierSection==='activity'?dossierItems.filter(item=>item.kind==='tool'||item.kind==='model'||item.state==='error'):dossierItems;
         const items=visibleItems.map((item,index)=>dossierSection==='activity'?activityHTML(item,index):dossierSection==='evidence'?evidenceHTML(item):`<details style="padding:12px 0;border-bottom:1px solid var(--border)"><summary><b>${esc(item.name)}</b> · ${esc(item.state)} · ${esc(duration((item.finished||Date.now()/1000)-item.started))}</summary><pre class="detail">${esc(JSON.stringify(dossierSection==='models'?{id:item.id,started:item.started,finished:item.finished}: {query:item.args,result:item.result},null,2))}</pre></details>`).join('');
         const flow=[['triage','Phạm vi'],['investigating','Lập kế hoạch'],['collecting','Công cụ'],['reviewing','Xem bằng chứng'],['concluding','Đánh giá'],['verifying','Kiểm tra'],['saving','Lưu']].map(([node,label])=>`<span class="${node===data.summary.node?'active':''}">${label}</span>`).join(' → ');

@@ -132,8 +132,8 @@ def test_actual_dns_playbook_keeps_response_and_escalation_provenance():
             'playbook_source':'PB-EXT-DNS-TUNNELING.txt','playbook_text':text}
     guidance=prepare_guidance(source)
     assert guidance['playbook_id']=='PB-EXT-DNS-TUNNELING' and len(guidance['sha256'])==64
-    assert any(p['section']=='RESPONSE' and 'M1037' in p['text'] for p in guidance['passages'])
-    assert any(p['section']=='ESCALATION' and 'Preserve' in p['text'] for p in guidance['passages'])
+    assert any(p['section']=='RESPONSE' and 'Victim' in p['text'] and 'resolver' in p['text'] for p in guidance['passages'])
+    assert any(p['section']=='ESCALATION' and 'phê duyệt' in p['text'] for p in guidance['passages'])
 
 
 def test_unknown_or_missing_guidance_is_rejected_even_with_valid_evidence():
@@ -275,6 +275,13 @@ def test_api_plan_approve_and_simulated_execution(api):
     assert RuntimeStore(app.state.store.path).load()['responses'][0]['approved_by'] == 'local-analyst'
     # A plan executes once.
     assert client.post('/api/response/execute', json={'plan_id': plan['id']}, headers=origin).status_code == 409
+
+
+def test_current_investigation_does_not_load_previous_plan(api):
+    client, app, alert, incident, _ = api
+    old=app.state.response_store.create(alert['id'],'INV-older',{'actions':[]})
+    assert old['id'] and incident != 'INV-older'
+    assert client.get(f"/api/alerts/{alert['id']}/response/plan").status_code == 404
 
 
 def test_api_refuses_live_mode_benign_verdict_and_missing_investigation(api, monkeypatch):

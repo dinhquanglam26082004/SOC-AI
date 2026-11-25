@@ -206,14 +206,14 @@
   </rule>
 
   <!-- Cung agent, nguon, dich, cong va loai query; different_field khong dem so ten duy nhat. -->
-  <rule id="100181" level="7" frequency="3" timeframe="120">
+  <rule id="100181" level="7" frequency="5" timeframe="60" ignore="200">
     <if_matched_sid>100183</if_matched_sid>
     <same_field>id.orig_h</same_field>
     <same_field>id.resp_h</same_field>
     <same_field>id.resp_p</same_field>
     <same_field>qtype_name</same_field>
     <different_field>query</different_field>
-    <description>Zeek DNS: nhieu query $(qtype_name) tu $(id.orig_h) toi $(id.resp_h):$(id.resp_p) trong 120s, can xac minh</description>
+    <description>Zeek DNS: nhieu query $(qtype_name) tu $(id.orig_h) toi $(id.resp_h):$(id.resp_p) trong 60s, can xac minh</description>
     <mitre><id>T1071.004</id></mitre>
     <group>zeek_detection,zeek_dns_anomaly,</group>
   </rule>

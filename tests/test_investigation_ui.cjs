@@ -6,7 +6,7 @@ const html = fs.readFileSync(require('node:path').join(__dirname,'../web/index.h
 assert.doesNotMatch(html, /#analyst-queue\s*\{\s*display:\s*none\s*!important;/);
 assert.match(html, /if\(name==='investigations'\)loadAnalystQueue\(\)/);
 assert.match(html, /\['overview','Tổng quan'\]/);
-assert.match(html, /assessmentPanel\(data,linkedAlert\)\+responsePanel\(data,linkedAlert\)/);
+assert.match(html, /investigationWorkspace\(data,linkedAlert\)\+responsePanel\(data,linkedAlert\)/);
 assert.match(html, /a\.ai_group\?\.representative_alert_id/);
 assert.match(html, /\/investigation'/);
 assert.match(html, /101200.*101201.*101202/);
@@ -90,7 +90,7 @@ console.log('Investigation UI render checks passed.');
 const summarySource=html.slice(html.indexOf('    function shortAssessment('),html.indexOf('    function analystPanel('));
 scope.verdictName=x=>x;
 scope.ACTION_LABEL={increase_monitoring:'Tăng giám sát'};
-vm.runInNewContext(summarySource+'\nthis.assessment=assessmentPanel;this.shortSummary=shortAssessment;this.assessmentText=assessmentText;this.recordedEvidence=recordedEvidence;this.groundedSuggestions=groundedSuggestions;',scope);
+vm.runInNewContext(summarySource+'\nthis.assessment=assessmentPanel;this.investigationWorkspace=investigationWorkspace;this.shortSummary=shortAssessment;this.assessmentText=assessmentText;this.recordedEvidence=recordedEvidence;',scope);
 const longId='WAZUH-'+'a'.repeat(64),ref='EV-'+'b'.repeat(24);
 assert.equal(scope.shortSummary(`Cảnh báo ${longId} từ 192.168.1.2. Câu thứ hai. Câu thứ ba.`), 'Cảnh báo từ 192.168.1.2. Câu thứ hai.');
 const report={verdict:'inconclusive',confidence:null,reasoning:`Cảnh báo ${longId}. Chưa đủ bằng chứng. Câu thứ ba.`,
@@ -99,13 +99,15 @@ const report={verdict:'inconclusive',confidence:null,reasoning:`Cảnh báo ${lo
   unknowns:['Chưa rõ câu trả lời DNS'],recommendations:['Xem thêm log DNS'],
   tool_outcomes:[{tool:'search_zeek_dns',status:'empty'},{tool:'summarize_dns_activity',status:'ok',aggregate_evidence_id:ref,dns_summary:{matched_records:12,unique_queries:8,scope:{window_seconds:60}}}]};
 const card=scope.assessment({report,summary:{},status:'completed',finding_evidence:[{evidence_id:ref,event_time:'2026-11-17T01:00:00Z',data:{dns:{query:'example.test'}}}]},{});
+const collapsed=scope.investigationWorkspace({report,summary:{},status:'completed'},{});
+assert.match(collapsed,/^<details class="investigation-workspace response-workspace" data-overview-workspace="investigation"><summary>Kết quả điều tra/);
+assert.match(collapsed,/Đánh giá của AI/);
 assert.match(card,/Độ tin cậy: Chưa có/);
 assert.doesNotMatch(card,/Phát hiện chính/);
 assert.doesNotMatch(card,/Quan sát &lt;đáng ngờ&gt;/);
 assert.match(card,/search_zeek_dns: không có kết quả/);
 assert.match(card,/Domain nào được truy vấn\?/);
-assert.match(card,/Gợi ý bước phản ứng/);
-assert.match(card,/Chưa có gợi ý gắn nguồn/);
+assert.doesNotMatch(card,/Gợi ý bước phản ứng/);
 assert.match(card,/12 bản ghi đã lưu · 8 tên query khác nhau/);
 assert.match(card,/Phạm vi thời gian chưa được ghi/);
 assert.doesNotMatch(card,/Câu thứ ba/);
@@ -135,12 +137,7 @@ assert.doesNotMatch(scope.recordedEvidence([{tool:'summarize_dns_activity',statu
 const grounded={status:'available',incident_id:'INV-1',knowledge_guidance:{playbook_id:'PB-DNS',title:'DNS',source:'dns.txt',passages:[{id:'G1',section:'RESPONSE',text:'Monitor DNS.'}]},
   actions:[{status:'proposed',action:'increase_monitoring',target:'001',reason:'Theo dõi DNS.',guidance_ids:['G1']}]};
 const groundedCard=scope.assessment({report:{...report,incident_id:'INV-1'},summary:{},status:'completed'},{grounded_response:grounded});
-assert.match(groundedCard,/PB-DNS/);assert.match(groundedCard,/Tăng giám sát<\/b> · 001/);assert.match(groundedCard,/Monitor DNS\./);
-assert.doesNotMatch(scope.assessment({report:{...report,incident_id:'INV-other'},summary:{}},{grounded_response:grounded}),/Monitor DNS\./);
-const noActionsCard=scope.assessment({report:{...report,incident_id:'INV-1'},summary:{},status:'completed'},
-  {grounded_response:{status:'no_actions',incident_id:'INV-1',actions:[]}});
-assert.match(noActionsCard,/Playbook đã được tìm thấy/);
-assert.match(noActionsCard,/không tự tạo hành động/);
+assert.doesNotMatch(groundedCard,/PB-DNS/);
 assert.doesNotMatch(scope.assessment({report,summary:{}},{}),/Xem thêm log DNS/);
 console.log('Investigation summary card checks passed.');
 const panels=html.slice(html.indexOf('    function analystPanel('),html.indexOf('    function activityHTML('));
@@ -173,6 +170,10 @@ assert.match(responseCard,/&lt;script&gt;untrusted&lt;\/script&gt;/);
 assert.match(responseCard,/ssh_bruteforce\.txt/);
 assert.match(responseCard,/AI lập kế hoạch phản ứng/);
 assert.match(responseCard,/chỉ thực thi mô phỏng/);
+assert.doesNotMatch(responseCard,/Gợi ý có sẵn từ điều tra/);
+scope.responsePlans['alert-1']={status:'proposed',actions:[],knowledge_guidance:{}};
+assert.doesNotMatch(scope.planHTML('alert-1'),/Gợi ý có sẵn từ điều tra/);
+delete scope.responsePlans['alert-1'];
 assert.equal(scope.responsePanel({status:'running'},{}),'');
 assert.doesNotMatch(scope.responsePanel({status:'failed',report:{}},scope.alerts[0]),/data-plan-create/);
 console.log('Integrated playbook and response UI rendering checks passed.');
@@ -205,7 +206,7 @@ try{
 const lookupSource=html.slice(html.indexOf('    function chatLookupLabel('),html.indexOf('    function renderChat('));
 vm.runInNewContext(lookupSource+'\nthis.lookupLabel=chatLookupLabel;',scope);
 assert.match(scope.lookupLabel({ok:true,name:'search_alerts',scope:{since:eventTime,until:collectedAt}}),/từ LOCAL\(2026-11-20T08:00:00Z\)/);
-const overviewSource=html.slice(html.indexOf('    function recordedEvidence('),html.indexOf('    function groundedSuggestions('));
+const overviewSource=html.slice(html.indexOf('    function recordedEvidence('),html.indexOf('    function assessmentPanel('));
 vm.runInNewContext(overviewSource+'\nthis.recordedEvidence=recordedEvidence;',scope);
 const overview=scope.recordedEvidence([{tool:'summarize_dns_activity',status:'ok',
   dns_summary:{scope:{since:eventTime,until:collectedAt},matched_records:1}}],{zeek_data:{}});

@@ -8,5 +8,20 @@ Hướng dẫn điều tra:
 Official analytic text:
 Detects unusual outbound DNS traffic from ESXi hosts, often from shell scripts, custom daemons, or malicious VIBs interacting with external DNS infrastructure outside the management plane.
 
-Local applicability (hướng dẫn riêng của dự án SOC-AI, không thuộc văn bản của MITRE):
-Chỉ sử dụng các bản ghi xác thực/FIM/sudo của Wazuh và dữ liệu conn/HTTP/DNS của Zeek khi nguồn dữ liệu yêu cầu thực sự tồn tại. Đây là quan sát lịch sử, không phải kiểm tra trực tiếp thiết bị đầu cuối. Cần nguồn bổ sung hoặc xác minh của phân tích viên để đánh giá cây tiến trình, mức sử dụng tài nguyên, tính sẵn sàng dịch vụ và quyền được cấp. Không khẳng định các tín hiệu đã được kiểm tra trừ khi công cụ thực tế đã trả về dữ liệu. Không có ngưỡng số nào trong tài liệu này tự nó xác lập một cuộc tấn công. Khi đưa ra kết luận sự cố, hãy trích dẫn ID sự kiện nguồn; tài liệu này chỉ hỗ trợ đề xuất điều tra. Không có kết quả không chứng minh hệ thống an toàn. Ví dụ công khai hoặc tên kỹ thuật MITRE không phải bằng chứng cuộc tấn công tương tự đã xảy ra tại địa phương.
+INVESTIGATION:
+Áp dụng cho ESXi — hướng dẫn SOC-AI, không thuộc văn bản gốc MITRE. Trước hết
+xác minh tài sản là ESXi và sensor có quan sát được đường DNS của host; Agent
+trên một máy ảo không mặc định cung cấp log của hypervisor. Ghi thời gian, IP,
+domain, resolver và chủ sở hữu để phân biệt lưu lượng quản trị hợp lệ.
+
+INVESTIGATION:
+Nếu có Zeek DNS phù hợp, dùng summarize_dns_activity và search_zeek_dns để xem
+thống kê và mẫu; search_zeek_connections để xem kết nối lịch sử. Dữ liệu rỗng
+hoặc thiếu trường không chứng minh không có hoạt động. Không suy ra script,
+dịch vụ hay gói VIB trên ESXi từ DNS hoặc conn.log đơn lẻ.
+
+INVESTIGATION:
+Cần log quản trị, tiến trình và thay đổi VIB của ESXi từ nguồn được cấu hình
+riêng hoặc do chuyên viên kiểm tra. SOC-AI không tự có các log này chỉ vì có
+Wazuh Agent trên máy ảo. Lưu ID bằng chứng, báo rõ nguồn thiếu và tham chiếu
+PB-EXT-DNS-TUNNELING; cân nhắc tác động tới các VM trước mọi phản ứng trên host.

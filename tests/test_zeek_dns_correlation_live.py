@@ -38,31 +38,32 @@ def matched_rules(events):
 
 def test_rare_query_requires_a_related_burst():
     assert matched_rules([event('one')]) == ['100183']
-    assert matched_rules([event(str(i)) for i in range(3)]) == ['100183', '100183', '100181']
-    assert matched_rules([event('same') for _ in range(4)]) == ['100183'] * 4
-    # The third observation differs from prior observations, but only two names
-    # occur. Wazuh different_field does not mean three distinct query names.
-    assert matched_rules([event('a'), event('a'), event('b')]) == ['100183', '100183', '100181']
+    assert matched_rules([event(str(i)) for i in range(5)]) == ['100183'] * 4 + ['100181']
+    assert matched_rules([event('same') for _ in range(6)]) == ['100183'] * 6
+    # The last observation differs from previous ones, but only two names
+    # occur. Wazuh different_field does not mean five distinct query names.
+    assert matched_rules([event('a')] * 4 + [event('b')]) == ['100183'] * 4 + ['100181']
 
 
 @pytest.mark.parametrize('variation', ['source', 'destination', 'port', 'qtype'])
 def test_unrelated_scopes_do_not_share_a_counter(variation):
     samples = []
-    for i in range(3):
+    for i in range(5):
         options = {
             'source': f'192.0.2.{10 + i}' if variation == 'source' else '192.0.2.10',
             'destination': f'192.0.2.{53 + i}' if variation == 'destination' else '192.0.2.53',
             'port': 53 + i if variation == 'port' else 53,
-            'qtype': ['NULL', 'KEY', 'PRIVATE'][i] if variation == 'qtype' else 'NULL',
+            'qtype': ['NULL', 'KEY', 'PRIVATE', 'NULL', 'KEY'][i] if variation == 'qtype' else 'NULL',
         }
         samples.append(event(str(i), **options))
-    assert matched_rules(samples) == ['100183'] * 3
+    assert matched_rules(samples) == ['100183'] * 5
 
 
 def test_separate_sources_each_trigger_and_nxdomain_is_not_lost():
-    events = [event(str(i), source='192.0.2.10', rcode_name='NXDOMAIN') for i in range(3)]
-    events += [event(str(i), source='192.0.2.11', rcode_name='NXDOMAIN') for i in range(3)]
-    assert matched_rules(events) == ['100183', '100183', '100181'] * 2
+    # logtest checks correlation; it does not establish production ignore scope.
+    events = [event(str(i), source='192.0.2.10', rcode_name='NXDOMAIN') for i in range(5)]
+    events += [event(str(i), source='192.0.2.11', rcode_name='NXDOMAIN') for i in range(5)]
+    assert matched_rules(events) == (['100183'] * 4 + ['100181']) * 2
 
 
 def test_long_null_query_still_reaches_existing_tunneling_rule():

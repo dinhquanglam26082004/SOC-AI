@@ -218,6 +218,8 @@ def analyze(record, on_progress=None, store=None, audit=None):
                                    client=audited_response_client,model=AGENT_MODEL,
                                    timeout=min(120.0, float(os.getenv('OLLAMA_TIMEOUT','900'))))
                 grounded=recommendation_preview(plan,current['id'])
+                plan['verdict_source']='model_report'
+                record['_automatic_response_plan']=plan
             except Exception as exc:
                 logger.warning('Grounded response suggestions unavailable (%s)', type(exc).__name__)
                 grounded={'status':'error','incident_id':current['id'],'error':type(exc).__name__}
@@ -255,12 +257,14 @@ async def ai_worker(app):
             await asyncio.to_thread(store.skip, record, 'Not a security alert; no model call made')
             continue
         error = None
+        automatic_plan = None
         try:
             async with app.state.ai_slots:
                 report, proposal = await asyncio.to_thread(
                     analyze, record, lambda stage, step: store.progress(record, stage, step, AGENT_MODEL),
                     store, getattr(app.state,'investigation_store',None))
             record['investigation_report'], record['playbook_proposal'] = report, proposal
+            automatic_plan = record.pop('_automatic_response_plan', None)
             # The source rule severity is never overwritten by an inference.
         except asyncio.CancelledError:
             raise  # leave running job recoverable on next startup
@@ -275,6 +279,7 @@ async def ai_worker(app):
                 current=None
             if current:
                 record['investigation']=current['summary']
+        record.pop('_automatic_response_plan', None)
         while True:
             try:
                 committed = await asyncio.to_thread(store.finish, record, error)
@@ -283,6 +288,15 @@ async def ai_worker(app):
                 logger.error('AI result commit unavailable; retaining running job and retrying')
                 await asyncio.sleep(3)
         if error is None and committed:
+            if automatic_plan is not None:
+                try:
+                    incident_id = (record.get('investigation_report') or {}).get('incident_id')
+                    response_store = getattr(app.state, 'response_store', None)
+                    if incident_id and response_store:
+                        await asyncio.to_thread(response_store.create, record['id'], incident_id,
+                                                automatic_plan, if_absent=True)
+                except Exception as exc:
+                    logger.warning('Automatic response plan could not be saved (%s)', type(exc).__name__)
             try:
                 # The alert payload omits authentication aggregates to keep polling
                 # compact. Recover the matching dossier only for this notification.
@@ -665,7 +679,8 @@ def create_app(db_path=None, workers=True):
 
     @app.get('/api/alerts/{alert_id}/response/plan')
     def response_plan_latest(alert_id: str):
-        plan = app.state.response_store.latest(alert_id)
+        current = app.state.investigation_store.current(alert_id)
+        plan = app.state.response_store.latest(alert_id, current['id'] if current else None)
         if not plan:
             raise HTTPException(404, 'Chưa có kế hoạch phản ứng cho cảnh báo này')
         return plan

@@ -109,6 +109,38 @@ def test_parent_domain(query, expected):
     assert parent_domain(query) == expected
 
 
+def test_parent_domain_skips_multiple_escaped_zeek_payload_labels():
+    query = '.'.join([r'\xd3' * 40, r'\xe5' * 40, r'\xf9' * 40, 'tunnel', 'lab', 'local'])
+    assert len(query) > 253
+    assert parent_domain(query) == 'tunnel.lab.local'
+    assert parent_domain(r'payload.\xd3.\xe5') is None
+    assert parent_domain('payload.invalid..example.com') is None
+
+
+def test_dns_baseline_without_usable_suffix_falls_back_to_scoped_search():
+    alert = {'timestamp': '2026-11-19T09:33:05Z', 'rule': {'id': '100181'},
+             'src_ip': VICTIM, 'zeek_data': {'query': r'payload.\xd3.\xe5'}}
+    assert baseline_calls(alert, '2026-11-19T09:18:05Z', '2026-11-19T09:48:05Z') == [
+        ('search_zeek_dns', {'ip': VICTIM, 'limit': 30})]
+
+
+def test_dns_tools_run_with_multi_label_escaped_trigger(tunnel_lab):
+    from agents.investigation_tools import LocalTools
+    store, audit, trigger = tunnel_lab
+    query = '.'.join([r'\xd3' * 40, r'\xe5' * 40, r'\xf9' * 40, 'tunnel', 'lab', 'local'])
+    trigger = {**trigger, 'zeek_data': {**trigger['zeek_data'], 'query': query}}
+    incident = audit.create(trigger['id'], {})['id']
+    tools = LocalTools(store, audit, incident, trigger)
+    calls = baseline_calls(trigger, tools.since, tools.until)
+    assert [name for name, _ in calls] == [
+        'summarize_dns_activity', 'search_zeek_dns', 'compare_dns_baseline']
+    results = [tools.execute(name, args) for name, args in calls]
+    assert all(result['status'] in {'ok', 'truncated'} for result in results)
+    assert results[0]['summary']['scope']['domain'] == 'tunnel.lab.local'
+    assert results[0]['summary']['matched_records'] == 81
+    assert results[1]['total_matched'] == 81
+
+
 def test_dns_suffix_and_qtype_filters_exclude_gateway_noise(tunnel_lab):
     store, audit, trigger = tunnel_lab
     from agents.investigation_tools import LocalTools

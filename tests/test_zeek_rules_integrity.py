@@ -50,7 +50,7 @@ def test_rare_dns_records_are_telemetry_until_correlated():
     assert base.find("field[@name='qtype_name']").text == '^(NULL|PRIVATE|KEY)$'
     assert 'zeek_telemetry' in base.findtext('group').split(',')
     assert 'zeek_detection' not in base.findtext('group').split(',')
-    assert (alert.get('level'), alert.get('frequency'), alert.get('timeframe')) == ('7', '3', '120')
+    assert (alert.get('level'), alert.get('frequency'), alert.get('timeframe'), alert.get('ignore')) == ('7', '5', '60', '200')
     assert alert.findtext('if_matched_sid') == '100183'
     assert {field.text for field in alert.findall('same_field')} == {
         'id.orig_h', 'id.resp_h', 'id.resp_p', 'qtype_name'

@@ -8,5 +8,20 @@ Hướng dẫn điều tra:
 Official analytic text:
 Detects clients issuing DNS queries with high volume, long subdomain lengths, encoded payload patterns, or to known malicious infrastructure; indicative of DNS-based C2 channels.
 
-Local applicability (hướng dẫn riêng của dự án SOC-AI, không thuộc văn bản của MITRE):
-Chỉ sử dụng các bản ghi xác thực/FIM/sudo của Wazuh và dữ liệu conn/HTTP/DNS của Zeek khi nguồn dữ liệu yêu cầu thực sự tồn tại. Đây là quan sát lịch sử, không phải kiểm tra trực tiếp thiết bị đầu cuối. Cần nguồn bổ sung hoặc xác minh của phân tích viên để đánh giá cây tiến trình, mức sử dụng tài nguyên, tính sẵn sàng dịch vụ và quyền được cấp. Không khẳng định các tín hiệu đã được kiểm tra trừ khi công cụ thực tế đã trả về dữ liệu. Không có ngưỡng số nào trong tài liệu này tự nó xác lập một cuộc tấn công. Khi đưa ra kết luận sự cố, hãy trích dẫn ID sự kiện nguồn; tài liệu này chỉ hỗ trợ đề xuất điều tra. Không có kết quả không chứng minh hệ thống an toàn. Ví dụ công khai hoặc tên kỹ thuật MITRE không phải bằng chứng cuộc tấn công tương tự đã xảy ra tại địa phương.
+INVESTIGATION:
+Áp dụng cho quan sát mạng — hướng dẫn SOC-AI, không thuộc văn bản gốc MITRE.
+Xác định sensor, máy gửi, resolver, domain, cổng và cửa sổ thời gian. Dùng
+summarize_dns_activity để xem số bản ghi đã lưu, loại query, mã phản hồi,
+tên query khác nhau và số theo phút; search_zeek_dns để đối chiếu mẫu gốc.
+
+INVESTIGATION:
+Nếu có dữ liệu phù hợp, dùng compare_dns_baseline cho hai cửa sổ cùng phạm vi
+và không chồng lấn; dùng search_zeek_connections đối chiếu kết nối và thời gian.
+Số bản ghi không mặc định bằng số gói; query dài, NULL hay NXDOMAIN không tự
+chứng minh tunnel. Kiểm tra bản trùng, log thiếu và phạm vi quan sát của sensor.
+
+INVESTIGATION:
+DoH/DoT, raw UDP hoặc lưu lượng ngoài sensor có thể không xuất hiện trong dns.log.
+Zeek conn không xác định tiến trình sở hữu kết nối; cần log endpoint độc lập.
+Không chặn IP resolver hay máy nội bộ chỉ vì xuất hiện trong log. Bảo toàn
+bằng chứng và tham chiếu PB-EXT-DNS-TUNNELING cho bước phản ứng có điều kiện.

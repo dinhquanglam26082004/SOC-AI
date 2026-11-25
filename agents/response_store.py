@@ -46,11 +46,17 @@ class ResponseStore:
         return {**json.loads(row['payload']), 'id': row['id'], 'status': row['status'],
                 'created': row['created'], 'updated': row['updated']}
 
-    def create(self, alert_id, incident_id, plan):
+    def create(self, alert_id, incident_id, plan, *, if_absent=False):
         now = time.time()
         plan_id = 'RP-' + uuid.uuid4().hex
         payload = {**plan, 'alert_id': alert_id, 'incident_id': incident_id, 'decisions': []}
         with self._lock, self.connect() as db:
+            if if_absent:
+                db.execute('BEGIN IMMEDIATE')
+                existing = db.execute('SELECT * FROM response_plans WHERE alert_id=? AND incident_id=? ORDER BY created DESC LIMIT 1',
+                                      (alert_id, incident_id)).fetchone()
+                if existing:
+                    return self._row(existing)
             db.execute('INSERT INTO response_plans VALUES(?,?,?,?,?,?,?)',
                        (plan_id, alert_id, incident_id, now, now, 'proposed', json.dumps(payload, ensure_ascii=False)))
         return self.get(plan_id)
@@ -60,10 +66,14 @@ class ResponseStore:
             row = db.execute('SELECT * FROM response_plans WHERE id=?', (plan_id,)).fetchone()
         return self._row(row) if row else None
 
-    def latest(self, alert_id):
+    def latest(self, alert_id, incident_id=None):
         with self.connect() as db:
-            row = db.execute('SELECT * FROM response_plans WHERE alert_id=? ORDER BY created DESC LIMIT 1',
-                             (alert_id,)).fetchone()
+            if incident_id is None:
+                row = db.execute('SELECT * FROM response_plans WHERE alert_id=? ORDER BY created DESC LIMIT 1',
+                                 (alert_id,)).fetchone()
+            else:
+                row = db.execute('SELECT * FROM response_plans WHERE alert_id=? AND incident_id=? ORDER BY created DESC LIMIT 1',
+                                 (alert_id, incident_id)).fetchone()
         return self._row(row) if row else None
 
     def _save(self, db, plan, status):

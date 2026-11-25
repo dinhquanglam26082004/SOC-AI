@@ -1,70 +1,89 @@
 PLAYBOOK ID: PB-EXT-DNS-TUNNELING
 
 NAME:
-Đường hầm DNS, C2 và rò rỉ dữ liệu qua DNS
+DNS tunneling: điều tra và phản ứng
 
-Provenance: Tóm tắt tuyển chọn MITRE ATT&CK T1071.004 (Application Layer Protocol: DNS),
-T1048.003 (Exfiltration Over Alternative Protocol), T1572 (Protocol Tunneling),
-chiến lược phát hiện DET0400 và các biện pháp giảm thiểu M1037/M1031;
-được rà soát 2026-11-19.
-Sources: https://attack.mitre.org/techniques/T1071/004/ ,
-https://attack.mitre.org/techniques/T1048/003/ ,
-https://attack.mitre.org/techniques/T1572/ ,
-https://attack.mitre.org/mitigations/M1037/ và
-https://attack.mitre.org/mitigations/M1031/ .
-Chỉ dẫn, không phải bằng chứng sự cố.
+Provenance: Hướng dẫn điều tra riêng cho SOC-AI, tham khảo MITRE ATT&CK
+T1071.004, T1572, DET0400/AN1122, M1037 và M1031. Tài liệu là hướng dẫn,
+không phải bằng chứng sự cố. Rà soát: 2026-11-25.
+Nguồn:
+https://attack.mitre.org/techniques/T1071/004/
+https://attack.mitre.org/detectionstrategies/DET0400/
+https://attack.mitre.org/techniques/T1572/
+https://attack.mitre.org/mitigations/M1037/
+https://attack.mitre.org/mitigations/M1031/
 
 TRIGGER:
-MITRE ATT&CK T1071.004 Application Layer Protocol: DNS là kỹ thuật Command and
-Control (TA0011) trên Linux, Windows, macOS, Network Devices và ESXi. Đường hầm
-DNS mã hóa dữ liệu hoặc lệnh trong truy vấn và phản hồi DNS để che giấu C2
-và đưa dữ liệu vượt qua kiểm soát biên. Kỹ thuật này có điểm trùng với
-T1048.003 Exfiltration Over Alternative Protocol và T1572 Protocol Tunneling.
-Chỉ một truy vấn DNS không chứng minh dữ liệu đã bị đánh cắp hoặc lệnh đã chạy.
+Áp dụng khi có cảnh báo hoặc bằng chứng Zeek DNS cho thấy query loại hiếm,
+label dài hoặc chuỗi query đáng xem xét; ví dụ rule 100154, 100153, 100156,
+100157, 100181. Rule 100151 phản ánh NXDOMAIN hàng loạt và có thể do lỗi
+cấu hình. Một rule, loại NULL/TXT, label dài hoặc \xNN đơn lẻ không xác nhận
+tunnel, C2, mã độc hay rò rỉ. Xác nhận tên miền, vai trò máy và phạm vi.
+
+TRIGGER:
+Chỉ tham chiếu T1041 khi có bằng chứng dữ liệu được đưa ra qua kênh C2 hiện hữu
+(https://attack.mitre.org/techniques/T1041/). T1048.003 mô tả truyền dữ liệu qua
+giao thức không mã hóa khác kênh C2; không tự áp dụng cho mọi DNS tunnel
+(https://attack.mitre.org/techniques/T1048/003/).
 
 INVESTIGATION:
-1. Phát hiện hành vi (DET0400) dựa vào Network Traffic Content như Zeek dns.log;
-   phân tích trên Linux còn sử dụng dữ liệu tạo tiến trình. Khi có đường cơ sở
-   phù hợp, hãy so sánh số truy vấn, độ dài truy vấn, số tên miền phụ duy nhất,
-   loại bản ghi và mã phản hồi.
-2. Dấu hiệu điển hình của đường hầm gồm nhiều tên miền phụ phân biệt, có entropy
-   cao dưới một tên miền cha; loại bản ghi bất thường như NULL, TXT, CNAME hoặc MX;
-   tần suất truy vấn cao; và nhãn mã hóa dài. Không dấu hiệu nào đứng riêng lẻ
-   chứng minh hành vi độc hại.
-3. Xác định tên miền cha nhận các tên miền phụ ngẫu nhiên, máy chủ nguồn,
-   bộ phân giải hoặc đích, đồng thời kiểm tra truy vấn đi tới bộ phân giải nội bộ
-   hay một DNS authority bên ngoài bất thường. Các đích chỉ nội bộ và tên miền lab
-   làm thay đổi cách diễn giải.
-4. Loại trừ giải thích hợp lệ trước khi kết luận có đường hầm: mạng phân phối
-   nội dung, phần mềm bảo mật/quyền riêng tư và ứng dụng cấu hình sai có thể
-   tạo ra lưu lượng DNS ồn ào. Hãy hiệu chỉnh theo đường cơ sở DNS của doanh nghiệp
-   hoặc máy chủ thay vì áp dụng một ngưỡng phổ quát.
-5. Chỉ đối chiếu DNS với tiến trình tạo truy vấn, danh tính máy chủ, mốc thời gian
-   và bằng chứng truy cập tệp khi các trường đó thực sự được thu thập. Ghi nhận
-   cửa sổ quan sát, giới hạn, trường bị thiếu và hiện tượng bị cắt. Số bản ghi
-   lưu giữ không phải tập bắt đầy đủ và không đo chính xác lượng dữ liệu đã truyền.
+1. Phạm vi: đọc alert bằng get_alert; ghi rule, Agent, thời gian và IP nguồn,
+IP đích, cổng, query, qtype, rcode. Phân biệt IP Agent/Victim với DNS resolver
+hoặc server nhận query. Ghi timezone và ID bằng chứng. Xác minh server hay
+resolver là đích cần phân tích; không mặc định IP đích là attacker.
+
+2. Bảo toàn mẫu Zeek dns.log và conn.log đã thu thập. Kiểm tra sensor, thời
+gian, độ trễ, log bị cắt, trùng hoặc thiếu trường. DNS qua DoH/DoT, raw UDP,
+gói bị mất hoặc lưu lượng ngoài vị trí sensor có thể không hiện trong dns.log.
+
+INVESTIGATION:
+3. Dùng summarize_dns_activity khi có domain và phạm vi chính xác: ghi số bản
+ghi đã lưu, số tên query, loại query, mã phản hồi, số theo phút và thời điểm đầu,
+cuối. Có thể tồn tại bản trùng; không coi số bản ghi là số gói hoặc tổng DNS
+thực. Độ dài tool tính theo chuỗi query đã lưu, không mặc định là độ dài label
+hay số byte trên mạng. Tool có thể báo không khả dụng nếu vượt giới hạn xử lý.
+
+INVESTIGATION:
+4. Dùng search_zeek_dns để xem mẫu query, response và UID trong đúng phạm vi.
+query là tên đầy đủ; domain_suffix tìm domain và subdomain. Cần xác minh domain
+cha: payload iodine có thể trải qua nhiều label và cách bỏ một label đầu không
+phải lúc nào cũng xác định đúng domain. NOERROR, NULL hoặc \xNN không tự chứng
+minh dữ liệu đã được truyền hay lệnh đã chạy.
+
+INVESTIGATION:
+5. So sánh bằng compare_dns_baseline nếu có hai cửa sổ bằng nhau, không chồng
+lấn và cùng phạm vi điều tra. Đây là đối chiếu ngắn trên log đã lưu, không phải
+baseline nhiều ngày. Kết quả rỗng hoặc thiếu không chứng minh bình thường.
+
+6. Đối chiếu search_zeek_connections và search_related_alerts theo Agent, IP,
+thời gian. conn.log là quan sát lịch sử; công cụ tìm kết nối hiện không gán PID
+và không lọc cổng. Không suy ra quy trình nào tạo DNS chỉ từ liên hệ thời gian.
+
+INVESTIGATION:
+7. Tìm search_process_events, search_file_changes, search_file_access và
+search_privilege_events khi phù hợp. Các tool chỉ đọc dữ liệu đã thu thập:
+audit_command cho tiến trình, audit_watch_read cho file read, syscheck cho file
+thay đổi. Không có kết quả có thể do thiếu nguồn; FIM không chứng minh file đã
+được đọc. Không suy ra C2, lệnh hoặc tên file bị lộ nếu không có bằng chứng.
+
+INVESTIGATION:
+8. Ghi rõ dữ kiện ủng hộ, dữ kiện phản đối và phần chưa biết; đối chiếu hoạt
+động hợp lệ, phần mềm an ninh/CDN, resolver nội bộ, lab có cho phép và cấu hình
+sai. Nếu không đủ nguồn hoặc không xác minh được, báo chưa đủ kết luận. Tài liệu
+hướng dẫn không thay thế log gốc và không làm tăng số bằng chứng.
 
 RESPONSE:
-1. M1037 Filter Network Traffic: lọc các đích DNS không tin cậy và định tuyến
-   máy trạm qua bộ phân giải nội bộ hoặc proxy DNS được kiểm soát, đồng thời
-   tránh làm gián đoạn dịch vụ hợp lệ. Chặn tên miền cha bị lạm dụng là biện
-   pháp phạm vi hẹp, khả thi và có thể đảo ngược.
-2. M1031 Network Intrusion Prevention: triển khai và tinh chỉnh chữ ký phát hiện,
-   ngăn chặn đường hầm DNS ở những nơi nền tảng hỗ trợ.
-3. Nếu xác định tiến trình máy trạm tạo đường hầm trên máy chủ, hãy xác định
-   phạm vi trước khi hành động: ghi lại tiến trình và tiến trình cha, sau đó
-   dừng tiến trình dưới cơ chế phê duyệt. Coi đường hầm đang chạy là C2 đang
-   hoạt động và xem xét cách ly máy chủ.
-4. Trước mọi biện pháp, cần nêu rõ đối tượng, thời lượng, hiệu ứng dự kiến,
-   tác động dịch vụ, giám sát và hoàn tác. Các biện pháp này không tự chứng minh
-   rằng rò rỉ dữ liệu đã xảy ra.
+1. Bảo toàn log DNS, kết nối và endpoint; ghi ID và thời gian.
+2. Giám sát máy và domain; kiểm tra log thiếu, trùng.
+3. Nếu xác minh domain độc hại, cân nhắc chặn domain có thời hạn và hoàn tác.
+4. Chỉ chặn IP đích đã xác minh độc hại; không mặc định chặn Victim hay resolver.
+5. Nếu xác nhận xâm nhập, cân nhắc cô lập máy sau khi đánh giá tác động và phê duyệt.
+6. Sau khi bảo toàn bằng chứng, cân nhắc dừng tiến trình hoặc vô hiệu service đã xác minh; cần phê duyệt.
+7. Kiểm tra dịch vụ, giám sát tái diễn và ghi phương án hoàn tác.
 
 ESCALATION:
-Bảo toàn ID sự kiện và nguồn, mốc thời gian, mẫu DNS, phạm vi truy vấn,
-tên miền cha, bằng chứng trên máy trạm và kết quả lab đã xác minh. Chuyển
-cho phân tích viên khi chưa xác định được chủ sở hữu tiến trình, còn khoảng
-trống trong khả năng quan sát DNS hoặc nghi ngờ đã truyền dữ liệu. Chỉ dựa
-vào Zeek DNS không chứng minh lệnh đã được thực thi, tệp đã truy cập hoặc
-nội dung và lượng dữ liệu đã rò rỉ. Cần phê duyệt của con người trước khi
-chặn tên miền/đích, cách ly máy chủ hoặc dừng tiến trình. Playbook này không
-tự động thực thi hành động ứng phó nào.
+Chuyển chuyên viên khi chưa xác minh chủ sở hữu máy, domain, tiến trình, phạm
+vi hoặc tác động; hoặc thiếu nguồn để phân biệt hoạt động hợp lệ và xâm nhập.
+Đề xuất phải trích evidence ID và passage playbook tương ứng. Với biện pháp
+gây gián đoạn, xác minh mục tiêu, tác động và phê duyệt trước khi thực hiện.
+Playbook là hướng dẫn, không tự chặn, cô lập hoặc thực thi lệnh.

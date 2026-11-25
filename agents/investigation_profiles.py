@@ -7,6 +7,7 @@ schema consumes prompt space that would otherwise carry evidence.
 Set AI_TOOL_ROUTING=false to offer every tool (previous behaviour).
 """
 import os
+import re
 from datetime import datetime, timedelta, timezone
 
 # Tools usable for every alert in addition to the category tools.
@@ -132,16 +133,27 @@ def _query(alert):
 
 
 def parent_domain(query):
-    """Strip the leftmost (data-carrying) label: vaaaakaq3eq.tunnel.lab.local -> tunnel.lab.local.
+    """Infer a bounded ASCII suffix, not an authoritative registrable domain.
 
-    Keep at least two labels so a bare TLD is never used as the aggregation suffix.
+    Zeek may render bytes as literal \\xNN sequences. An iodine payload can
+    occupy several leading labels, so discard unsafe leading labels as well as
+    the first label. Never truncate a name or return a single-label suffix.
     """
+    if not isinstance(query, str):
+        return None
+    query = query.strip().lower().rstrip('.')
     if not query or query.endswith('.arpa'):
         return None
-    labels = [p for p in query.split('.') if p]
-    if len(labels) < 3:
-        return '.'.join(labels) if len(labels) == 2 else None
-    return '.'.join(labels[1:])
+    labels = query.split('.')
+    if len(labels) < 2 or any(not label for label in labels):
+        return None
+    if len(labels) >= 3:
+        labels = labels[1:]
+    valid = lambda label: re.fullmatch(r'[a-z0-9_-]{1,63}', label) is not None
+    while len(labels) >= 2 and (not all(valid(label) for label in labels) or len('.'.join(labels)) > 253):
+        labels = labels[1:]
+    suffix = '.'.join(labels)
+    return suffix if len(labels) >= 2 and len(suffix) >= 3 else None
 
 
 def _stamp(value):
@@ -164,7 +176,12 @@ def baseline_calls(alert, scope_since, scope_until):
         return []
     domain = parent_domain(_query(alert))
     if not domain:
-        return []
+        # No trustworthy suffix: return scoped DNS samples without inventing a
+        # domain or passing malformed values to the aggregate/baseline tools.
+        args = {'limit': 30}
+        if alert.get('src_ip'):
+            args['ip'] = str(alert['src_ip'])
+        return [('search_zeek_dns', args)]
     anchor = datetime.fromisoformat(alert['timestamp'].replace('Z', '+00:00'))
     lo = datetime.fromisoformat(scope_since.replace('Z', '+00:00'))
     hi = datetime.fromisoformat(scope_until.replace('Z', '+00:00'))
