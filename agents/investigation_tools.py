@@ -132,7 +132,8 @@ DESCRIPTIONS = {
     'search_zeek_connections': (
         'For scan, DoS or DNS activity, e.g. rules 100141/100142/100143/100145, '
         'inspect retained Zeek conn flows and bytes. Scoped IP matches either endpoint; '
-        'there is no port filter. Rows are bounded historical observations, not live sockets.'),
+        'the IP must come from the alert or collected evidence; omit it if unknown. '
+        'There is no port filter. Rows are bounded historical observations, not live sockets.'),
     'summarize_zeek_flows': (
         'For single-source TCP bursts, e.g. rule 100142, aggregate retained flows, '
         'packets and IP bytes and their average rates. Source, destination and port must '
@@ -169,7 +170,9 @@ DESCRIPTIONS = {
     'search_privilege_events': (
         'For suspicious sudo/su or escalation around any alert, inspect retained sudo/su '
         'records. actor_user matches srcuser and target_user matches dstuser; they are '
-        'different identities. A request or failure alone does not prove execution.'),
+        'different identities. When IP is the alert agent IP, include its local sudo/su '
+        'records without network IP fields. This does not prove that an IP was recorded '
+        'in those events. A request or failure alone does not prove execution.'),
     'search_account_events': (
         'For Linux account or group changes, especially rules 5901/101200/101201/101202, '
         'find retained account creation and group membership alerts for this agent and time window. '
@@ -503,6 +506,13 @@ class LocalTools:
             if name == 'search_rootkit_evidence':
                 return self.rootkit_evidence(args, min(timeout or self.seconds, self.seconds,),)
             deadline=time.monotonic()+min(timeout or self.seconds,self.seconds)
+            agent_ip_filter=False
+            if name=='search_privilege_events' and args.get('ip'):
+                try:
+                    agent_ip_filter=(ipaddress.ip_address(args['ip']) ==
+                                     ipaddress.ip_address(str((self.alert.get('agent') or {}).get('ip') or '')))
+                except ValueError:
+                    pass
             # mode=ro and query_only enforce the read-only boundary independently of tool arguments.
             db=sqlite3.connect(Path(self.store.path).resolve().as_uri()+'?mode=ro',uri=True,timeout=.5)
             try:
@@ -539,6 +549,11 @@ class LocalTools:
                 if args['ip']:
                     if name=='search_auth_events':
                         where.append('i.src_ip=?'); params.append(args['ip'])
+                    elif agent_ip_filter:
+                        # A local sudo event belongs to this Agent even when no
+                        # network endpoints were present in the source log.
+                        where.append('(i.src_ip=? OR i.dst_ip=? OR (i.src_ip IS NULL AND i.dst_ip IS NULL))')
+                        params.extend([args['ip'],args['ip']])
                     else:
                         where.append('(i.src_ip=? OR i.dst_ip=?)'); params.extend([args['ip'],args['ip']])
                 if args.get('username'):
@@ -609,6 +624,10 @@ class LocalTools:
                     {'source':'derived-soc-sqlite','event_time':until,'authentication_summary':auth_summary},name,args)
             result.update(total_matched=total,returned_count=len(result['items']),
                 count_unit='Retained records matching this query; not unique sessions or proof of collection completeness.')
+            if agent_ip_filter:
+                result['scope_interpretation']=('IP là địa chỉ của Agent trong cảnh báo. Bao gồm log sudo/su cục bộ '
+                    'của Agent không có trường IP nguồn hoặc đích; không suy ra IP đã xuất hiện trong log đó.')
+                result['coverage'] += ' ' + result['scope_interpretation']
             if name=='search_process_events':
                 result['coverage']=('Only retained Wazuh events with rule.groups containing audit_command '
                     'for this agent and time window. This is not live process enumeration or a general '

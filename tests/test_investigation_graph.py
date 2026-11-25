@@ -657,6 +657,58 @@ def test_zeek_connections_are_historical_observations_without_process_inference(
     assert store.queue_stats()=={}
 
 
+def test_connection_search_recovers_from_ungrounded_model_ip_with_audited_scope(lab, monkeypatch):
+    monkeypatch.setenv('AI_TOOL_ROUTING','false')
+    store,audit,trigger,_=lab
+    conn=map_wazuh_alert({'id':'conn-fallback','timestamp':trigger['timestamp'],
+        'agent':trigger['agent'],'manager':{'name':'lab'},'location':'/opt/zeek/logs/current/conn.log',
+        'rule':{'id':'100120','level':3,'description':'Zeek connection','groups':['zeek_telemetry']},
+        'data':{'uid':'C-fallback','id.orig_h':'198.51.100.8','id.resp_h':'192.0.2.7',
+                'id.resp_p':22,'proto':'tcp','conn_state':'S0'}})
+    store.accept(conn,False)
+    messages=[]
+    def client(history,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        messages.append(deepcopy(history))
+        if len(messages)==1:
+            return {'message':{'content':'','tool_calls':[{'function':{'name':'search_zeek_connections',
+                'arguments':{'ip':'10.10.10.10','agent_id':'007'}}}]}}
+        return {'message':{'content':'Không cần thêm công cụ.'}}
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    item=next(o for o in result['tool_outcomes'] if o['tool']=='search_zeek_connections')
+    assert item['status']=='ok' and item['query']['ip']=='198.51.100.8'
+    assert item['scope_adjustment']=={'requested_ip':'10.10.10.10','effective_ip':'198.51.100.8',
+                                     'source':'alert.src_ip','reason':'requested_ip_not_in_incident_evidence'}
+    audit_item=next(i for i in audit.detail(result['incident_id'],'activity',limit=100)['items']
+                    if i.get('name')=='search_zeek_connections')
+    assert audit_item['query']['ip']=='198.51.100.8' and audit_item['scope_adjustment']==item['scope_adjustment']
+    response=next(json.loads(m['content']) for m in messages[1] if m.get('tool_name')=='search_zeek_connections')
+    assert response['scope_adjustment']==item['scope_adjustment']
+    # The lower-level API continues rejecting an IP without incident evidence.
+    direct=LocalTools(store,audit,result['incident_id'],trigger)
+    assert direct.execute('search_zeek_connections',{'ip':'10.10.10.10'})['error']=='invalid_scope_or_arguments'
+
+
+def test_connection_search_does_not_invent_scope_if_alert_has_no_ip(lab, monkeypatch):
+    monkeypatch.setenv('AI_TOOL_ROUTING','false')
+    store,audit,trigger,_=lab
+    trigger=deepcopy(trigger)
+    trigger.update(src_ip=None,dst_ip=None,agent={'id':'007','name':'test-agent'})
+    def client(history,**kwargs):
+        incident=audit.current(trigger['id'])['id']
+        if kwargs.get('schema'):
+            return {'message':{'content':json.dumps(report(audit,incident))}}
+        if any(m.get('role')=='tool' for m in history):
+            return {'message':{'content':'Không đủ thông tin.'}}
+        return {'message':{'content':'','tool_calls':[{'function':{'name':'search_zeek_connections',
+            'arguments':{'ip':'10.10.10.10'}}}]}}
+    result=InvestigationGraph(store,audit,client=client,limits=Limits(progress_mode=True)).run_alert(trigger)
+    item=next(o for o in result['tool_outcomes'] if o['tool']=='search_zeek_connections')
+    assert item['error']=='invalid_scope_or_arguments' and 'scope_adjustment' not in item
+
+
 def test_graph_failure_never_silently_calls_legacy(lab):
     store,audit,trigger,_=lab
     with patch('agents.investigation_graph.InvestigationGraph.run_alert',side_effect=WorkflowError('invalid_report','test')), \

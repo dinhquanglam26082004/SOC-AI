@@ -148,6 +148,25 @@ def test_privilege_actor_target_and_pam_sudo_records(sources):
     assert tools.execute('search_privilege_events',{})['total_matched']==2
 
 
+def test_privilege_agent_ip_includes_only_scoped_ipless_local_records(sources):
+    _,_,_,tools,add,_=sources
+    local=add(data={'srcuser':'operator','dstuser':'root'},decoder={'name':'sudo'},
+              rule={'id':'5402','level':3,'description':'Successful sudo','groups':['sudo']})
+    add(data={'srcuser':'operator','dstuser':'other'},decoder={'name':'sudo'},
+        rule={'id':'5402','level':3,'description':'Successful sudo','groups':['sudo']})
+    add(data={'srcuser':'operator','dstuser':'root','srcip':'198.51.100.9'},decoder={'name':'sudo'},
+        rule={'id':'5402','level':3,'description':'Successful sudo','groups':['sudo']})
+    add(data={'srcuser':'operator','dstuser':'root'},decoder={'name':'sudo'},
+        agent={'id':'002','name':'other','ip':'192.0.2.8'},
+        rule={'id':'5402','level':3,'description':'Successful sudo','groups':['sudo']})
+    result=tools.execute('search_privilege_events',{'ip':'192.0.2.7','target_user':'root'})
+    assert result['status']=='ok' and result['total_matched']==1
+    assert result['items'][0]['id']==local['id']
+    assert 'không có trường IP' in result['scope_interpretation']
+    assert result['items'][0]['src_ip'] is None and result['items'][0]['dst_ip'] is None
+    assert tools.execute('search_privilege_events',{'ip':'203.0.113.99'})['error']=='invalid_scope_or_arguments'
+
+
 def test_details_require_collected_event_and_preserve_evidence_identity(sources):
     store,audit,incident,tools,add,trigger=sources
     other=add(syscheck={'path':'/etc/other.conf'})

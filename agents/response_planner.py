@@ -16,6 +16,7 @@ import re
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
+from agents.response_safety import block_ip_reason
 
 ActionName = Literal['block_domain', 'block_ip', 'isolate_host', 'kill_process', 'disable_service',
                      'disable_account', 'collect_forensics', 'increase_monitoring']
@@ -153,6 +154,10 @@ def gate(drafts, *, verdict, evidence, alert):
             reasons.append('Mục tiêu không xuất hiện trong bằng chứng được dẫn hoặc cảnh báo gốc.')
         if verdict != 'malicious' and draft['action'] not in LOW_IMPACT:
             reasons.append('Hành động gây gián đoạn chỉ được đề xuất khi verdict là malicious.')
+        if draft['action'] == 'block_ip':
+            reason = block_ip_reason(target, alert)
+            if reason:
+                reasons.append(reason)
         out.append({
             'id': f'A{index + 1}', 'action': draft['action'], 'target': target, 'reason': draft['reason'],
             'evidence_ids': cited, 'guidance_ids': list(draft.get('guidance_ids') or []), 'phase': spec['phase'], 'impact': spec['impact'],

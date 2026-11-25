@@ -683,13 +683,18 @@ def create_app(db_path=None, workers=True):
         plan = app.state.response_store.latest(alert_id, current['id'] if current else None)
         if not plan:
             raise HTTPException(404, 'Chưa có kế hoạch phản ứng cho cảnh báo này')
-        return plan
+        from agents.response_safety import safe_plan_view
+        return safe_plan_view(plan, app.state.store.get(alert_id))
 
     @app.post('/api/response/plans/{plan_id}/decision')
     def response_decision(plan_id: str, body: ResponseDecision):
         from agents.response_store import PlanConflict
+        from agents.response_safety import safe_plan_view
         try:
-            return app.state.response_store.decide(plan_id, body.approve, body.decline, body.notes)
+            existing = app.state.response_store.get(plan_id)
+            alert = app.state.store.get(existing['alert_id']) if existing else None
+            plan = app.state.response_store.decide(plan_id, body.approve, body.decline, body.notes, alert=alert)
+            return safe_plan_view(plan, alert)
         except KeyError:
             raise HTTPException(404, 'Plan not found')
         except PlanConflict as exc:
@@ -701,7 +706,9 @@ def create_app(db_path=None, workers=True):
         from agents.response_store import PlanConflict
         from common.runtime_store import RuntimeStore
         try:
-            return app.state.response_store.execute(body.plan_id, RuntimeStore(app.state.store.path))
+            existing = app.state.response_store.get(body.plan_id)
+            alert = app.state.store.get(existing['alert_id']) if existing else None
+            return app.state.response_store.execute(body.plan_id, RuntimeStore(app.state.store.path), alert=alert)
         except KeyError:
             raise HTTPException(404, 'Plan not found')
         except PlanConflict as exc:

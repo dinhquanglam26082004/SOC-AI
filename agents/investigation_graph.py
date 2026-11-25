@@ -1,5 +1,6 @@
 """Bounded evidence investigation with durable LangGraph checkpoints and independent audit."""
 import hashlib
+import ipaddress
 import json
 import os
 from pathlib import Path
@@ -136,13 +137,35 @@ class InvestigationGraph:
             self.on_progress(node,step,summary)
 
     def tool(self,name,args,explanation=None):
+        normalized=True
         try:
             canonical=self.tools.normalized_args(name,args) if name in MODELS else args
         except (ValueError,TypeError):
+            normalized=False
             canonical=args  # Invalid arguments retain their own auditable identity.
         ip=canonical.get('ip') if isinstance(canonical,dict) else None
-        ip_authorized=(ip in self.tools.scoped_ips()) if ip is not None else None
-        key='tool-'+hashlib.sha256(encode([name,canonical,self.tools.agent,self.tools.since,self.tools.until,ip_authorized]).encode()).hexdigest()[:32]
+        scoped_ips=self.tools.scoped_ips() if ip is not None else set()
+        ip_authorized=(isinstance(ip,str) and ip in scoped_ips) if ip is not None else None
+        adjustment=None
+        if normalized and name=='search_zeek_connections' and isinstance(ip,str) and not ip_authorized and isinstance(canonical,dict):
+            # Do not search an invented IP or silently claim it was checked.
+            # Fall back only to an IP explicitly present on the triggering alert.
+            for source,value in (('alert.src_ip',self.alert.get('src_ip')),
+                                 ('alert.agent.ip',(self.alert.get('agent') or {}).get('ip'))):
+                try:
+                    observed=str(ipaddress.ip_address(str(value)))
+                except ValueError:
+                    continue
+                if observed in scoped_ips:
+                    adjustment={'requested_ip':ip,'effective_ip':observed,'source':source,
+                                'reason':'requested_ip_not_in_incident_evidence'}
+                    canonical={**canonical,'ip':observed}
+                    ip_authorized=True
+                    break
+        identity=[name,canonical,self.tools.agent,self.tools.since,self.tools.until,ip_authorized]
+        if adjustment:
+            identity.append(adjustment)
+        key='tool-'+hashlib.sha256(encode(identity).encode()).hexdigest()[:32]
         cached=self.audit.completed_call(self.id,key)
         if cached is not None:
             return {**cached,'call_disposition':'cached' if cached['status'] in {'ok','empty','truncated'} else 'blocked',
@@ -155,6 +178,8 @@ class InvestigationGraph:
             if remaining<=0:
                 return self.tools.envelope('unavailable',error='time_budget')
             result=self.tools.execute(name,canonical,timeout=min(remaining,self.limits.tool_seconds))
+            if adjustment:
+                result={**result,'scope_adjustment':adjustment}
             if explanation:
                 result={**result,'model_explanation':explanation}
             disposition=('executed' if result['status'] in {'ok','empty','truncated'} else
@@ -241,7 +266,7 @@ class InvestigationGraph:
                     'username':self.alert.get('username'),'source_ip':self.alert.get('src_ip'),
                     'event_time':trigger_time,'event_time_local':trigger_time_local},
                 **packed,
-                'tool_outcomes':[{k:v for k,v in o.items() if k in {'tool','status','error','count','total_matched','truncated','coverage','automatic','call_disposition','call_reason','relevance','investigation_question','evidence_needed'}}
+                'tool_outcomes':[{k:v for k,v in o.items() if k in {'tool','status','error','count','total_matched','truncated','coverage','automatic','call_disposition','call_reason','relevance','investigation_question','evidence_needed','scope_adjustment','scope_interpretation'}}
                     for o in state.get('observations',[])[-20:]],
                 'hypotheses':state.get('hypotheses',[])[:3],
                 'verification':state.get('review',{}),
@@ -364,11 +389,17 @@ class InvestigationGraph:
                 if exc.code!='tool_budget': raise
                 stop='tool_budget'; result=self.tools.envelope('unavailable',error=stop,
                     call_disposition='blocked',call_reason=stop)
+            if result.get('scope_adjustment') and isinstance(query,dict):
+                query={**query,'ip':result['scope_adjustment']['effective_ip']}
             observations.append({'tool':pending['name'],'query':query,'status':result['status'],
                                  'error':result.get('error'),'count':len(result.get('items',[])),
                                  'truncated':result.get('truncated',False),
                                  'call_disposition':result.get('call_disposition'),
                                  'call_reason':result.get('call_reason')})
+            if result.get('scope_adjustment'):
+                observations[-1]['scope_adjustment']=result['scope_adjustment']
+            if result.get('scope_interpretation'):
+                observations[-1]['scope_interpretation']=result['scope_interpretation']
             if result.get('coverage'):
                 observations[-1]['coverage']=result['coverage']
             if listener_change(self.alert):
@@ -399,6 +430,8 @@ class InvestigationGraph:
                     'guidance_only':result.get('guidance_only',False),
                     'returned_count':len(result.get('items',[])),
                     'total_matched':result.get('total_matched'),
+                    'scope_adjustment':result.get('scope_adjustment'),
+                    'scope_interpretation':result.get('scope_interpretation'),
                     'call_disposition':result.get('call_disposition'),'call_reason':result.get('call_reason'),
                     'evidence_ids':[e['evidence_id'] for e in result.get('items',[])]})})
         if not self.limits.progress_mode and state['round']>=self.limits.rounds:

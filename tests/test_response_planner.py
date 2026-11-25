@@ -102,6 +102,19 @@ def test_host_must_be_the_alert_agent_and_protected_targets_are_refused(monkeypa
     assert out[('isolate_host', '192.168.19.129')]['status'] == 'proposed'
 
 
+def test_block_ip_rejects_agent_and_unknown_agent_but_not_other_evidenced_ip():
+    alert = dns_alert()
+    results = by_target(gate([draft('block_ip','192.168.19.129'),draft('block_ip','192.168.19.130')],
+                             verdict='malicious',evidence=evidence_items(),alert=alert))
+    assert results[('block_ip','192.168.19.129')]['status'] == 'rejected'
+    assert any('Agent' in reason for reason in results[('block_ip','192.168.19.129')]['policy_reasons'])
+    assert results[('block_ip','192.168.19.130')]['status'] == 'proposed'
+    unknown = {**alert, 'agent': {'id': '001'}}
+    result = gate([draft('block_ip','192.168.19.130')],verdict='malicious',
+                  evidence=evidence_items(),alert=unknown)[0]
+    assert result['status'] == 'rejected' and any('Không xác định' in r for r in result['policy_reasons'])
+
+
 def test_duplicates_removed_and_order_follows_ir_phases():
     out = gate([draft('isolate_host', '001'), draft('block_domain', 'tunnel.lab.local'),
                 draft('block_domain', 'TUNNEL.lab.local'), draft('collect_forensics', '001', refs=[]),
@@ -282,6 +295,27 @@ def test_current_investigation_does_not_load_previous_plan(api):
     old=app.state.response_store.create(alert['id'],'INV-older',{'actions':[]})
     assert old['id'] and incident != 'INV-older'
     assert client.get(f"/api/alerts/{alert['id']}/response/plan").status_code == 404
+
+
+def test_legacy_plan_cannot_approve_or_simulate_agent_ip(api):
+    client, app, alert, incident, _ = api
+    guidance = prepare_guidance(playbook())
+    action = {'id':'A1', 'action':'block_ip', 'target':AGENT['ip'], 'status':'proposed',
+              'guidance_ids':['G1'], 'policy_reasons':[]}
+    plan = app.state.response_store.create(alert['id'],incident,{'actions':[action], 'knowledge_guidance':guidance})
+    displayed = client.get(f"/api/alerts/{alert['id']}/response/plan").json()
+    assert displayed['actions'][0]['status'] == 'rejected'
+    assert 'Agent' in displayed['actions'][0]['policy_reasons'][0]
+    assert app.state.response_store.get(plan['id'])['actions'][0]['status'] == 'proposed'
+    origin = {'Origin':'http://localhost:8100'}
+    decision = client.post(f"/api/response/plans/{plan['id']}/decision",headers=origin,json={'approve':['A1']})
+    assert decision.status_code == 409 and 'Agent' in decision.text
+    # Even a legacy plan saved as approved cannot bypass the guard at execution.
+    action['status'] = 'approved'
+    approved = app.state.response_store.create(alert['id'],incident,{'actions':[action], 'knowledge_guidance':guidance})
+    result = client.post('/api/response/execute',headers=origin,json={'plan_id':approved['id']})
+    assert result.status_code == 409 and 'Agent' in result.text
+    assert client.get('/api/response/history').json()['history'] == []
 
 
 def test_api_refuses_live_mode_benign_verdict_and_missing_investigation(api, monkeypatch):

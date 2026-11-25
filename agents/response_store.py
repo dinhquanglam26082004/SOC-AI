@@ -10,6 +10,7 @@ import threading
 import time
 import uuid
 from pathlib import Path
+from agents.response_safety import block_ip_reason
 
 
 class PlanConflict(ValueError):
@@ -82,7 +83,7 @@ class ResponseStore:
         db.execute('UPDATE response_plans SET payload=?, status=?, updated=? WHERE id=?',
                    (json.dumps(payload, ensure_ascii=False), status, now, plan['id']))
 
-    def decide(self, plan_id, approve, decline, notes='', actor='local-analyst'):
+    def decide(self, plan_id, approve, decline, notes='', actor='local-analyst', alert=None):
         with self._lock, self.connect() as db:
             db.execute('BEGIN IMMEDIATE')
             row = db.execute('SELECT * FROM response_plans WHERE id=?', (plan_id,)).fetchone()
@@ -100,6 +101,10 @@ class ResponseStore:
                     raise PlanConflict('Không có hành động ' + action_id + ' trong kế hoạch.')
                 if action_id in approve and actions[action_id]['status'] == 'rejected':
                     raise PlanConflict(f'Hành động {action_id} đã bị cổng chính sách chặn; không thể duyệt.')
+                if action_id in approve and actions[action_id].get('action') == 'block_ip':
+                    reason = block_ip_reason(actions[action_id].get('target'), alert)
+                    if reason:
+                        raise PlanConflict(reason)
                 if action_id in approve and not has_guidance(plan, actions[action_id]):
                     raise PlanConflict(f'Hành động {action_id} chưa có trích dẫn playbook hợp lệ; hãy lập lại kế hoạch.')
             for action_id in approve:
@@ -112,7 +117,7 @@ class ResponseStore:
             self._save(db, plan, 'reviewed')
         return self.get(plan_id)
 
-    def execute(self, plan_id, history_store, actor='local-analyst'):
+    def execute(self, plan_id, history_store, actor='local-analyst', alert=None):
         mode = os.getenv('RESPONSE_EXECUTION_MODE', 'simulate').lower()
         if mode != 'simulate':
             raise NotImplementedError('Chỉ hỗ trợ chế độ mô phỏng; chưa cấu hình adapter thực thi thật.')
@@ -127,6 +132,11 @@ class ResponseStore:
             approved = [a for a in plan['actions'] if a['status'] == 'approved']
             if not approved:
                 raise PlanConflict('Chưa có hành động nào được analyst duyệt.')
+            for action in approved:
+                if action.get('action') == 'block_ip':
+                    reason = block_ip_reason(action.get('target'), alert)
+                    if reason:
+                        raise PlanConflict(reason)
             if any(not has_guidance(plan, action) for action in approved):
                 raise PlanConflict('Kế hoạch có hành động chưa dẫn playbook hợp lệ; hãy lập lại kế hoạch.')
             now = time.time()

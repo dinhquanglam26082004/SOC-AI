@@ -217,6 +217,13 @@ vm.runInNewContext(activitySource+'\nthis.activity=activityHTML;',scope);
 const activity=scope.activity({kind:'tool',name:'search_auth_events',state:'completed',
   started:1,finished:2,query:{since:eventTime,until:collectedAt}},0);
 assert.match(activity,/From LOCAL\(2026-11-20T08:00:00Z\).*To LOCAL\(2026-11-20T08:01:00Z\)/);
+const corrected=scope.activity({kind:'tool',name:'search_zeek_connections',state:'completed',outcome:'ok',
+  query:{ip:'192.168.19.129'},scope_adjustment:{requested_ip:'10.10.10.10',effective_ip:'192.168.19.129',source:'alert.src_ip'}},0);
+assert.match(corrected,/10\.10\.10\.10.*không có trong bằng chứng/);
+assert.match(corrected,/192\.168\.19\.129.*không xác minh IP model yêu cầu/);
+const localScope=scope.activity({kind:'tool',name:'search_privilege_events',state:'completed',outcome:'ok',
+  scope_interpretation:'Bao gồm log sudo cục bộ không có trường IP.'},0);
+assert.match(localScope,/Phạm vi:.*không có trường IP/);
 console.log('Investigation timestamps use local display; stored evidence JSON remains UTC.');
 scope.responsePlans['alert-1']={id:'RP-1',status:'proposed',verdict:'malicious',verdict_source:'model_report',summary:'Plan <b>x</b>',note:'n',
   knowledge_guidance:{playbook_id:'PB-DNS',title:'DNS response',source:'dns.txt',sha256:'abc',passages:[{id:'G1',section:'RESPONSE',text:'Filter the domain <script>x</script>'}]},

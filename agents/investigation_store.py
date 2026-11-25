@@ -307,6 +307,8 @@ class InvestigationStore:
         if row['kind']=='tool':
             item.update(query=json.loads(row['args']),outcome=result.get('status'),
                         result_count=len(result.get('items',[])),error=result.get('error'),
+                        scope_adjustment=result.get('scope_adjustment'),
+                        scope_interpretation=result.get('scope_interpretation'),
                         model_explanation=result.get('model_explanation') or {},
                         evidence_ids=[e['evidence_id'] for e in result.get('items',[]) if 'evidence_id' in e])
             if result.get('authentication_summary'):
