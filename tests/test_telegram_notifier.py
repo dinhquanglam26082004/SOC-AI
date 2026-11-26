@@ -120,10 +120,14 @@ def test_authentication_message_shows_scoped_evidence_and_truncation():
         'agent': {'name': 'ubuntu', 'ip': '192.0.2.4'}, 'username': 'victim',
         'investigation_report': {'tool_outcomes': [{'tool': 'search_auth_events', 'status': 'truncated',
             'count': 2, 'total_matched': 15, 'authentication_summary': {'groups': [
-                {'username': 'victim', 'source_ip': '192.0.2.7', 'failure_count': 3, 'success_count': 0, 'unknown_count': 1}]}}]}})
-    assert 'victim · 192.0.2.7: thất bại: 3 | thành công: 0 | không rõ: 1' in msg
+                {'username': 'victim', 'source_ip': '192.0.2.7', 'failure_count': 1,
+                 'failure_record_count': 3, 'success_count': 0,
+                 'success_record_count': 0, 'unclassified_failure_record_count': 2,
+                 'unknown_count': 1}]}}]}})
+    assert 'victim · 192.0.2.7: lần thử xác nhận thất bại: 1 | bản ghi thất bại: 3 | lần thành công: 0 | bản ghi thành công: 0 | không rõ: 1' in msg
+    assert 'chưa quy thành lần thử' not in msg
     assert 'search_auth_events (bị cắt)' in msg
-    assert 'Một số kết quả bị cắt' in msg and 'không nhất thiết là số lần thử duy nhất' in msg
+    assert 'Một số kết quả bị cắt' in msg and 'PAM/alert tổng hợp là bằng chứng liên quan, không được cộng thêm thành lần thử' in msg
 
 
 def test_skipped_repeat_is_not_reported_as_a_second_tool_execution():

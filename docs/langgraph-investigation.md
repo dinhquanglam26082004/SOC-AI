@@ -64,12 +64,12 @@ Confidence, when provided, is a model estimate, not calibrated probability.
   to the planner, and records its decision. Repeated questions and original
   configured limits or the no-new-evidence guard bound the loop. Review is part of the planner's
   existing model calls, not a mandatory additional model call every round.
-- Authentication tool results include exact retained-record aggregates per
-  agent, exact username and source IP, independent of the displayed row limit.
-  Outcome classification uses explicit rule groups, Windows event IDs and known
-  SSH decoder messages; unknown/contradictory outcomes remain unknown. A strict
-  earlier-failure/later-success flag does not assert compromise. Counts describe
-  retained normalized records, not unique sessions or complete source coverage.
+- Authentication tool results include exact retained-record and confirmed
+  attempt counts per agent, exact username and source IP, independent of the
+  displayed row limit. Attempt counts use explicit SSH daemon auth-result lines
+  or Windows 4624/4625 events; PAM and aggregate alerts remain evidence records
+  but are not added as attempts. A strict earlier-failure/later-success flag
+  does not assert compromise, and counts do not establish complete source coverage.
 - Positive authorization is required for a benign conclusion. This installation
   has no trusted maintenance/authorization connector: successful authentication,
   a maintenance claim in a log, or no matching events cannot justify automatic
@@ -148,9 +148,11 @@ cuối, query dài nhất, phản hồi lỗi và NOERROR khi có; các mẫu n�
 thống kê cho toàn bộ lưu lượng. Mỗi mẫu và bản tổng hợp giữ ID bằng chứng.
 
 `search_auth_events` lưu thêm bằng chứng tổng hợp theo agent, khoảng thời gian,
-IP nguồn và tài khoản được lọc. Số đếm theo nhóm tính trên bản ghi đã lưu, không
-khẳng định số lần thử duy nhất hay việc thu thập đầy đủ. Các trang hiển thị chi
-tiết khác nhau của cùng phạm vi không tạo thêm một bản tổng hợp mới.
+IP nguồn và tài khoản được lọc. Số lần thử chỉ tính từ log `sshd` có kết quả xác
+thực rõ ràng hoặc sự kiện Windows 4624/4625; PAM và alert tổng hợp được đếm riêng
+như bản ghi, không cộng thành lần thử. Thống kê không khẳng định việc thu thập
+đầy đủ. Các trang hiển thị chi tiết khác nhau của cùng phạm vi không tạo thêm
+một bản tổng hợp mới.
 
 Context ưu tiên cảnh báo gốc, tổng hợp và sau đó là các mẫu từ các tool. Tổng
 hợp DNS, TCP và xác thực giữ phạm vi, đơn vị, các trường thiếu và giới hạn khi

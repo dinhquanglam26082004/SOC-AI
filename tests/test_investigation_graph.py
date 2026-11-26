@@ -28,6 +28,7 @@ def test_activity_includes_only_compact_cited_evidence_for_that_investigation(tm
     audit.update(run, {}, status='completed', report={'findings': [
         {'statement': 'DNS observation', 'evidence_ids': [ref, foreign]}]})
     result = audit.detail(run, 'activity', limit=1)
+    assert result['evidence_total'] == 2
     assert [item['evidence_id'] for item in result['finding_evidence']] == [ref]
     assert result['finding_evidence'][0]['data']['dns']['query'] == 'example.test'
     assert 'full_log' not in result['finding_evidence'][0]['data']

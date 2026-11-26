@@ -40,12 +40,15 @@ def test_auth_aggregate_exact_beyond_returned_page(lab):
     tools,run=tool(lab);result=tools.execute('search_auth_events',{'limit':1})
     group=result['authentication_summary']['groups'][0]
     assert result['status']=='truncated' and len(result['items'])==1
-    assert group['failure_count']==11 and group['success_count']==1 and group['failure_before_success']
+    assert group['failure_count']==0 and group['success_count']==0
+    assert group['failure_record_count']==11 and group['success_record_count']==1
+    assert group['failure_before_success'] is False
     evidence=audit.evidence(run['id'])
     aggregate=next(e for e in evidence if e['evidence_id']==result['aggregate_evidence_id'])
     assert aggregate['evidence_type']=='aggregate' and aggregate['data']['source']=='derived-soc-sqlite'
     assert aggregate['data']['authentication_summary']['scope']['agent_id']==alert['agent']['id']
-    assert aggregate['data']['authentication_summary']['groups'][0]['failure_count']==11
+    aggregate_group=aggregate['data']['authentication_summary']['groups'][0]
+    assert aggregate_group['failure_count']==0 and aggregate_group['failure_record_count']==11
     assert len([e for e in evidence if e['evidence_type']!='aggregate'])==1
 
 

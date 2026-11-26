@@ -83,14 +83,23 @@ def _evidence_lines(record, outcomes):
     if isinstance(groups, list) and groups and isinstance(groups[0], dict):
         group = groups[0]
         values = []
-        for key, label in [('failure_count', 'thất bại'), ('success_count', 'thành công'), ('unknown_count', 'không rõ')]:
-            if group.get(key) is not None:
-                values.append(f"{label}: {group[key]}")
+        if group.get('failure_record_count') is None and group.get('failure_count') is not None:
+            values.append(f"bản ghi thất bại (thống kê cũ): {group['failure_count']}")
+        else:
+            values.extend((f"lần thử xác nhận thất bại: {group.get('failure_count', 0)}",
+                           f"bản ghi thất bại: {group.get('failure_record_count', 0)}"))
+        if group.get('success_record_count') is None and group.get('success_count') is not None:
+            values.append(f"bản ghi thành công (thống kê cũ): {group['success_count']}")
+        else:
+            values.extend((f"lần thành công: {group.get('success_count', 0)}",
+                           f"bản ghi thành công: {group.get('success_record_count', 0)}"))
+        if group.get('unknown_count') is not None:
+            values.append(f"không rõ: {group['unknown_count']}")
         if values:
             name = _short(group.get('username') or 'không rõ tài khoản', 60)
             ip = _short(group.get('source_ip') or 'không rõ IP nguồn', 45)
             lines.append(f"Xác thực (một nhóm) {name} · {ip}: " + ' | '.join(values))
-            lines.append('Số đếm là bản ghi đã lưu trong phạm vi truy vấn, không nhất thiết là số lần thử duy nhất.')
+            lines.append('PAM/alert tổng hợp là bằng chứng liên quan, không được cộng thêm thành lần thử.')
 
     summary = record.get('dos_summary') or {}
     if isinstance(summary, dict) and summary.get('observed') is not None and summary.get('window_seconds') is not None:

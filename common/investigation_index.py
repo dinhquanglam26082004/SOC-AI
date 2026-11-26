@@ -31,9 +31,13 @@ def migrate(db):
         username TEXT,category TEXT NOT NULL,log_type TEXT NOT NULL);
         CREATE INDEX IF NOT EXISTS investigation_agent_time ON investigation_event_index(agent_id,event_time,id);
         CREATE INDEX IF NOT EXISTS investigation_agent_category_time ON investigation_event_index(agent_id,category,event_time,id);
-        CREATE TABLE IF NOT EXISTS authentication_facts(id TEXT PRIMARY KEY,outcome TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS authentication_facts(
+            id TEXT PRIMARY KEY,outcome TEXT NOT NULL,attempt_outcome TEXT);
     ''')
     db.execute('BEGIN IMMEDIATE')
+    columns={row[1] for row in db.execute('PRAGMA table_info(authentication_facts)')}
+    if 'attempt_outcome' not in columns:
+        db.execute('ALTER TABLE authentication_facts ADD COLUMN attempt_outcome TEXT')
     if not db.execute("SELECT 1 FROM migrations WHERE name='investigation_index_v1'").fetchone():
         for row in db.execute('''SELECT COALESCE(e.payload,z.payload) FROM log_index l
             LEFT JOIN events e ON e.id=l.id LEFT JOIN zeek_logs z ON z.id=l.id'''):
@@ -44,3 +48,8 @@ def migrate(db):
             LEFT JOIN events e ON e.id=i.id LEFT JOIN zeek_logs z ON z.id=i.id WHERE i.category='auth' '''):
             write_auth_fact(db,json.loads(row[0]),True)
         db.execute("INSERT INTO migrations VALUES('authentication_facts_v1')")
+    if not db.execute("SELECT 1 FROM migrations WHERE name='authentication_attempt_facts_v1'").fetchone():
+        for row in db.execute('''SELECT COALESCE(e.payload,z.payload) FROM investigation_event_index i
+            LEFT JOIN events e ON e.id=i.id LEFT JOIN zeek_logs z ON z.id=i.id WHERE i.category='auth' '''):
+            write_auth_fact(db,json.loads(row[0]),True)
+        db.execute("INSERT INTO migrations VALUES('authentication_attempt_facts_v1')")

@@ -275,7 +275,8 @@ class InvestigationStore:
                                 (incident_id,kind,limit+1,offset)).fetchall()
                 items=[{**dict(r),'args':json.loads(r['args']),'result':json.loads(r['result']) if r['result'] else None} for r in rows[:limit]]
                 total=db.execute('SELECT COUNT(*) FROM calls WHERE incident_id=? AND kind=?',(incident_id,kind)).fetchone()[0]
-            result = {**self._row(row),'section':section,'items':items,'total':total,
+            evidence_total=db.execute('SELECT COUNT(*) FROM evidence WHERE incident_id=?',(incident_id,)).fetchone()[0]
+            result = {**self._row(row),'section':section,'items':items,'total':total,'evidence_total':evidence_total,
                       'next_offset':offset+limit if len(rows)>limit else None}
             if section == 'activity' and offset == 0:
                 report = result.get('report') or {}

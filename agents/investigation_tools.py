@@ -123,8 +123,10 @@ DESCRIPTIONS = {
         'alert_id must equal the investigation alert.'),
     'search_auth_events': (
         'For login failures or SSH brute force, e.g. rules 2502/100172: find retained '
-        'auth successes and failures, with counts by user and source IP. The IP must be '
-        'in incident scope; records are not unique sessions or proof of compromise.'),
+        'auth successes and failures by user and source IP. Counts include only explicit '
+        'sshd auth-result lines or Windows 4624/4625 events; PAM and aggregate alerts are '
+        'listed as records, not extra attempts. The IP must be in incident scope; this '
+        'does not prove compromise.'),
     'search_related_alerts': (
         'For any rule, look for other retained security alerts on the same agent and time '
         'window; optionally filter by scoped IP or user. May include the trigger itself. '
@@ -585,17 +587,27 @@ class LocalTools:
                     where.append('CAST('+field('zeek_data.status_code')+' AS INTEGER)=?');params.append(args['status_code'])
                 auth_summary=None
                 if name=='search_auth_events':
-                    # Exact aggregate of the scoped retained dataset, independent of the row display limit.
+                    # Count attempts only when the source record identifies one protocol-level outcome.
                     groups=db.execute("""SELECT i.agent_id,i.username,i.src_ip,
-                        SUM(f.outcome='failure'),SUM(f.outcome='success'),SUM(f.outcome='unknown'),
-                        MIN(CASE WHEN f.outcome='failure' THEN i.event_time END),
-                        MAX(CASE WHEN f.outcome='success' THEN i.event_time END)
+                        COALESCE(SUM(f.attempt_outcome='failure'),0),
+                        COALESCE(SUM(f.attempt_outcome='success'),0),
+                        COALESCE(SUM(f.outcome='unknown'),0),
+                        COALESCE(SUM(f.outcome='failure'),0),
+                        COALESCE(SUM(f.outcome='success'),0),
+                        COALESCE(SUM(f.outcome='failure' AND f.attempt_outcome IS NULL),0),
+                        COALESCE(SUM(f.outcome='success' AND f.attempt_outcome IS NULL),0),
+                        MIN(CASE WHEN f.attempt_outcome='failure' THEN i.event_time END),
+                        MAX(CASE WHEN f.attempt_outcome='success' THEN i.event_time END)
                         FROM investigation_event_index i JOIN authentication_facts f ON f.id=i.id
                         WHERE """+' AND '.join(where)+' GROUP BY i.agent_id,i.username,i.src_ip ORDER BY i.agent_id,i.username,i.src_ip LIMIT 101',params).fetchall()
                     buckets={}
-                    for agent,user,ip,failed,success,unknown,first,last in groups[:100]:
+                    for (agent,user,ip,failed,success,unknown,failed_records,success_records,
+                         unclassified_failures,unclassified_successes,first,last) in groups[:100]:
                         buckets[(agent,user,ip)]={'agent_id':agent,'username':user,'source_ip':ip,
                             'failure_count':failed,'success_count':success,'unknown_count':unknown,
+                            'failure_record_count':failed_records,'success_record_count':success_records,
+                            'unclassified_failure_record_count':unclassified_failures,
+                            'unclassified_success_record_count':unclassified_successes,
                             'first_failure':first,'last_success':last}
                     for bucket in buckets.values():
                         bucket['failure_before_success']=bool(bucket['username'] and bucket['source_ip'] and
@@ -603,9 +615,9 @@ class LocalTools:
                     auth_summary={'scope':{'agent_id':self.agent,'since':since,'until':until,
                                            'source_ip':args.get('ip'),'username':args.get('username')},
                         'groups':list(buckets.values()),'groups_truncated':len(groups)>100,
-                        'count_unit':'Retained normalized records, not unique authentication sessions.',
+                        'count_unit':'Confirmed protocol-level authentication attempts; related records are counted separately.',
                         'counts_scope':'Exact for included agent/user/source-IP groups in retained data; not collection completeness.',
-                        'interpretation':'Failure followed by success does not establish unauthorized access or compromise.'}
+                        'interpretation':'Attempt totals include only explicit sshd auth-result lines and Windows 4624/4625 events. PAM and aggregate failure alerts remain evidence records but are not added as attempts. Failure followed by success does not establish unauthorized access or compromise.'}
                 source=''' FROM investigation_event_index i
                     JOIN log_index l ON l.id=i.id LEFT JOIN events e ON e.id=i.id
                     LEFT JOIN zeek_logs z ON z.id=i.id WHERE '''+' AND '.join(where)

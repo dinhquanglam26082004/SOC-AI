@@ -64,12 +64,34 @@ def compact_flow_summary(summary):
 def compact_auth_summary(summary):
     if not isinstance(summary, dict):
         return summary
-    groups = summary.get('groups') or []
+    groups = []
+    legacy_counts = False
+    for source in (summary.get('groups') or [])[:5]:
+        if not isinstance(source, dict):
+            continue
+        group = dict(source)
+        group_legacy = False
+        if 'failure_record_count' not in group and 'failure_count' in group:
+            group['failure_record_count'] = group.pop('failure_count')
+            group['failure_count'] = 'unavailable'
+            group_legacy = legacy_counts = True
+        if 'success_record_count' not in group and 'success_count' in group:
+            group['success_record_count'] = group.pop('success_count')
+            group['success_count'] = 'unavailable'
+            group_legacy = legacy_counts = True
+        if group_legacy:
+            group['failure_before_success'] = None
+        groups.append(group)
+    interpretation = summary.get('interpretation')
+    count_unit = summary.get('count_unit')
+    if legacy_counts:
+        count_unit = 'Legacy retained authentication records; attempt counts are unavailable.'
+        interpretation = (str(interpretation or '') + ' Previous summaries counted records, not confirmed unique attempts.').strip()
     return {'scope': bounded(summary.get('scope') or {}),
-            'groups': bounded(groups[:5]),
-            'groups_truncated': bool(summary.get('groups_truncated') or len(groups)>5),
-            'count_unit': summary.get('count_unit'), 'counts_scope': summary.get('counts_scope'),
-            'interpretation': summary.get('interpretation')}
+            'groups': bounded(groups),
+            'groups_truncated': bool(summary.get('groups_truncated') or len(summary.get('groups') or [])>5),
+            'count_unit': count_unit, 'counts_scope': summary.get('counts_scope'),
+            'interpretation': interpretation}
 
 
 def evidence_summary(e, local_timezone=None):
