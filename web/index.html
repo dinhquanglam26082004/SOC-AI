@@ -212,8 +212,22 @@
     .more-results{margin-top:10px;font-size:12px}.evidence-ref{margin-top:6px}
     .evidence-card{margin:14px 0;padding:18px;border:1px solid var(--border);border-radius:10px;background:#0a1421}
     .evidence-card-head{display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;align-items:center}
-    .evidence-card-head strong{font-size:15px;color:#eaf4fb}.evidence-kind{color:var(--cyan);font-size:11px;text-transform:uppercase;letter-spacing:.07em}
+    .evidence-card-head strong{font-size:16px;color:#eaf4fb}.evidence-kind{color:var(--cyan);font-size:11px;letter-spacing:.04em;text-align:right;text-transform:uppercase}
+    .evidence-role{display:block;margin-top:4px;color:var(--muted);font-size:11px}
+    .evidence-card .evidence-lead{margin:12px 0 0;color:#c5d8e6;font-size:13px;line-height:1.6;overflow-wrap:anywhere}
+    .evidence-card .evidence-limit{margin:8px 0;color:#e5c789;font-size:12px;line-height:1.5}
     .evidence-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:16px 0}
+    .evidence-highlights{margin:14px 0;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:#101f2d}
+    .evidence-highlights .evidence-grid{grid-template-columns:repeat(3,minmax(0,1fr));margin:0}
+    .evidence-highlights .evidence-field dd{font-size:14px;font-weight:600;color:#f0f8ff}
+    .evidence-state-summary{margin:7px 0;color:var(--muted);font-size:12px;line-height:1.5}
+    .evidence-result-ok{color:#58d49c!important}.evidence-result-fail{color:#e79a8d!important}
+    .evidence-meta-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 16px;margin:14px 0 8px;padding-top:13px;border-top:1px solid var(--border)}
+    .evidence-meta-grid .evidence-field dd{font-size:12px}
+    .evidence-id{display:inline-block;max-width:20ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom;cursor:text}
+    .evidence-id:hover,.evidence-id:focus{max-width:100%;white-space:normal;overflow-wrap:anywhere}
+    @media(max-width:520px){.evidence-highlights .evidence-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    @media(max-width:380px){.evidence-highlights .evidence-grid,.evidence-meta-grid{grid-template-columns:1fr}}
     .evidence-field{min-width:0}.evidence-field dt{color:var(--muted);font-size:11px}.evidence-field dd{margin:3px 0 0;overflow-wrap:anywhere;color:#e5edf5;font-size:13px}
     .evidence-log{margin:12px 0;padding:12px;background:#07101b;border-radius:7px;white-space:pre-wrap;overflow-wrap:anywhere;font:12px/1.65 Consolas,monospace;color:#d5e3ee}
     .evidence-card details{margin-top:12px;color:var(--muted);font-size:12px}.evidence-card details summary{cursor:pointer;color:var(--cyan)}
@@ -649,16 +663,108 @@
       return{value:prefix+log.slice(match[0].length),converted:true};
     }
     function evidenceHTML(item){
-      const d=item.data&&typeof item.data==='object'?item.data:{}, agent=d.agent||{}, rule=d.rule||{}, dns=d.dns||{}, http=d.http||{}, conn=d.zeek_connection||{};
-      const present=v=>v!==null&&v!==undefined&&v!==''&&!(Array.isArray(v)&&!v.length);
-      const show=v=>Array.isArray(v)?v.join(', '):typeof v==='object'?JSON.stringify(v):String(v);
-      const fieldValue=(key,value)=>key==='Thời gian sự kiện'||key==='Thời gian thu thập'?date(value):esc(show(value));
-      const logged=localizeSyslogLog(d.full_log,item.event_time||d.event_time);
-      const fields=[['Thời gian sự kiện',item.event_time||d.event_time],['Agent',[agent.name,agent.ip].filter(present).join(' · ')],['Rule',rule.id?`${rule.id}${present(rule.level)?' · level '+rule.level:''}`:null],['Người dùng',d.username],['Xác thực',d.auth_outcome&&d.auth_outcome!=='unknown'?d.auth_outcome:null],['IP nguồn',d.src_ip],['Cổng nguồn',d.src_port],['IP đích',d.dst_ip],['Cổng đích',d.dst_port],['Truy vấn DNS',dns.query],['Loại DNS',dns.qtype_name],['Phản hồi DNS',dns.rcode_name],['Kết quả DNS',dns.answers],['Phương thức HTTP',http.method],['Máy chủ HTTP',http.host],['Đường dẫn HTTP',http.uri],['Trạng thái HTTP',http.status_code],['Giao thức',conn.proto],['Trạng thái kết nối',conn.conn_state],['Tệp',d.file_path],['Công cụ',item.tool]].filter(([,v])=>present(v));
-      const title=rule.description||d.title||(item.evidence_type==='guidance'?'Reference material':'Sự kiện quan sát được');
-      const kind=item.evidence_type==='guidance'?'Hướng dẫn · không phải bằng chứng sự cố':item.evidence_type==='trigger'?'Cảnh báo khởi tạo':'Sự kiện quan sát được';
-      const logHTML=d.full_log?`<div class="evidence-field"><dt>Log đã ghi${logged.converted?' (giờ địa phương)':''}</dt></div><div class="evidence-log">${esc(logged.value)}</div>${logged.converted?`<details><summary>Log nguồn nguyên bản (UTC)</summary><div class="evidence-log">${esc(d.full_log)}</div></details>`:''}`:'';
-      return `<article class="evidence-card"><div class="evidence-card-head"><strong>${esc(title)}</strong><span class="evidence-kind">${esc(kind)}</span></div><dl class="evidence-grid">${fields.map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${fieldValue(k,v)}</dd></div>`).join('')}</dl>${logHTML}${d.summary_truncated?'<p class="muted">Bản tóm tắt bằng chứng đã bị cắt; hãy xem chi tiết đã lưu.</p>':''}<details><summary>Nguồn và ID bằng chứng</summary><dl class="evidence-grid">${[['Evidence ID',item.evidence_id],['Nguồn',item.source],['ID bản ghi nguồn',item.source_record_id],['Thời gian thu thập',item.collected_at]].filter(([,v])=>present(v)).map(([k,v])=>`<div class="evidence-field"><dt>${esc(k)}</dt><dd>${fieldValue(k,v)}</dd></div>`).join('')}</dl></details><details><summary>Xem dữ liệu đã ghi (JSON)</summary><pre class="detail">${esc(JSON.stringify(item.data,null,2))}</pre></details></article>`;
+      const d=item.data&&typeof item.data==='object'?item.data:{},rule=d.rule||{},agent=d.agent||{};
+      const present=v=>v!=null&&(typeof v==='string'?v.trim()!=='':Array.isArray(v)?v.some(present):typeof v==='object'?Object.values(v).some(present):true);
+      const hasData=v=>v&&typeof v==='object'&&!Array.isArray(v)&&present(v);
+      const groups=Array.isArray(d.authentication_summary?.groups)?d.authentication_summary.groups:[];
+      const auth=groups.length===1?groups[0]:{};
+      const suspects=Array.isArray(d.rootkit_snapshot?.suspects)?d.rootkit_snapshot.suspects:[];
+      const suspect=suspects.find(s=>s&&s.pid===d.rootkit_snapshot?.target_pid)||{};
+      const module=d.kernel_module_activity||{},moduleAction=String(rule.id)==='100205'?'Gỡ module':String(rule.id)==='100200'?'Nạp module':null;
+      const moduleSucceeded=module.success==='yes'||module.success===true,moduleFailed=module.success==='no'||module.success===false;
+      const taintLog=String(d.event_details?.full_log||d.full_log||'');
+      const taintLine=taintLog.match(/\bkernel_taint\b[^\r\n]*/i)?.[0]||taintLog;
+      const taint=String(rule.id)==='100201'||d.rootkit_telemetry_summary?.kind==='kernel_taint'?{
+        baseline:taintLine.match(/\bbaseline\s*=\s*(\d+)\b/i)?.[1],current:taintLine.match(/\bcurrent\s*=\s*(\d+)\b/i)?.[1],
+        changed:taintLine.match(/\bchanged\s*=\s*(yes|no)\b/i)?.[1]}:{};
+      const mask=typeof taint.current==='string'&&/^\d+$/.test(taint.current)?BigInt(taint.current):null;
+      if(mask!==null)taint.flags={out_of_tree:(mask&4096n)!==0n,unsigned:(mask&8192n)!==0n,oops:(mask&128n)!==0n};
+      const view={...d,auth_group:auth,auth_groups_visible:hasData(d.authentication_summary)?groups.length:null,
+        confirmed_failures:Number.isFinite(auth.failure_record_count)?auth.failure_count:null,
+        confirmed_successes:Number.isFinite(auth.success_record_count)?auth.success_count:null,
+        snapshot_target:suspect,module_action:moduleAction,taint,
+        module_syscall:present(module.syscall_name)?`${module.syscall_name}${present(module.syscall)?` (${module.syscall})`:''}`:module.syscall};
+      const read=path=>path.split('.').reduce((value,key)=>value?.[key],view);
+      const specs=[
+        ['Endpoint Observation',hasData(d.rootkit_snapshot)&&d.rootkit_snapshot.producer==='soc-ai-rootkit-snapshot-v1',
+          [['PID mục tiêu','rootkit_snapshot.target_pid'],['Kết quả quan sát','rootkit_snapshot.finding'],['Thời điểm quan sát','rootkit_snapshot.observed_at'],['/proc lần 1','snapshot_target.proc_visible'],['/proc lần 2','snapshot_target.recheck_proc_visible'],['Boot ID do endpoint báo','rootkit_snapshot.boot_id']],
+          'Quan sát từ endpoint; không tự xác nhận rootkit. Boot ID chưa được đối chiếu độc lập.'],
+        ['Kernel State',hasData(d.rootkit_telemetry_summary)||String(rule.id)==='100201',
+          [['Baseline','taint.baseline'],['Hiện tại','taint.current'],['Thay đổi','taint.changed'],['Out-of-tree module','taint.flags.out_of_tree'],['Unsigned module','taint.flags.unsigned'],['Kernel oops','taint.flags.oops']],
+          'Quan sát trạng thái kernel; không tự chứng minh tấn công mới.'],
+        ['Kernel Module',hasData(d.kernel_module_activity)||['100200','100205'].includes(String(rule.id)),
+          [['Tên module','kernel_module_activity.module_name'],['Thao tác','module_action'],['Kết quả','kernel_module_activity.success'],['Lệnh thực thi','kernel_module_activity.command'],['Syscall','module_syscall'],['Exit code','kernel_module_activity.exit']],
+          'Thao tác module được ghi nhận; thành công không đồng nghĩa hệ thống an toàn.'],
+        ['File Change',hasData(d.file_change)||item.tool==='search_file_changes',
+          [['Tệp','file_path'],['Thay đổi','file_change.event'],['Hash trước','file_change.sha256_before'],['Hash sau','file_change.sha256_after'],['Người thực hiện','file_change.audit.user.name']],
+          'Thay đổi tệp được ghi nhận; chỉ quy thuộc người thực hiện khi có dữ liệu.'],
+        ['Authentication',hasData(d.authentication_summary)||hasData(d.privilege)||present(d.auth_outcome)&&d.auth_outcome!=='unknown'||item.tool==='search_auth_events',
+          [['Tài khoản','auth_group.username'],['IP nguồn','auth_group.source_ip'],['Lần thử thất bại xác nhận','confirmed_failures'],['Bản ghi thất bại','auth_group.failure_record_count'],['Lần thành công xác nhận','confirmed_successes'],['Bản ghi thành công','auth_group.success_record_count'],['Nhóm đang hiển thị','auth_groups_visible'],['Người dùng','username'],['IP nguồn','src_ip'],['Kết quả xác thực','auth_outcome'],['Người yêu cầu','privilege.srcuser'],['Tài khoản đích','privilege.dstuser'],['Lệnh','privilege.command']],
+          'Bản ghi xác thực/đặc quyền; số bản ghi khác số lần thử đã xác nhận.'],
+        ['DNS',hasData(d.dns)||hasData(d.dns_summary),
+          [['Query','dns.query'],['Loại query','dns.qtype_name'],['Mã phản hồi','dns.rcode_name'],['Câu trả lời','dns.answers'],['Bản ghi phù hợp','dns_summary.matched_records'],['Query khác nhau','dns_summary.unique_queries']],
+          'Truy vấn và phản hồi DNS được ghi nhận; tên bất thường chưa chứng minh mất dữ liệu.'],
+        ['HTTP',hasData(d.http),
+          [['Method','http.method'],['Host','http.host'],['URI','http.uri'],['Status','http.status_code']],
+          'Yêu cầu hoặc phản hồi HTTP được ghi nhận; chưa chứng minh khai thác thành công.'],
+        ['Network',hasData(d.zeek_connection)||hasData(d.flow_summary)||hasData(d.listener_changes),
+          [['IP nguồn','src_ip'],['IP đích','dst_ip'],['Cổng đích','dst_port'],['Giao thức','zeek_connection.proto'],['Trạng thái','zeek_connection.conn_state'],['Số flow','flow_summary.flow_observations'],['Cổng thêm','listener_changes.added_total'],['Cổng bỏ','listener_changes.removed_total']],
+          'Dữ liệu kết nối hoặc trạng thái mạng được ghi nhận; không tự xác nhận tác động.'],
+        ['Process',present(d.process)||hasData(d.audit)&&present(d.audit.command||d.audit.exe),
+          [['Tiến trình','process'],['Lệnh','audit.command'],['Tệp thực thi','audit.exe'],['Syscall','audit.syscall'],['PID','audit.process.id']],
+          'Lịch sử từ log; không phải kiểm tra tiến trình đang chạy.']
+      ];
+      const active=item.evidence_type==='guidance'?[]:specs.filter(([,matches])=>matches);
+      const type=item.evidence_type==='guidance'?'Tài liệu tham khảo':active.length?active.map(x=>x[0]).slice(0,2).join(' · ')+(active.length>2?` +${active.length-2}`:''):
+        item.evidence_type==='trigger'||d.rootkit_evidence_class==='detection'||item.tool==='search_related_alerts'?'Security Alert':'Chưa phân loại';
+      const role={trigger:'Cảnh báo khởi tạo',observed:'Sự kiện quan sát được',aggregate:'Tổng hợp dữ liệu',guidance:'Hướng dẫn'}[item.evidence_type]||'Bằng chứng đã lưu';
+      const lists=active.map(([, ,mapping])=>mapping.map(([label,path])=>[label,read(path)]).filter(([,value])=>present(value)));
+      const fields=[],seen=new Set(),add=([label,value])=>{if(fields.length<6&&!seen.has(label)){fields.push([label,value]);seen.add(label)}};
+      lists.flat().forEach(add);
+      if(!fields.length)[['Người dùng',d.username],['IP nguồn',d.src_ip],['IP đích',d.dst_ip],['Tiến trình',d.process],['Tệp',d.file_path],['Log type',d.log_type],['Event ID',d.event_id]].filter(([,value])=>present(value)).slice(0,6).forEach(add);
+      const rootcheck=d.rootkit_evidence_class==='detection'||['521','5132'].includes(String(rule.id))||Array.isArray(rule.groups)&&rule.groups.includes('rootcheck');
+      const pid=rootcheck?String(d.full_log||d.event_details?.full_log||'').match(/Process\s+['"]?(\d{1,8})['"]?\s+hidden\s+from\s+\/proc/i)?.[1]:null;
+      if(pid){fields.unshift(['PID được cảnh báo',pid]);fields.length=Math.min(fields.length,6)}
+      const readable=(label,value)=>['Kết quả','Kết quả thực thi'].includes(label)?(value==='yes'||value===true?'Thành công':value==='no'||value===false?'Thất bại':value):
+        ['Thay đổi','Out-of-tree module','Unsigned module','Kernel oops'].includes(label)?(value==='yes'||value===true?'Có':value==='no'||value===false?'Không':value):
+        label.startsWith('/proc')?(value===true?'Có':value===false?'Không':value):
+        label==='Kết quả quan sát'?({visible_process:'Tiến trình hiển thị',stable_process_visibility_discrepancy:'Bất nhất hiển thị lặp lại',identity_changed:'Danh tính PID thay đổi',identity_unverified:'Chưa xác minh danh tính PID'}[value]||value):value;
+      const render=([label,value])=>`<div class="evidence-field"><dt>${esc(label)}</dt><dd${label==='Kết quả'&&['yes','no'].includes(value)?` class="evidence-result-${value==='yes'?'ok':'fail'}"`:''}>${['Thời gian sự kiện','Thời điểm quan sát','Quan sát đầu','Quan sát cuối','Thời gian thu thập'].includes(label)?date(value):esc(Array.isArray(value)?value.join(', '):typeof value==='object'?JSON.stringify(value):readable(label,value))}</dd></div>`;
+      const primary=active[0]?.[0]||type;
+      const names={'Endpoint Observation':'Quan sát tiến trình trên endpoint','Kernel State':'Quan sát trạng thái kernel','Kernel Module':'Ghi nhận thao tác kernel module','File Change':'Ghi nhận thay đổi tệp',Authentication:'Sự kiện xác thực và tài khoản',DNS:'Ghi nhận truy vấn DNS',HTTP:'Ghi nhận sự kiện HTTP',Network:'Ghi nhận kết nối mạng',Process:'Ghi nhận tiến trình', 'Security Alert':'Cảnh báo bảo mật','Chưa phân loại':'Sự kiện chưa phân loại','Tài liệu tham khảo':'Tài liệu tham khảo'};
+      const typeNames={'Endpoint Observation':'Quan sát endpoint','Kernel State':'Trạng thái kernel','Kernel Module':'Kernel module','File Change':'Thay đổi tệp',Authentication:'Xác thực',DNS:'DNS',HTTP:'HTTP',Network:'Mạng',Process:'Tiến trình','Security Alert':'Cảnh báo bảo mật','Chưa phân loại':'Chưa phân loại','Tài liệu tham khảo':'Tài liệu tham khảo'};
+      const title=pid?'Cảnh báo tiến trình có thể bị ẩn':primary==='Kernel Module'&&moduleAction?`${moduleSucceeded?(moduleAction==='Gỡ module'?'Gỡ':'Nạp'):(moduleAction==='Gỡ module'?'Thao tác gỡ':'Thao tác nạp')} kernel module`:names[primary]||'Sự kiện đã ghi nhận';
+      const note=item.evidence_type==='guidance'?'Tài liệu hướng dẫn, không phải bằng chứng sự cố.':active[0]?.[3]|| (type==='Security Alert'?'Cảnh báo nguồn; cần đối chiếu với dữ liệu quan sát.':'Chưa có loại dữ liệu chuẩn hóa đủ để phân loại.');
+      const excerpt=(['Kernel State','Security Alert','Chưa phân loại'].includes(active[0]?.[0]||type)&&d.full_log)?String(d.full_log).slice(0,180):'';
+      const details={
+        'Endpoint Observation':present(d.rootkit_snapshot?.target_pid)?`Snapshot ghi nhận PID ${d.rootkit_snapshot.target_pid}: ${readable('Kết quả quan sát',d.rootkit_snapshot.finding||'chưa có kết quả quan sát')}.`:null,
+        'Kernel Module':present(d.kernel_module_activity?.module_name)||present(d.kernel_module_activity?.command)?`Log ghi nhận ${d.kernel_module_activity.command||'thao tác'} với module ${d.kernel_module_activity.module_name||'chưa ghi tên'}; kết quả thực thi không xác nhận hệ thống an toàn.`:null,
+        'File Change':present(d.file_path)?`Log ghi nhận tệp ${d.file_path}${present(d.file_change?.event)?` (${d.file_change.event})`:''}.`:present(d.file_change?.event)?`Log ghi nhận thay đổi tệp: ${d.file_change.event}.`:null,
+        Authentication:present(auth.username||d.username||d.privilege?.srcuser)?`Bản ghi liên quan tài khoản ${auth.username||d.username||d.privilege.srcuser}.`:groups.length>1?`Bản tổng hợp hiển thị ${groups.length} nhóm xác thực.`:null,
+        DNS:present(d.dns?.query)?`Log ghi nhận truy vấn ${d.dns.query}.`:Number.isFinite(d.dns_summary?.matched_records)?`Tổng hợp ${d.dns_summary.matched_records} bản ghi DNS phù hợp.`:null,
+        HTTP:present(d.http?.method||d.http?.host)?`Log ghi nhận ${d.http.method||'HTTP'} ${d.http.host||''}${d.http.uri||''}.`:present(d.http?.status_code)?`Log HTTP ghi trạng thái ${d.http.status_code}.`:null,
+        Network:present(d.src_ip)&&present(d.dst_ip)?`Log ghi nhận ${d.src_ip} → ${d.dst_ip}${present(d.dst_port)?`:${d.dst_port}`:''}.`:Number.isFinite(d.flow_summary?.flow_observations)?`Tổng hợp ${d.flow_summary.flow_observations} flow mạng đã lưu.`:null,
+        Process:present(d.audit?.command||d.process||d.audit?.exe)?`Log ghi nhận ${d.audit?.command||d.process||d.audit.exe}.`:null
+      };
+      const auditSource=hasData(d.audit)||present(module.audit_id)?'Auditd':'Log';
+      const verb=moduleAction==='Gỡ module'?'gỡ':'nạp';
+      const moduleDescription=primary==='Kernel Module'&&moduleAction&&(present(module.module_name)||present(module.success))?
+        `${auditSource} ghi nhận ${moduleSucceeded&&present(module.module_name)?`module ${module.module_name} được ${verb} thành công`:moduleFailed?`thao tác ${verb} module${present(module.module_name)?` ${module.module_name}`:''} thất bại`:`thao tác ${verb} module${present(module.module_name)?` ${module.module_name}`:''}`}.`:null;
+      const stateFacts=primary==='Kernel State'?[['baseline',taint.baseline],['current',taint.current],['changed',taint.changed]].filter(([,value])=>present(value)):[];
+      const stateDescription=stateFacts.length?`Log ghi nhận kernel taint: ${stateFacts.map(([key,value])=>`${key}=${value}`).join(', ')}.`:null;
+      const description=pid?`Rootcheck cảnh báo PID ${pid} không hiển thị trong /proc.`:moduleDescription||stateDescription||details[primary]||
+        (excerpt?`Log ghi nhận: ${excerpt}${String(d.full_log).length>180?'…':''}`:present(rule.description)?`Rule ghi nhận: ${rule.description}`:note);
+      const caveat=pid?'Cảnh báo Rootcheck chưa phải xác minh độc lập.':primary==='Kernel Module'&&moduleAction==='Gỡ module'&&moduleSucceeded?'Gỡ module thành công không đồng nghĩa hệ thống đã an toàn.':primary==='Kernel Module'?'Kết quả thao tác không tự xác nhận trạng thái an toàn của hệ thống.':note;
+      const meta=[['Thời gian sự kiện',item.event_time||d.event_time],['Agent',[agent.name,agent.ip].filter(present).join(' · ')],['Rule',rule.id],['Công cụ',item.tool]].filter(([,value])=>present(value));
+      const telemetry=d.rootkit_telemetry_summary||{},shortTime=value=>{const stamp=new Date(value);return Number.isNaN(stamp.getTime())?String(value):stamp.toLocaleTimeString('vi-VN',{hour12:false})};
+      const stateSummary=primary==='Kernel State'?[present(telemetry.observation_count)?`${telemetry.observation_count} lần quan sát`:null,
+        present(telemetry.source_record_count)?`${telemetry.source_record_count} bản ghi nguồn`:null,
+        present(telemetry.first_event_time)&&present(telemetry.last_event_time)?`${shortTime(telemetry.first_event_time)} – ${shortTime(telemetry.last_event_time)}`:null].filter(Boolean).join(' · '):'';
+      const rawLog=present(d.event_details?.full_log)?d.event_details.full_log:d.full_log;
+      const logged=localizeSyslogLog(rawLog,item.event_time||d.event_time);
+      const logHTML=present(rawLog)?`<div class="evidence-log">${esc(logged.value)}</div>${logged.converted?`<p class="muted">Đoạn log đã lưu trước quy đổi giờ:</p><div class="evidence-log">${esc(rawLog)}</div>`:''}`:'<p>Evidence này không chứa đoạn log đã lưu.</p>';
+      const idField=([label,value])=>['Evidence ID','Source Record ID'].includes(label)?`<div class="evidence-field"><dt>${esc(label)}</dt><dd><code class="evidence-id" tabindex="0" title="${esc(value)}">${esc(value)}</code></dd></div>`:render([label,value]);
+      return `<article class="evidence-card"><div class="evidence-card-head"><div><strong>${esc(title)}</strong><small class="evidence-role">${esc(role)}</small></div><span class="evidence-kind">${esc(typeNames[primary]||primary)}</span></div><p class="evidence-lead">${esc(description)}</p><div class="evidence-highlights">${fields.length?`<dl class="evidence-grid">${fields.map(render).join('')}</dl>`:'<p class="muted">Chưa có trường nổi bật; xem dữ liệu Evidence đã lưu.</p>'}</div>${stateSummary?`<p class="evidence-state-summary">${esc(stateSummary)}</p>`:''}${caveat!==description?`<p class="evidence-limit">${esc(caveat)}</p>`:''}${d.summary_truncated||d.details_truncated?'<p class="evidence-limit">Một phần dữ liệu Evidence đã lưu bị rút gọn; JSON dưới đây không mặc nhiên là log nguồn đầy đủ.</p>':''}${meta.length?`<dl class="evidence-meta-grid">${meta.map(render).join('')}</dl>`:''}<details><summary>Log đã lưu</summary>${logHTML}</details><details><summary>Nguồn và ID</summary><dl class="evidence-grid">${[['Evidence ID',item.evidence_id],['Nguồn hồ sơ',item.source],['Nguồn cảm biến',d.source_product],['Source Record ID',item.source_record_id],['Thời gian thu thập',item.collected_at]].filter(([,v])=>present(v)).map(idField).join('')}</dl><p class="muted">Di chuột hoặc chọn ID để xem đầy đủ và sao chép bằng cách chọn văn bản.</p></details><details><summary>Dữ liệu Evidence (JSON)</summary><pre class="detail">${esc(JSON.stringify(item,null,2))}</pre></details></article>`;
     }
     function investigate(id){if(String(selectedInvestigation)!==String(id)){dossierSection='overview';dossierKey='';dossierSignature=''}selectedInvestigation=id;document.querySelectorAll('[data-investigation]').forEach(b=>b.setAttribute('aria-current',String(b.dataset.investigation===String(id))));const a=alerts.find(x=>String(x.id)===String(id));$('investigation-back').hidden=!a;$('investigation-detail').textContent=a?investigationText(a):'Alert not found.';$('investigation-detail').hidden=true;if($('investigation-context'))$('investigation-context').innerHTML=a?`<h2>${esc(a.rule?.description||a.attack_type||'Cảnh báo bảo mật')}</h2><div class="log-chips"><span class="log-chip">${esc(a.agent?.name||'Không rõ agent')}</span><span class="severity ${esc(a.severity||'low')}">${esc(severityName(a.severity))}</span><span class="log-chip">Rule ${esc(a.rule?.id||'—')}</span>${a.timestamp?`<span class="log-chip">Sự kiện: ${esc(date(a.timestamp))}</span>`:''}${a.src_ip||a.dst_ip?`<span class="log-chip">${esc(a.src_ip||'?')} → ${esc(a.dst_ip||'?')}${a.dst_ip&&a.dst_port!=null?':'+esc(a.dst_port):''}</span>`:''}</div>`:'';$('investigation-progress').innerHTML=a?progressHTML(a):'';loadDossier(a)}
     async function loadDossier(a,more=false,force=false){

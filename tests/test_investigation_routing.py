@@ -37,9 +37,16 @@ def test_published_tool_descriptions_and_scope_schemas():
     flow = published['summarize_zeek_flows']['parameters']
     assert set(flow['required']) == {'src_ip', 'dst_ip', 'dst_port', 'since', 'until'}
     auth = published['search_auth_events']['parameters']['properties']
-    # Published schemas are compact (types only); limits are enforced by Pydantic at dispatch.
+    # Published schemas stay compact; limits are enforced by Pydantic at dispatch.
     assert auth['limit']['default'] == 20 and auth['limit']['type'] == 'integer'
-    assert auth['ip'] == {'type': 'string'}
+    assert auth['ip']['type'] == 'string'
+    assert 'source IP only' in auth['ip']['description']
+    privilege = published['search_privilege_events']['parameters']['properties']
+    assert 'IP-less local sudo/su' in privilege['ip']['description']
+    rootkit = published['search_rootkit_evidence']['parameters']['properties']
+    assert rootkit['ip']['type'] == 'string' and 'does not filter results' in rootkit['ip']['description']
+    fim = published['search_file_changes']['parameters']['properties']
+    assert fim['file_path']['type'] == 'string' and '/proc/PID' in fim['file_path']['description']
     from agents.investigation_tools import MODELS as M
     import pytest
     with pytest.raises(Exception):

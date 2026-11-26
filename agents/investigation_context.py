@@ -112,9 +112,43 @@ def evidence_summary(e, local_timezone=None):
         compact['flow_summary'] = compact_flow_summary(data['flow_summary'])
     if isinstance(data.get('authentication_summary'), dict):
         compact['authentication_summary'] = compact_auth_summary(data['authentication_summary'])
+    kernel_module = data.get('kernel_module_activity')
+    module_summary_complete = (isinstance(kernel_module,dict) and all(
+        kernel_module.get(key) not in (None,'') for key in
+        ('audit_id','syscall','command','executable','module_name','success','exit','uid','auid')))
+    if isinstance(kernel_module,dict) and kernel_module:
+        compact['kernel_module_activity'] = kernel_module
+        if module_summary_complete:
+            # The typed fields carry the decision-relevant facts. Keep the full
+            # Auditd object and raw line in the dossier, not twice in the prompt.
+            compact.pop('audit',None)
+    snapshot = data.get('rootkit_snapshot')
+    if isinstance(snapshot, dict) and snapshot.get('producer') == 'soc-ai-rootkit-snapshot-v1':
+        compact['event_role'] = 'endpoint_snapshot_observation'
+        suspects = snapshot.get('suspects') or []
+        suspect = next((item for item in suspects if isinstance(item, dict)
+                        and item.get('pid') == snapshot.get('target_pid')), {})
+        compact['rootkit_snapshot'] = {
+            'target_pid': snapshot.get('target_pid'), 'finding': snapshot.get('finding'),
+            'observed_at': snapshot.get('observed_at'), 'boot_id': snapshot.get('boot_id'),
+            'boot_id_status': 'reported_by_endpoint_not_cross_verified',
+            'observation': {k:suspect[k] for k in ('pid','finding','kill0','proc_visible','ps_visible',
+                'ps_thread_visible','recheck_kill0','recheck_proc_visible','recheck_ps_visible',
+                'recheck_ps_thread_visible') if k in suspect},
+            'observation_limit': bounded(snapshot.get('interpretation') or
+                'Local kernel-dependent observation; not independent forensic proof.', text=180),
+        }
+        if local_timezone is not None and snapshot.get('observed_at'):
+            observed = datetime.fromisoformat(snapshot['observed_at'].replace('Z', '+00:00'))
+            compact['rootkit_snapshot']['observed_at_local'] = observed.astimezone(local_timezone).isoformat()
+    if isinstance(data.get('rootkit_telemetry_summary'), dict):
+        telemetry = data['rootkit_telemetry_summary']
+        compact['rootkit_telemetry_summary'] = {k:telemetry[k] for k in
+            ('kind','source_record_count','observation_count','first_event_time',
+             'last_event_time','interpretation') if k in telemetry}
     rule = data.get('rule') or {}
     compact['rule'] = {k: bounded(rule[k]) for k in ('id', 'description', 'level') if k in rule}
-    if data.get('full_log'):
+    if data.get('full_log') and not module_summary_complete:
         compact['log_excerpt'] = bounded(data['full_log'], text=400)
     if data.get('previous_output'):
         compact['previous_output'] = bounded(data['previous_output'], text=700)
@@ -125,6 +159,22 @@ def evidence_summary(e, local_timezone=None):
             detail={**{k:detail[k] for k in ('full_log','data','syscheck','decoder','predecoder') if k in detail},**detail}
         compact['event_details'] = bounded(detail, text=400)
         compact['details_excerpted'] = compact['event_details'] != detail
+    # Rootcheck reports are detector alerts, not direct confirmation; module
+    # and taint records are separate observations. Avoid repeating the full
+    # agent metadata and generic rule description for every related record.
+    rid=str(rule.get('id') or '')
+    groups=set(rule.get('groups') or [])
+    if rid in {'521','5132','100200','100201','100205'} and (
+            data.get('rootkit_evidence_class') or groups.intersection({'rootcheck','kernel_monitoring','kernel_integrity','kernel_module_activity'})):
+        compact['event_role'] = ('detector_alert' if rid in {'521','5132'} else
+                                 'kernel_state_context' if rid=='100201' else 'kernel_module_observation')
+        compact['rule']={'id':rid}
+        if isinstance(compact.get('agent'),dict):
+            compact['agent']={k:compact['agent'][k] for k in ('id',) if k in compact['agent']}
+        compact.pop('auth_outcome',None)
+        compact.pop('log_type',None)
+        if compact.get('summary_truncated') is False:
+            compact.pop('summary_truncated')
     summary={'evidence_id': e['evidence_id'], 'kind': e['evidence_type'],
              'event_time': e.get('event_time'), 'source_record_id': e['source_record_id'], 'data': compact}
     if local_timezone is not None and e.get('event_time') and e.get('evidence_type') in {'trigger','observed'}:
@@ -163,7 +213,8 @@ def pack_evidence(evidence, allowance, local_timezone=None):
         if used + size > allowance:
             # Keep a small observation when a large detail would displace all context.
             detail = item['data'].get('event_details')
-            aggregate = {k:item['data'][k] for k in ('dns_summary','flow_summary','authentication_summary') if k in item['data']}
+            aggregate = {k:item['data'][k] for k in ('dns_summary','flow_summary','authentication_summary',
+                'rootkit_snapshot','rootkit_telemetry_summary') if k in item['data']}
             item['data'] = {**{k:bounded(v,text=100,width=4,depth=3) for k,v in item['data'].items()
                               if k in {'rule','file_path','src_ip','dst_ip','privilege','http','dns','file_change'}},
                             'log_excerpt': bounded(e['data'].get('full_log', ''), text=180),

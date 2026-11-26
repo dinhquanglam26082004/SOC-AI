@@ -1,0 +1,39 @@
+<group name="local,kernel_monitoring,soc_ai,">
+
+  <!-- Kernel module load -->
+  <rule id="100200" level="3">
+    <if_sid>80700</if_sid>
+    <field name="audit.type">^SYSCALL$</field>
+    <field name="audit.key">^kernel_module_load$</field>
+    <field name="audit.success">^yes$</field>
+    <description>Kernel module load operation observed</description>
+    <group>kernel_module_activity,</group>
+  </rule>
+
+  <!-- Kernel taint observation -->
+  <rule id="100201" level="3">
+    <if_sid>530</if_sid>
+    <match>kernel-taint-check</match>
+    <description>Kernel taint state observation</description>
+    <group>kernel_integrity,</group>
+  </rule>
+
+  <!-- Kernel module unload -->
+  <rule id="100205" level="3">
+    <if_sid>80700</if_sid>
+    <field name="audit.type">^SYSCALL$</field>
+    <field name="audit.key">^kernel_module_unload$</field>
+    <field name="audit.success">^yes$</field>
+    <description>Kernel module unload operation observed</description>
+    <group>kernel_module_activity,</group>
+  </rule>
+  
+  <!-- Endpoint snapshot observation -->
+  <rule id="100206" level="3">
+    <decoded_as>json</decoded_as>
+    <field name="producer">^soc-ai-rootkit-snapshot-v1$</field>
+    <description>Endpoint process visibility observation</description>
+    <group>endpoint_snapshot,kernel_monitoring,</group>
+  </rule>  
+
+</group>

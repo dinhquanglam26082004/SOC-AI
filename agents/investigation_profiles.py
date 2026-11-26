@@ -83,7 +83,7 @@ def classify(alert):
         return 'endpoint_listener_change'
     if rid in DNS_RULES or groups & DNS_GROUPS or 'T1071.004' in mitre or 'dns tunneling' in desc:
         return 'dns_tunneling'
-    if rid == '521' or ('rootcheck' in groups and ('rootkit' in desc or 'hidden' in desc)):
+    if rid in {'521', '5132'} or ('rootcheck' in groups and ('rootkit' in desc or 'hidden' in desc)):
         return 'rootkit'
     if groups & {'syscheck', 'fim'} or rid in {'550', '553', '554'}:
         return 'file_integrity'

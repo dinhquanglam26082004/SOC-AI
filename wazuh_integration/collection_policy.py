@@ -9,6 +9,9 @@ AUTH_GROUPS = frozenset({'authentication_failed', 'authentication_success', 'inv
                          'privilege_escalation'})
 AUTH_PROGRAMS = frozenset({'sshd', 'ssh', 'sudo', 'su', 'login', 'useradd', 'usermod', 'gpasswd'})
 EXCLUDED_GROUPS = frozenset({'stats', 'syscollector', 'sca'})
+ROOTKIT_GROUPS = frozenset({'rootcheck', 'rootkit', 'kernel_monitoring', 'kernel_integrity',
+                            'kernel_module_activity', 'endpoint_snapshot'})
+ROOTKIT_RULES = frozenset({'521', '5132', '80700', '80705', '100200', '100201', '100205', '100206'})
 
 
 def selected_source(raw):
@@ -24,6 +27,13 @@ def selected_source(raw):
     groups = {g.lower() for g in groups if isinstance(g, str)}
     if groups & EXCLUDED_GROUPS:
         return False
+    # Kernel/rootkit telemetry may arrive through journald or an audit location
+    # that is not one of the ordinary Wazuh locations. Retain it at intake;
+    # AI eligibility is decided later by mapper.is_security_alert/ai_eligible.
+    data = raw.get('data') if isinstance(raw.get('data'), dict) else {}
+    if (groups & ROOTKIT_GROUPS or str(rule.get('id', '')) in ROOTKIT_RULES
+            or data.get('producer') == 'soc-ai-rootkit-snapshot-v1'):
+        return True
     location = raw.get('location') if isinstance(raw.get('location'), str) else ''
     if '/zeek/logs/current/' in location:
         filename = location.rsplit('/', 1)[-1]

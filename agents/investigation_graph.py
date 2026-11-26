@@ -62,6 +62,8 @@ REPORT_STYLE = '''Trình bày dễ đọc và đi thẳng vào thông tin đã c
 - findings: mỗi mục trình bày một phát hiện và dẫn evidence_ids tương ứng; chỉ nêu số liệu thực sự có trong bằng chứng.
 - unknowns: mỗi mục nêu một thông tin còn thiếu; recommendations: mỗi mục nêu một bước cụ thể.
 - Dùng câu ngắn, hạn chế lặp ý và không chèn tiêu đề Markdown trong câu. Ghi ID vào trường evidence_ids thay vì viết ID dài trong reasoning.
+- Chỉ gắn mỗi evidence_id với thông tin thực sự có trong bản ghi đó; cảnh báo của công cụ phát hiện là cảnh báo, không mặc định là xác minh độc lập. Phân biệt sự kiện, bằng chứng bổ trợ và suy luận.
+- Nếu có nhiều sự kiện liên quan, nêu trình tự theo thời gian và kết quả quan sát; không suy ra quan hệ nhân quả chỉ từ thời gian hoặc coi thao tác gỡ thành công là hệ thống đã sạch.
 - Mọi thời gian nêu trong câu phải lấy từ trường có hậu tố _local và ghi rõ múi giờ; không trình bày giờ UTC như giờ địa phương.
 Tự đưa ra nhận định và đề xuất theo bằng chứng, không điền số liệu hoặc kết luận khi dữ liệu không có.'''
 

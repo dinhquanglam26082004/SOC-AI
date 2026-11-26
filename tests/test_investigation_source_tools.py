@@ -163,6 +163,8 @@ def test_privilege_agent_ip_includes_only_scoped_ipless_local_records(sources):
     assert result['status']=='ok' and result['total_matched']==1
     assert result['items'][0]['id']==local['id']
     assert 'không có trường IP' in result['scope_interpretation']
+    assert 'không có trường IP' in result['coverage']
+    assert 'rows without these IPs are excluded' not in result['coverage']
     assert result['items'][0]['src_ip'] is None and result['items'][0]['dst_ip'] is None
     assert tools.execute('search_privilege_events',{'ip':'203.0.113.99'})['error']=='invalid_scope_or_arguments'
 

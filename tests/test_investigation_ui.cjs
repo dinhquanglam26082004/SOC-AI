@@ -125,13 +125,13 @@ const metrics=scope.assessment({status:'completed',summary:{},report:{verdict:'i
   {tool:'summarize_dns_activity',status:'ok',dns_summary:{matched_records:25,unique_queries:22,query_types:{A:10,NULL:7},scope:{domain:'<lab.test>',agent_id:'001',since:'03:19Z',until:'03:49Z'}}},
   {tool:'search_zeek_connections',status:'truncated',count:10,total_matched:68},
   {tool:'search_process_events',status:'empty'},
-  {tool:'search_auth_events',status:'truncated',count:1,total_matched:12,authentication_summary:{scope:{since:'01:00Z',until:'01:30Z'},groups:[{username:'victim',source_ip:'192.0.2.7',failure_count:11,success_count:0}]}}
+  {tool:'search_auth_events',status:'truncated',count:1,total_matched:12,authentication_summary:{scope:{since:'01:00Z',until:'01:30Z'},groups:[{username:'victim',source_ip:'192.0.2.7',failure_count:11,failure_record_count:11,success_count:0,success_record_count:0}]}}
 ]}},{zeek_data:{qtype_name:'NULL'}});
 assert.match(metrics,/25 bản ghi đã lưu · 22 tên query khác nhau · NULL: 7, A: 10/);
 assert.match(metrics,/&lt;lab\.test&gt;/);assert.doesNotMatch(metrics,/<lab\.test>/);
 assert.match(metrics,/03:19Z → 03:49Z/);
 assert.match(metrics,/search_zeek_connections: đã trả 10\/68 bản ghi phù hợp/);
-assert.match(metrics,/victim · 192\.0\.2\.7: 11 thất bại · 0 thành công/);
+assert.match(metrics,/victim · 192\.0\.2\.7: 11 lần thử xác nhận thất bại · 11 bản ghi thất bại · 0 lần thành công/);
 assert.match(metrics,/01:00Z → 01:30Z/);
 assert.doesNotMatch(scope.recordedEvidence([{tool:'summarize_dns_activity',status:'error'}],{}),/0 bản ghi/);
 const grounded={status:'available',incident_id:'INV-1',knowledge_guidance:{playbook_id:'PB-DNS',title:'DNS',source:'dns.txt',passages:[{id:'G1',section:'RESPONSE',text:'Monitor DNS.'}]},
@@ -192,7 +192,7 @@ try{
   assert.match(evidence,/LOCAL\(2026-11-20T08:00:00Z\)/);
   assert.match(evidence,/LOCAL\(2026-11-20T08:01:00Z\)/);
   assert.match(evidence,/Nov 20 15:00:00 victim sshd/);
-  assert.match(evidence,/Log nguồn nguyên bản \(UTC\)/);
+  assert.match(evidence,/Đoạn log đã lưu trước quy đổi giờ/);
   assert.match(evidence,/Nov 20 08:00:00 victim sshd/);
   assert.match(evidence,/"event_time": "2026-11-20T08:00:00Z"/);
   assert.match(evidence,/"full_log": "Nov 20 08:00:00 victim/);

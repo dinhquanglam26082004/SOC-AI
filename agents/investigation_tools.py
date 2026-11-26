@@ -158,17 +158,15 @@ DESCRIPTIONS = {
         'baseline first, no overlap, both within incident scope. Reports retained counts '
         'and distributions, not a historical multi-day baseline or proof of normality.'),
     'search_process_events': (
-        'For suspected execution after DNS, SSH or file alerts, inspect retained Wazuh '
-        'audit_command records for the agent and window. Requires collection of that group; '
-        'not live process enumeration and no result does not prove absence.'),
+        'Retained Wazuh audit_command history for this agent/window; not live process '
+        'enumeration or a /proc visibility check. Empty results do not prove absence.'),
     'search_file_access': (
         'For suspected file reads or exfiltration, inspect retained audit_watch_read events; '
         'file_path is exact. Requires the relevant audit records to be collected. FIM '
         'changes do not prove a read, and no result does not prove no access.'),
     'search_file_changes': (
-        'For FIM alerts such as rule 550 or suspected persistence, read retained syscheck '
-        'file changes; file_path is exact. A user/process is attributable only when '
-        'who-data is present; a file change is not a file-read event.'),
+        'Retained FIM syscheck path changes; file_path is exact. /proc/PID does not '
+        'test process visibility. Attribution requires who-data; a change is not a read.'),
     'search_privilege_events': (
         'For suspicious sudo/su or escalation around any alert, inspect retained sudo/su '
         'records. actor_user matches srcuser and target_user matches dstuser; they are '
@@ -187,9 +185,10 @@ DESCRIPTIONS = {
         'For any incident needing investigation or response steps, search local indexed '
         'playbooks by query. Retrieved guidance is not evidence and does not perform an action.'),
     'search_rootkit_evidence': (
-        'Only for rule 521 or rootcheck alerts whose description mentions rootkit/hidden: '
-        'find retained related alerts and existing endpoint snapshots for the agent/window. '
-        'If supplied, pid must match the trigger. No live scan; repeated alerts are not independent proof.'),
+        'Rule 521/5132 detections, 100200/100201/100205 kernel telemetry and valid 100206 '
+        'snapshots on the same agent. Targeted snapshot PID and observation time must match '
+        'the trigger/window; Rule 521 cannot cross-verify boot ID. No live scan; '
+        'visible_process or repeated alerts are not proof.'),
     }
 
 
@@ -216,7 +215,22 @@ def definitions(allowed_tools=None):
         if name not in MODELS:
             continue
         schema=compact(MODELS[name].model_json_schema())
-        schema.setdefault('properties', {}).update({
+        properties=schema.setdefault('properties', {})
+        if 'ip' in properties:
+            properties['ip']['description'] = (
+                'Log source IP only, not agent IP; omit for agent scope.' if name=='search_auth_events' else
+                'Scope check only; does not filter results, even by agent IP. Omit for agent scope.'
+                if name=='search_rootkit_evidence' else
+                'Event source/destination IP; agent IP also includes IP-less local sudo/su. Omit for agent scope.'
+                if name=='search_privilege_events' else
+                'Log source/destination IP, not agent IP; omit for agent scope.')
+        if name=='search_file_changes':
+            properties['file_path']['description'] = 'Exact syscheck.path; /proc/PID is not a visibility check.'
+        elif name=='search_file_access':
+            properties['file_path']['description'] = 'Exact audit.file.name in retained audit_watch_read logs.'
+        elif name=='search_rootkit_evidence':
+            properties['pid']['description'] = 'Must match trigger PID; omit to extract from alert.'
+        properties.update({
             '_verification_question': {'type':'string', 'description':'Câu hỏi cần xác minh'},
             '_selection_reason': {'type':'string', 'description':'Lý do chọn'},
         })
@@ -305,6 +319,34 @@ def compare_listener_snapshots(full_log,previous_output):
             'interpretation':'Snapshot difference only; process intent, authorization and cause are unknown.'}
 
 
+def kernel_module_observation(record, data, full_log):
+    """Extract only recorded Auditd fields for kernel module load/unload rules."""
+    if record.get('source')!='wazuh' or str((record.get('rule') or {}).get('id')) not in {'100200','100205'}:
+        return None
+    audit=data.get('audit') if isinstance(data,dict) else None
+    audit=audit if isinstance(audit,dict) else {}
+    result={target:audit[source] for source,target in (
+        ('id','audit_id'),('syscall','syscall'),('command','command'),('exe','executable'),
+        ('success','success'),('exit','exit'),('uid','uid'),('auid','auid'))
+        if audit.get(source) not in (None,'')}
+    source_stamps=re.findall(r'\bmsg=audit\((\d+(?:\.\d+)?):(\d+)\)',full_log)
+    # A combined Auditd line may carry multiple record types. Do not attach a
+    # module name from another audit ID to this SYSCALL event.
+    if source_stamps and (not result.get('audit_id') or
+            {stamp_id for _,stamp_id in source_stamps}=={str(result['audit_id'])}):
+        result.setdefault('audit_id',source_stamps[0][1])
+        result['audit_epoch']=source_stamps[0][0]
+        syscall_name=re.search(r'\bSYSCALL=([A-Za-z_][A-Za-z0-9_]*)\b',full_log)
+        if syscall_name:
+            result['syscall_name']=syscall_name.group(1)
+        module_section=re.search(r'\btype=KERN_MODULE\b(.*?)(?=\btype=[A-Z_]+\b|\Z)',full_log,re.S)
+        if module_section:
+            module_name=re.search(r'\bname=(?:"([^"\r\n]{1,256})"|([^\s\x1d]{1,256}))',module_section.group(1))
+            if module_name:
+                result['module_name']=module_name.group(1) or module_name.group(2)
+    return result or None
+
+
 def observation(record):
     """Keep evidence small without reinterpreting packet direction or inventing fields."""
     raw=record.get('raw_event') or {}
@@ -318,15 +360,21 @@ def observation(record):
     privilege_source=bool(set((record.get('rule') or {}).get('groups') or []) & {'sudo','su'}) or (
         (raw.get('decoder') or {}).get('name') in {'sudo','su'} or
         (raw.get('predecoder') or {}).get('program_name') in {'sudo','su'})
-    rootkit_snapshot = (data if isinstance(data, dict) and data.get('producer') == 'soc-ai-rootkit-snapshot-v1' else {})
+    full_log=str(raw.get('full_log') or '')
+    kernel_module=kernel_module_observation(record,data,full_log)
+    rootkit_snapshot = record.get('rootkit_snapshot') or {}
     structured,cut=bounded({'zeek_connection':network,'http':http,'dns':dns,'audit':data.get('audit') if isinstance(data.get('audit'),dict) else {},
         'file_change':raw.get('syscheck') or {},
         'privilege':{k:data[k] for k in ('srcuser','dstuser','command','tty','pwd') if k in data} if privilege_source else {},
+        'kernel_module_activity':kernel_module or {},
         'rootkit_snapshot': {
             k: rootkit_snapshot.get(k)
             for k in (
                'producer',
                'observed_at',
+               'target_pid',
+               'finding',
+               'boot_id',
                'scan',
                'suspects',
                'modules',
@@ -335,17 +383,22 @@ def observation(record):
             if k in rootkit_snapshot
         },
     })
-    full_log=str(raw.get('full_log') or '')
     previous_output=str(raw.get('previous_output') or data.get('previous_output') or '')
     listener_changes=compare_listener_snapshots(full_log,previous_output)
     return {**{k:record.get(k) for k in ('id','timestamp','received_at','source_product','log_type',
-             'agent','rule','src_ip','dst_ip','src_port','dst_port','username','event_id','process','file_path','title')},
+             'agent','rule','src_ip','dst_ip','src_port','dst_port','username','event_id','process','file_path','title',
+             'rootkit_evidence_class')},
             'event_time':utc_stamp(record['timestamp']) if record.get('timestamp') else None, 'source':'soc-ai-sqlite',
             'auth_outcome':auth_outcome(record),
             'full_log':full_log[:2000],
             'previous_output':previous_output[:3000],
             **({'listener_changes':listener_changes} if listener_changes else {}),
             'data':json.dumps(raw.get('data') or {},ensure_ascii=False)[:2500],
+            **({'rootkit_source_record_ids':record['rootkit_source_record_ids'],
+                'rootkit_source_ids_omitted':record.get('rootkit_source_ids_omitted',0)}
+               if record.get('rootkit_source_record_ids') else {}),
+            **({'rootkit_telemetry_summary':record['rootkit_telemetry_summary']}
+               if record.get('rootkit_telemetry_summary') else {}),
             **structured,'summary_truncated':cut or len(full_log)>2000
                 or len(previous_output)>3000
                 or len(json.dumps(data,ensure_ascii=False))>2500}
@@ -636,17 +689,26 @@ class LocalTools:
                     {'source':'derived-soc-sqlite','event_time':until,'authentication_summary':auth_summary},name,args)
             result.update(total_matched=total,returned_count=len(result['items']),
                 count_unit='Retained records matching this query; not unique sessions or proof of collection completeness.')
+            ip_coverage = ('ip filters event src_ip/dst_ip, not agent.ip; rows without these IPs are excluded.'
+                           if args['ip'] else 'No event-IP filter; agent/time scope applies.')
             if agent_ip_filter:
                 result['scope_interpretation']=('IP là địa chỉ của Agent trong cảnh báo. Bao gồm log sudo/su cục bộ '
                     'của Agent không có trường IP nguồn hoặc đích; không suy ra IP đã xuất hiện trong log đó.')
-                result['coverage'] += ' ' + result['scope_interpretation']
+                ip_coverage=result['scope_interpretation']
             if name=='search_process_events':
-                result['coverage']=('Only retained Wazuh events with rule.groups containing audit_command '
-                    'for this agent and time window. This is not live process enumeration or a general '
-                    'process-creation feed; collection and forwarding completeness are unknown.')
+                result['coverage']=('Retained Wazuh audit_command events for this agent/window only; '
+                    'not live processes or /proc visibility. '+ip_coverage+
+                    ' Empty does not prove process absence or collection completeness.')
                 if total==0:
                     result['detail']=('No retained audit_command event matched this query. '
                         'This does not establish that the process did not run or that its activity was malicious.')
+            elif name=='search_file_changes':
+                result['coverage']=('Retained FIM syscheck.path for this agent/window only; '
+                    'file_path is exact, not /proc visibility. '+ip_coverage+
+                    ' Empty does not prove absence.')
+            elif args['ip']:
+                result['coverage'] += (' ip filters event src_ip only, not agent.ip.'
+                    if name=='search_auth_events' else ' '+ip_coverage)
             return result
         except (ValueError,TypeError) as exc:
             return self.envelope('error',error='invalid_scope_or_arguments',detail=str(exc)[:500])
@@ -660,11 +722,9 @@ class LocalTools:
         rule = self.alert.get('rule') or {}
         groups = set(rule.get('groups') or [])
         description = str(rule.get('description') or '').lower()
-        is_rootkit = (
-            str(rule.get('id')) == '521'
-            or 'rootcheck' in groups
-            and ('rootkit' in description or 'hidden' in description)
-        )
+        is_rootkit = (str(rule.get('id')) in {'521', '5132'}
+                      or 'rootcheck' in groups and ('rootkit' in description or 'hidden' in description)
+                      or 'rootkit' in groups or 'kernel_monitoring' in groups)
 
         if not is_rootkit:
             return self.envelope('error', error='not_a_rootkit_alert')

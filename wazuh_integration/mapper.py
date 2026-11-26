@@ -8,6 +8,18 @@ import math
 import posixpath
 
 
+def normalize_rootkit_snapshot(data):
+    """Return a validated decoded snapshot for query/index use.
+
+    The raw Wazuh envelope remains untouched in ``raw_event``. Importing here
+    keeps the mapper's other source types independent of rootkit parsing.
+    """
+    if not isinstance(data, dict) or data.get('producer') != 'soc-ai-rootkit-snapshot-v1':
+        return None, None
+    from agents.rootkit_evidence import normalize_snapshot
+    return normalize_snapshot(data)
+
+
 def network_ip(value):
     try:
         return str(ipaddress.ip_address(value)) if isinstance(value, str) else None
@@ -170,6 +182,12 @@ def map_wazuh_alert(raw):
         record['dst_ip'] = network_ip(data.get('dst') or data.get('id.resp_h') or endpoints.get('resp_h'))
         record['src_port'] = data.get('id.orig_p', endpoints.get('orig_p'))
         record['dst_port'] = data.get('dst_port') or data.get('p') or data.get('id.resp_p', endpoints.get('resp_p'))
+    if record.get('raw_event', {}).get('data', {}).get('producer') == 'soc-ai-rootkit-snapshot-v1':
+        snapshot, snapshot_error = normalize_rootkit_snapshot(record['raw_event']['data'])
+        if snapshot is not None:
+            record['rootkit_snapshot'] = snapshot
+        else:
+            record['rootkit_snapshot_error'] = snapshot_error
     record['ai_allowed'] = is_security_alert(record)
     record['event_kind'] = 'alert' if record['ai_allowed'] else 'telemetry'
     return record
@@ -187,6 +205,10 @@ def is_security_alert(record):
                 and 'zeek_operational' not in groups and rule.get('level', 0) >= 7
                 and not note.startswith(('CaptureLoss::', 'ChecksumOffloading::')))
     if groups.intersection({'sca', 'syscollector', 'dpkg', 'package', 'package_management', 'inventory'}):
+        return False
+    # Endpoint snapshot/kernel observations are retained telemetry. Their
+    # source level must never promote them into an automatic AI investigation.
+    if str(rule.get('id')) in {'100200', '100201', '100205', '100206'}:
         return False
     if str(rule.get('id')) in {'591', '5501', '5502', '5402'}:
         return False  # rotation, ordinary PAM sessions and successful sudo

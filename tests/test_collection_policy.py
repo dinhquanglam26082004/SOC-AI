@@ -48,6 +48,13 @@ def test_journal_and_command_filtering():
         assert not selected_source(raw(name))
 
 
+def test_kernel_and_endpoint_snapshot_telemetry_is_retained_from_any_wazuh_location():
+    assert selected_source(raw('journald', rule_id='100201', groups=['kernel_integrity']))
+    assert selected_source(raw('/var/log/audit/audit.log', rule_id='80705', groups=['audit']))
+    assert selected_source(raw('/tmp/collector.json', rule_id='100206', data={
+        'producer': 'soc-ai-rootkit-snapshot-v1'}))
+
+
 def test_ingest_discards_both_streams_without_falsely_claiming_a_write(tmp_path, monkeypatch):
     monkeypatch.setenv('WAZUH_WEBHOOK_TOKEN', 'test-only-token')
     with TestClient(create_app(tmp_path / 'policy.db', workers=False)) as client:

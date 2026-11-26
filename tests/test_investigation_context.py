@@ -56,6 +56,52 @@ def test_context_budget_and_interleaving():
     assert sum(len(json.dumps(e,ensure_ascii=False)) for e in result['evidence'])<=1200
 
 
+def test_rootcheck_and_module_events_fit_as_distinct_scoped_evidence():
+    from datetime import timezone, timedelta
+    zone=timezone(timedelta(hours=7))
+    agent={'id':'002','name':'host','ip':'192.0.2.7'}
+    def event(eid, rule, timestamp, **data):
+        e=item(eid,'trigger' if eid=='pid0' else 'observed','search_rootkit_evidence',
+            agent=agent,rule={'id':rule,'description':'Endpoint event','level':3,
+                              'groups':['rootcheck' if rule=='521' else 'kernel_monitoring']},**data)
+        e['event_time']=timestamp
+        return e
+    evidence=[event('taint','100201','2026-11-25T14:51:26Z',
+        full_log='kernel_taint current=12288 baseline=12288 changed=no',
+        rootkit_evidence_class='context_telemetry'),
+        event('load','100200','2026-11-25T15:02:22Z',rootkit_evidence_class='context_telemetry',
+            kernel_module_activity={'audit_id':'1','syscall':'313','command':'insmod',
+                'executable':'/usr/bin/kmod','module_name':'example_module','success':'yes',
+                'exit':'0','uid':'0','auid':'1000'}),
+        *[event(f'pid{i}','521',f'2026-11-25T15:04:5{i}Z',
+            full_log=f"Process '{6780+i}' hidden from /proc.",rootkit_evidence_class='detection')
+          for i in range(4)],
+        event('unload','100205','2026-11-25T15:05:26Z',rootkit_evidence_class='context_telemetry',
+            kernel_module_activity={'audit_id':'2','syscall':'176','command':'rmmod',
+                'executable':'/usr/bin/kmod','module_name':'example_module','success':'no',
+                'exit':'-1','uid':'0','auid':'1000'})]
+    result=pack_evidence(evidence,4143,zone)
+    assert len(result['evidence'])==7
+    summaries={e['evidence_id']:e for e in result['evidence']}
+    assert summaries['pid0']['data']['event_role']=='detector_alert'
+    assert summaries['taint']['data']['event_role']=='kernel_state_context'
+    assert summaries['load']['data']['kernel_module_activity']['module_name']=='example_module'
+    assert summaries['unload']['data']['kernel_module_activity']['success']=='no'
+    assert summaries['unload']['data']['kernel_module_activity']['exit']=='-1'
+    assert summaries['unload']['event_time_local'].startswith('2026-11-25T22:05:26')
+    assert all(e['source_record_id']==e['evidence_id'] for e in result['evidence'])
+
+
+def test_partial_kernel_module_summary_never_invents_missing_fields():
+    e=item('partial',rule={'id':'100205','groups':['kernel_monitoring']},
+           rootkit_evidence_class='context_telemetry',
+           kernel_module_activity={'success':'no','exit':'-1'},full_log='unload failed')
+    result=pack_evidence([e],2000)['evidence'][0]['data']
+    assert result['kernel_module_activity']=={'success':'no','exit':'-1'}
+    assert 'module_name' not in result['kernel_module_activity']
+    assert result['log_excerpt']=='unload failed'
+
+
 def test_dns_and_flow_aggregates_keep_scope_and_limitations_in_model_context():
     scope={'agent_id':'001','domain':'lab.test','since':'2026-11-20T00:00:00Z',
            'until':'2026-11-20T00:30:00Z','window_seconds':1800}
